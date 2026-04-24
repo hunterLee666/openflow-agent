@@ -118,6 +118,8 @@ async function handleQuery(
   if (input.startsWith("/") && commandRegistry) {
     const result = await commandRegistry.execute(input, {
       cwd: process.cwd(),
+      memory: memorySystem,
+      config: undefined,
     });
     const assistantMessage: Message = {
       id: `assistant-${Date.now()}`,
@@ -240,6 +242,10 @@ function ChatApp(): React.ReactElement {
     error: null,
     abortController: null,
   });
+
+  useEffect(() => {
+    initializeApp().catch(console.error);
+  }, []);
 
   const handleSendMessage = useCallback(
     async (input: string) => {

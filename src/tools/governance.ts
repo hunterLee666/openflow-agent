@@ -12,6 +12,7 @@ export interface GovernanceContext {
   isDestructive: boolean;
   isNetworkAccess: boolean;
   isGitCommand: boolean;
+  workspaceValidator?: import("../security/workspace-boundary.js").WorkspaceBoundaryValidator;
   config: {
     maskSensitiveOutputs?: boolean;
     riskThreshold?: RiskLevel;
@@ -252,14 +253,43 @@ export class FourteenStepGovernancePipeline {
       }
     }
 
-    if (ctx.tool === "edit" || ctx.tool === "write") {
-      const filePath = String(input.path || "");
-      if (/\/\.git\//.test(filePath) || /\/\.ssh\//.test(filePath)) {
-        return { step: 3, name: "validateInput", action: "deny", reason: "Cannot modify protected paths" };
+    if (ctx.workspaceValidator) {
+       const paths = this.extractPathsFromInput(ctx.tool, input);
+       for (const path of paths) {
+         const operation = ctx.tool === "bash" ? "execute" : ctx.tool === "read" || ctx.tool === "read_file" ? "read" : "write";
+         const validation = ctx.workspaceValidator.validatePath(path, operation);
+         if (!validation.valid) {
+           return { step: 3, name: "validateInput", action: "deny", reason: validation.reason || "Path not allowed" };
+         }
+       }
+     } else {
+      if (ctx.tool === "edit" || ctx.tool === "write") {
+        const filePath = String(input.path || "");
+        if (/\/\.git\//.test(filePath) || /\/\.ssh\//.test(filePath)) {
+          return { step: 3, name: "validateInput", action: "deny", reason: "Cannot modify protected paths" };
+        }
       }
     }
 
     return { step: 3, name: "validateInput", action: "continue" };
+  }
+
+  private extractPathsFromInput(tool: string, input: Record<string, unknown>): string[] {
+    const paths: string[] = [];
+    if (tool === "read" || tool === "read_file") {
+      if (input.path) paths.push(String(input.path));
+    } else if (tool === "write" || tool === "write_file" || tool === "edit") {
+      if (input.path) paths.push(String(input.path));
+    } else if (tool === "bash") {
+      const cmd = String(input.command || "");
+      const matches = cmd.match(/['"]([^'"]+)['"]/g);
+      if (matches) {
+        for (const m of matches) {
+          paths.push(m.slice(1, -1));
+        }
+      }
+    }
+    return paths;
   }
 
   // Step 4: 投机分类器

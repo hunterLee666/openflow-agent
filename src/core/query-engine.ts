@@ -859,6 +859,7 @@ async function runSingleTool(
     isDestructive: isDestructiveTool(use.name, use.input),
     isNetworkAccess: isNetworkCommand(use.input),
     isGitCommand: isGitCommand(use.input),
+    workspaceValidator: ctx.workspaceValidator,
     config: {
       maskSensitiveOutputs: ctx.config.maskSensitiveOutputs,
     },
