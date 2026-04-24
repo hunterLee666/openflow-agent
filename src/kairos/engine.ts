@@ -1,5 +1,6 @@
 import type { KairosEngine, KairosContext, DistillationResult, DreamSchedule } from "./types.js";
 import type { MemorySystem } from "../memory/types.js";
+import { MemoryDistiller } from "./distillation.js";
 
 export class DefaultKairosEngine implements KairosEngine {
   private timer?: ReturnType<typeof setInterval>;
@@ -12,17 +13,14 @@ export class DefaultKairosEngine implements KairosEngine {
   shouldTrigger(ctx: KairosContext): boolean {
     if (!this.config.enabled) return false;
 
-    // Trigger after long session
     if (ctx.sessionDuration > this.config.triggerAfterMinutes * 60 * 1000) {
       return true;
     }
 
-    // Trigger on low activity
     if (this.config.triggerOnLowActivity && ctx.lowActivity) {
       return true;
     }
 
-    // Night mode trigger
     if (this.config.nightMode) {
       const hour = ctx.currentHour;
       if (hour >= this.config.nightStartHour || hour < this.config.nightEndHour) {
@@ -35,63 +33,40 @@ export class DefaultKairosEngine implements KairosEngine {
 
   async distill(sessionId: string): Promise<DistillationResult> {
     const events = await this.memory.episodic.retrieve(sessionId, 100);
-    const facts: string[] = [];
-    const preferences: string[] = [];
-    const projectFacts: string[] = [];
 
-    for (const event of events) {
-      // Extract user preferences
-      const prefMatch = event.content.match(/(?:prefer|like|want|always|never)\s+(.{3,50})/gi);
-      if (prefMatch) {
-        for (const match of prefMatch) {
-          preferences.push(match);
-          await this.memory.semantic.store({
-            id: `pref_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-            subject: "user",
-            predicate: "prefers",
-            object: match,
-            confidence: 0.6,
-            source: sessionId,
-            createdAt: new Date(),
-            tags: ["preference", "kairos"],
-          });
-        }
-      }
-
-      // Extract project facts
-      const factMatch = event.content.match(/(?:project uses|tech stack|framework|library)\s+(.{3,50})/gi);
-      if (factMatch) {
-        for (const match of factMatch) {
-          projectFacts.push(match);
-          await this.memory.semantic.store({
-            id: `proj_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-            subject: "project",
-            predicate: "uses",
-            object: match,
-            confidence: 0.7,
-            source: sessionId,
-            createdAt: new Date(),
-            tags: ["project", "kairos"],
-          });
-        }
-      }
-
-      // Extract general facts
-      const generalMatch = event.content.match(/(?:is|has|supports|requires)\s+(.{3,50})/gi);
-      if (generalMatch) {
-        for (const match of generalMatch) {
-          facts.push(match);
-        }
-      }
+    if (events.length === 0) {
+      return {
+        extractedFacts: 0,
+        extractedPreferences: 0,
+        extractedProjectFacts: 0,
+        summary: "No events to distill",
+      };
     }
 
-    await this.memory.semantic.consolidate();
+    const distiller = new MemoryDistiller();
+    const input = {
+      sessionId,
+      rawLogs: events.map((e) => ({
+        id: e.id,
+        timestamp: e.timestamp,
+        content: e.content,
+      })),
+    };
+
+    const result = await distiller.distill(this.memory, input);
+
+    if (result.cards.length > 0) {
+      await distiller.storeCards(this.memory, result.cards);
+    }
+
+    const preferences = result.cards.filter((c) => c.type === "preference");
+    const projectFacts = result.cards.filter((c) => c.type === "project");
 
     return {
-      extractedFacts: facts.length,
+      extractedFacts: result.errors.length,
       extractedPreferences: preferences.length,
       extractedProjectFacts: projectFacts.length,
-      summary: `Distilled ${facts.length} facts, ${preferences.length} preferences, ${projectFacts.length} project facts`,
+      summary: `Distilled ${result.cards.length} cards (${preferences.length} preferences, ${projectFacts.length} project facts)`,
     };
   }
 

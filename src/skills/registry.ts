@@ -40,6 +40,7 @@ export function parseSkillMarkdown(content: string, sourcePath: string): Skill {
   let description = "";
   const triggers: string[] = [];
   const steps: SkillStep[] = [];
+  const allowedTools: string[] = [];
 
   let inFrontMatter = false;
   let frontMatterDone = false;
@@ -67,6 +68,9 @@ export function parseSkillMarkdown(content: string, sourcePath: string): Skill {
           break;
         case "triggers":
           triggers.push(...value.split(",").map((t) => t.trim()));
+          break;
+        case "allowed-tools":
+          allowedTools.push(...value.split(",").map((t) => t.trim()));
           break;
       }
       continue;
@@ -98,6 +102,7 @@ export function parseSkillMarkdown(content: string, sourcePath: string): Skill {
     triggers: triggers.length > 0 ? triggers : [name.toLowerCase()],
     steps,
     markdown: content,
+    allowedTools: allowedTools.length > 0 ? allowedTools : undefined,
   };
 }
 

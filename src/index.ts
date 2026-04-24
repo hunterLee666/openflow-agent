@@ -32,7 +32,7 @@ export { DefaultHookRegistry, createBuiltInHooks } from "./hooks/index.js";
 export { DefaultCoordinator } from "./coordinator/index.js";
 export { DefaultVerificationAgent } from "./verification/index.js";
 export { DefaultSystemPromptBuilder } from "./prompts/index.js";
-export { DefaultPermissionPipeline } from "./permissions/index.js";
+export { SevenStepPermissionPipeline, createPermissionPipeline } from "./permissions/index.js";
 export { SeatbeltExecutor, BubblewrapExecutor, NoSandboxExecutor } from "./sandbox/index.js";
 export { GenericLspClient, detectLspForProject } from "./lsp/index.js";
 export { DefaultSkillRegistry, parseSkillMarkdown, loadBuiltinSkills } from "./skills/index.js";

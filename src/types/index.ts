@@ -1,6 +1,12 @@
 export interface Message {
   role: "user" | "assistant" | "system" | "tool";
   content: string | ContentBlock[];
+  cacheControl?: CacheControl;
+}
+
+export interface CacheControl {
+  type: "ephemeral" | "hidden";
+  category?: "system" | "user" | "context" | "memory";
 }
 
 export interface ContentBlock {
@@ -84,6 +90,7 @@ export interface QueryContext {
   toolRegistry: ToolRegistry;
   memory?: import("../memory/types.js").MemorySystem;
   hooks?: import("../hooks/types.js").HookRegistry;
+  permissionPipeline?: import("../permissions/types.js").PermissionPipeline;
 }
 
 export interface SessionStore {
@@ -104,6 +111,7 @@ export interface AgentConfig {
   compactionThreshold: number;
   maxCompactionFailures: number;
   baseUrl?: string;
+  maskSensitiveOutputs?: boolean;
 }
 
 export type PermissionMode = "acceptAll" | "acceptEdits" | "askUser" | "readonly";
@@ -123,6 +131,7 @@ export interface ToolDefinition {
   name: string;
   description: string;
   inputSchema: unknown;
+  outputSchema?: unknown;
   isConcurrencySafe: boolean;
   isReadOnly: boolean;
   handler: (input: unknown, ctx: ToolContext) => Promise<unknown>;
@@ -142,4 +151,12 @@ export interface QueryState {
   compactionCircuitOpen: boolean;
   usage: UsageCounters;
   threadId: string;
+  contextMetrics: ContextMetrics;
+  retryAttempt: number;
+}
+
+export interface ContextMetrics {
+  injectionTokens: number;
+  claudeMdTokens: number;
+  messagesTokens: number;
 }

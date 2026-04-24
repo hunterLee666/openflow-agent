@@ -5,6 +5,7 @@ export interface Skill {
   triggers: string[];
   steps: SkillStep[];
   markdown?: string;
+  allowedTools?: string[];
 }
 
 export interface SkillStep {

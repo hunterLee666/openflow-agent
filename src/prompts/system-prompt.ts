@@ -20,6 +20,7 @@ export interface PromptContext {
   cwd: string;
   turn: number;
   sessionId?: string;
+  mcpInstructions?: string[];
 }
 
 export class DefaultSystemPromptBuilder implements SystemPromptBuilder {
@@ -83,7 +84,20 @@ Error handling:
 - If uncertain, ask the user for clarification`,
     });
 
-    // 3. Tool Discipline
+    // 3. Task Philosophy
+    layers.push({
+      name: "task_philosophy",
+      stability: "static",
+      priority: 3,
+      content: `Task completion principles:
+- Focus on the user's actual request; avoid scope creep
+- Prefer practical solutions over theoretical perfection
+- Resist over-engineering: write code that solves the problem, not code that impresses
+- If a simpler approach exists, use it
+- "Done is better than perfect" - ship working code over polished prototypes`,
+    });
+
+    // 4. Tool Discipline
     const toolDescriptions = ctx.tools
       .map((t) => `- ${t.name}: ${t.description} (${t.isReadOnly ? "read-only" : "read-write"})`)
       .join("\n");
@@ -91,15 +105,15 @@ Error handling:
     layers.push({
       name: "tool_discipline",
       stability: "static",
-      priority: 3,
+      priority: 4,
       content: `Available tools:\n${toolDescriptions}\n\nTool usage rules:\n- Use read-only tools before read-write tools\n- Batch independent read operations\n- Never use rm -rf / or similar dangerous commands\n- Respect permission modes`,
     });
 
-    // 4. Safety & Security
+    // 5. Safety & Security
     layers.push({
       name: "safety",
       stability: "static",
-      priority: 4,
+      priority: 5,
       content: `Security rules:
 - Never expose API keys, tokens, or credentials
 - Do not execute untrusted code
@@ -107,9 +121,22 @@ Error handling:
 - Warn before modifying configuration files`,
     });
 
+    // 6. Voice & Tone
+    layers.push({
+      name: "voice_tone",
+      stability: "static",
+      priority: 6,
+      content: `Communication style:
+- Be concise: prefer short, direct responses
+- Use code blocks for code snippets
+- Avoid filler words and unnecessary caveats
+- When unsure, say "I don't know" rather than guessing
+- If you need more information, ask one focused question`,
+    });
+
     // === DYNAMIC LAYERS (below boundary) ===
 
-    // 5. Session Preamble (turn-based)
+    // 7. Session Preamble (turn-based)
     layers.push({
       name: "session_preamble",
       stability: "dynamic",
@@ -117,7 +144,7 @@ Error handling:
       content: `Current turn: ${ctx.turn}\nSession: ${ctx.sessionId || "new"}\nWorking directory: ${ctx.cwd}`,
     });
 
-    // 6. Memory Injections (max 5)
+    // 8. Memory Injections (max 5)
     const memoryContext = await ctx.memory.inject("current task", { cwd: ctx.cwd });
     if (memoryContext) {
       layers.push({
@@ -128,7 +155,7 @@ Error handling:
       });
     }
 
-    // 7. Environment Snapshot
+    // 9. Environment Snapshot
     layers.push({
       name: "environment",
       stability: "dynamic",
@@ -136,7 +163,20 @@ Error handling:
       content: `Environment:\n- OS: ${process.platform}\n- Node: ${process.version}\n- Shell: ${process.env.SHELL || "unknown"}`,
     });
 
-    // 8. Token Budget Hint
+    // 10. MCP Server Instructions (from connected MCP servers)
+    if (ctx.mcpInstructions && ctx.mcpInstructions.length > 0) {
+      const mcpContent = ctx.mcpInstructions
+        .map((inst, i) => `## MCP Server ${i + 1}\n${inst}`)
+        .join("\n\n");
+      layers.push({
+        name: "mcp_instructions",
+        stability: "dynamic",
+        priority: 14,
+        content: `### MCP Server Instructions\n${mcpContent}`,
+      });
+    }
+
+    // 11. Token Budget Hint
     layers.push({
       name: "budget_hint",
       stability: "dynamic",

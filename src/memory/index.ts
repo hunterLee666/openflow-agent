@@ -2,6 +2,7 @@ import { DefaultWorkingMemory } from "./working-memory.js";
 import { FileEpisodicMemory } from "./episodic-memory.js";
 import { FileSemanticMemory } from "./semantic-memory.js";
 import { FileProjectMemory } from "./project-memory.js";
+import { MemoryDistiller } from "../kairos/distillation.js";
 import type { MemorySystem, MemoryCard } from "./types.js";
 
 export class DefaultMemorySystem implements MemorySystem {
@@ -60,30 +61,32 @@ export class DefaultMemorySystem implements MemorySystem {
   }
 
   async distill(sessionId: string): Promise<void> {
-    // Extract semantic facts from episodic events
-    const events = await this.episodic.retrieve(sessionId, 50);
+    const events = await this.episodic.retrieve(sessionId, 100);
 
-    // Simple heuristic: user preferences and project facts
-    for (const event of events) {
-      if (event.type === "user_message") {
-        // Extract preferences (simplified)
-        const preferenceMatch = event.content.match(/(?:prefer|use|always|never)\s+(\w+)/i);
-        if (preferenceMatch) {
-          await this.semantic.store({
-            id: `pref_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-            subject: "user",
-            predicate: "prefers",
-            object: preferenceMatch[1],
-            confidence: 0.7,
-            source: sessionId,
-            createdAt: new Date(),
-            tags: ["preference"],
-          });
-        }
-      }
+    if (events.length === 0) {
+      return;
     }
 
-    await this.semantic.consolidate();
+    const distiller = new MemoryDistiller();
+
+    const input = {
+      sessionId,
+      rawLogs: events.map((e) => ({
+        id: e.id,
+        timestamp: e.timestamp,
+        content: e.content,
+      })),
+    };
+
+    const result = await distiller.distill(this, input);
+
+    if (result.cards.length > 0) {
+      await distiller.storeCards(this, result.cards);
+    }
+
+    if (result.errors.length > 0) {
+      console.warn("Distillation errors:", result.errors);
+    }
   }
 }
 
