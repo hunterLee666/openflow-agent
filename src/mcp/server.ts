@@ -7,6 +7,7 @@ import {
   createErrorResponse,
   MCP_ERROR_CODES,
 } from "./protocol.js";
+import { WebSocketTransport, createWebSocketTransport } from "./websocket-transport.js";
 
 export interface McpServerConfig {
   name: string;
@@ -14,6 +15,9 @@ export interface McpServerConfig {
   tools?: ToolDefinition[];
   instructions?: string;
   capabilities?: McpCapabilities;
+  transport?: 'stdio' | 'websocket';
+  websocketUrl?: string;
+  port?: number;
 }
 
 export class McpServer {
@@ -22,9 +26,12 @@ export class McpServer {
   private toolHandlers: Map<string, ToolHandler> = new Map();
   private resourceHandlers: Map<string, ResourceHandler> = new Map();
   private promptHandlers: Map<string, PromptHandler> = new Map();
+  private wsTransport?: WebSocketTransport;
+  private transportType: 'stdio' | 'websocket' = 'stdio';
 
   constructor(config: McpServerConfig) {
     this.config = config;
+    this.transportType = config.transport || 'stdio';
     this.session = new McpSession({
       serverInfo: { name: config.name, version: config.version },
       capabilities: config.capabilities || this.getDefaultCapabilities(),
@@ -80,7 +87,7 @@ export class McpServer {
     }
   }
 
-  async start(): Promise<void> {
+  async startStdio(): Promise<void> {
     process.stdin.on("data", async (data) => {
       try {
         const rawMessage = data.toString().trim();
@@ -100,7 +107,67 @@ export class McpServer {
     });
   }
 
+  async startWebSocket(url?: string): Promise<void> {
+    const wsUrl = url || this.config.websocketUrl;
+    if (!wsUrl && !this.config.port) {
+      throw new Error('WebSocket URL or port must be provided');
+    }
+
+    this.wsTransport = createWebSocketTransport({
+      url: wsUrl,
+      port: this.config.port,
+      onMessage: async (message) => {
+        try {
+          const response = await this.session.handleMessage(JSON.stringify(message));
+          if (response) {
+            this.wsTransport?.send(JSON.parse(response));
+          }
+        } catch (e) {
+          const errorResponse = createErrorResponse(
+            null,
+            MCP_ERROR_CODES.INTERNAL_ERROR,
+            e instanceof Error ? e.message : "Internal error"
+          );
+          this.wsTransport?.send(JSON.parse(JSON.stringify(errorResponse)));
+        }
+      },
+      onConnect: () => {
+        console.log('MCP WebSocket server connected');
+      },
+      onDisconnect: () => {
+        console.log('MCP WebSocket server disconnected');
+      },
+      onError: (error) => {
+        console.error('MCP WebSocket error:', error.message);
+      },
+    });
+
+    await this.wsTransport.connect(wsUrl);
+  }
+
+  async start(): Promise<void> {
+    if (this.transportType === 'websocket') {
+      return this.startWebSocket();
+    }
+    return this.startStdio();
+  }
+
+  async stop(): Promise<void> {
+    if (this.wsTransport) {
+      this.wsTransport.disconnect();
+      this.wsTransport = undefined;
+    }
+  }
+
   getSession(): McpSession {
     return this.session;
+  }
+
+  getTransport(): WebSocketTransport | undefined {
+    return this.wsTransport;
+  }
+
+  isConnected(): boolean {
+    return this.wsTransport?.isConnected() ?? false;
   }
 }

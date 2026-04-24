@@ -16,3 +16,4 @@ export {
   useMultipleStoreSelectors,
   useMultipleStoreSelectorsArr,
 } from "./hooks.js";
+export * from "./selectors.js";
