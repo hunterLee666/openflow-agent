@@ -81,4 +81,17 @@ export * from "./hooks/useInput.js";
 export * from "./hooks/useTerminalSize.js";
 export * from "./hooks/useAnimationFrame.js";
 
+export * from "./context/index.js";
+
+export { C0, ESC, BEL, SEP, ESC_TYPE, isC0, isEscFinal, isCsiFinal, isIntermediate, isParam } from "./termio/ansi.js"
+export { CSI, CURSOR_STYLES, ERASE_DISPLAY, ERASE_LINE_REGION, cursorTo, cursorMove, cursorPosition, CURSOR_HOME, CURSOR_HOME_PATCH, ERASE_SCREEN, ERASE_THEN_HOME_PATCH, DISABLE_KITTY_KEYBOARD, ENABLE_KITTY_KEYBOARD, DISABLE_MODIFY_OTHER_KEYS, ENABLE_MODIFY_OTHER_KEYS, HIDE_CURSOR, SHOW_CURSOR, eraseLines, saveCursor, restoreCursor, scrollUp, scrollDown, setMargins } from "./termio/csi.js"
+export { DEC, DEC_MODE, BSU, ESU, HIDE_CURSOR as DEC_HIDE_CURSOR, SHOW_CURSOR as DEC_SHOW_CURSOR, ENABLE_MOUSE_TRACKING, DISABLE_MOUSE_TRACKING, ENABLE_BRAILLE_PASTE, DISABLE_BRAILLE_PASTE, setBracketedPaste, setMouseTracking, setAltScreen, enterAlternateScreen, exitAlternateScreen, saveDecPrivateModeState, restoreDecPrivateModeState, resetAllModes } from "./termio/dec.js"
+export { OSC, setWindowTitle, setClipboard, getClipboard, clearHyperlink, setHyperlink, setProgressBar, setTerminalNotification, reportTerminalId, setTabStatus, supportsTabStatus, wrapForMultiplexer, unwrapForMultiplexer } from "./termio/osc.js"
+export { defaultStyle, colorToSgr, styleToSgr, sgrToStyle, applySgr } from "./termio/sgr.js"
+export { parseEsc, ESC_SEQUENCES, isEscSequence, isTwoCharEsc, type EscAction } from "./termio/esc.js"
+export { createTokenizer, createParser } from "./termio/parser.js"
+export type { Token, Tokenizer } from "./termio/parser.js"
+export { Parser } from "./termio/parser.js"
+export { Color as TermioColor, type Grapheme, type TextStyle, type Cell, type Action, type CursorAction, type NamedColor } from "./termio/types.js"
+
 export * from "./types.js";

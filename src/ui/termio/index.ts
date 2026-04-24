@@ -66,6 +66,13 @@ export {
   sgrToStyle,
   applySgr,
 } from './sgr.js'
+export {
+  parseEsc,
+  ESC_SEQUENCES,
+  isEscSequence,
+  isTwoCharEsc,
+  type EscAction,
+} from './esc.js'
 export * from './types.js'
 export { createTokenizer, createParser } from './parser.js'
 export type { Token, Tokenizer } from './parser.js'
