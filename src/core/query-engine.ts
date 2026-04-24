@@ -13,6 +13,8 @@ import type {
 } from "../types/index.js";
 import { DefaultSystemPromptBuilder } from "../prompts/system-prompt.js";
 import type { HookPayload } from "../hooks/types.js";
+import { AnthropicApiClient } from "../services/api/client.js";
+import type { OpenAIMessage } from "../services/api/types.js";
 
 export async function* query(
   input: QueryInput,
@@ -52,9 +54,15 @@ async function* queryLoop(
   ctx: QueryContext,
   mode: string,
 ): AsyncGenerator<StreamEvent, QueryResult, undefined> {
-  const client = new Anthropic({
+  const provider = ctx.config.provider || "anthropic";
+  const anthropicClient = new Anthropic({
     apiKey: ctx.config.apiKey,
     baseURL: ctx.config.baseUrl,
+  });
+  const apiClient = new AnthropicApiClient({
+    apiKey: ctx.config.apiKey,
+    baseUrl: ctx.config.baseUrl,
+    provider,
   });
 
   // Record session start in memory
@@ -101,20 +109,23 @@ async function* queryLoop(
 
     let assistantMsg: Message;
     try {
-      const stream = await client.messages.create({
-        model: state.model,
-        max_tokens: ctx.config.maxTokens,
-        messages: state.messages.filter((m) => m.role !== "system") as Anthropic.Messages.MessageParam[],
-        system: extractSystemPrompt(state.messages),
-        tools: ctx.toolRegistry.list().map((t) => ({
-          name: t.name,
-          description: t.description,
-          input_schema: t.inputSchema as Anthropic.Messages.Tool.InputSchema,
-        })),
-        stream: true,
-      });
-
-      assistantMsg = await collectAssistantMessage(stream);
+      if (provider === "anthropic") {
+        const stream = await anthropicClient.messages.create({
+          model: state.model,
+          max_tokens: ctx.config.maxTokens,
+          messages: state.messages.filter((m) => m.role !== "system") as Anthropic.Messages.MessageParam[],
+          system: extractSystemPrompt(state.messages),
+          tools: ctx.toolRegistry.list().map((t) => ({
+            name: t.name,
+            description: t.description,
+            input_schema: t.inputSchema as Anthropic.Messages.Tool.InputSchema,
+          })),
+          stream: true,
+        });
+        assistantMsg = await collectAssistantMessage(stream);
+      } else {
+        assistantMsg = await collectOpenAICompatibleMessage(state, ctx, apiClient);
+      }
     } catch (e) {
       const recovered = await handleStreamError(e as Error, ctx);
       if (!recovered) {
@@ -321,6 +332,69 @@ async function collectAssistantMessage(
   }
   for (const tu of toolUses) {
     content.push(tu);
+  }
+
+  return { role: "assistant", content };
+}
+
+async function collectOpenAICompatibleMessage(
+  state: QueryState,
+  ctx: QueryContext,
+  apiClient: AnthropicApiClient,
+): Promise<Message> {
+  const messages: OpenAIMessage[] = state.messages
+    .filter((m) => m.role !== "system")
+    .map((m) => {
+      if (typeof m.content === "string") {
+        return { role: m.role as "user" | "assistant", content: m.content };
+      }
+      const text = m.content.find((c) => c.type === "text")?.text || "";
+      return { role: m.role as "user" | "assistant", content: text };
+    });
+
+  const systemPrompt = extractSystemPrompt(state.messages);
+  const tools = ctx.toolRegistry.list().map((t) => ({
+    type: "function" as const,
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.inputSchema,
+    },
+  }));
+
+  let fullContent = "";
+  let toolCalls: { id: string; name: string; input: Record<string, unknown> }[] = [];
+
+  await apiClient.createOpenAICompatibleMessage(
+    messages,
+    state.model,
+    {
+      system: systemPrompt,
+      temperature: 0.7,
+      maxTokens: ctx.config.maxTokens,
+      stream: false,
+    },
+    {
+      onText: (text: string) => {
+        fullContent += text;
+      },
+      onToolCall: (toolCall: { id: string; name: string; input: Record<string, unknown> }) => {
+        toolCalls.push(toolCall);
+      },
+    },
+  );
+
+  const content: ContentBlock[] = [];
+  if (fullContent) {
+    content.push({ type: "text", text: fullContent });
+  }
+  for (const tc of toolCalls) {
+    content.push({
+      type: "tool_use",
+      id: tc.id,
+      name: tc.name,
+      input: tc.input,
+    });
   }
 
   return { role: "assistant", content };

@@ -12,11 +12,12 @@ export interface OpenAIMessage {
 }
 
 export interface OpenAIToolCall {
+  index?: number;
   id: string;
   type: 'function';
   function: {
     name: string;
-    arguments: string;
+    arguments?: string;
   };
 }
 
@@ -170,6 +171,8 @@ export interface TokenUsage {
 
 export interface StreamHandler {
   onToken?: (token: string) => void;
+  onText?: (text: string) => void;
+  onToolCall?: (toolCall: { id: string; name: string; input: Record<string, unknown> }) => void;
   onChunk?: (event: AnthropicStreamEvent) => void;
   onComplete?: (usage?: TokenUsage) => void;
   onError?: (error: ApiErrorInfo) => void;

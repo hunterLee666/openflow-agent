@@ -43,6 +43,8 @@ async function createQueryContext(): Promise<QueryContext> {
     config: {
       apiKey: config.apiKey,
       model: config.model,
+      provider: config.provider,
+      baseUrl: config.baseUrl,
       maxTokens: 8192,
       maxTurns: 100,
       tokenBudget: 100000,

@@ -89,6 +89,10 @@ export class AnthropicApiClient {
   }
 
   private async executeOpenAIRequest(requestBody: Record<string, unknown>): Promise<OpenAIResponse> {
+    if (this.provider === 'dashscope') {
+      requestBody.enable_thinking = false;
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
@@ -117,6 +121,10 @@ export class AnthropicApiClient {
     requestBody: Record<string, unknown>,
     handler: StreamHandler
   ): Promise<OpenAIResponse> {
+    if (this.provider === 'dashscope') {
+      requestBody.enable_thinking = false;
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
@@ -143,6 +151,7 @@ export class AnthropicApiClient {
       let buffer = '';
       let fullContent = '';
       const usage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+      const toolCallBuffers: Map<number, { id: string; name: string; arguments: string }> = new Map();
 
       while (true) {
         const { done, value } = await reader.read();
@@ -159,15 +168,46 @@ export class AnthropicApiClient {
 
           try {
             const chunk: OpenAIStreamChunk = JSON.parse(data);
-            const delta = chunk.choices[0]?.delta?.content;
+            const delta = chunk.choices[0]?.delta;
+            const toolCalls = delta?.tool_calls;
 
-            if (delta) {
-              fullContent += delta;
-              handler.onToken?.(delta);
+            if (delta?.content) {
+              fullContent += delta.content;
+              handler.onToken?.(delta.content);
+              handler.onText?.(delta.content);
+            }
+
+            if (toolCalls && Array.isArray(toolCalls)) {
+              for (const tc of toolCalls) {
+                const idx = tc.index ?? 0;
+                if (tc.function?.name) {
+                  toolCallBuffers.set(idx, {
+                    id: tc.id || '',
+                    name: tc.function.name,
+                    arguments: tc.function.arguments || '',
+                  });
+                } else if (tc.function?.arguments && toolCallBuffers.has(idx)) {
+                  const existing = toolCallBuffers.get(idx)!;
+                  existing.arguments += tc.function.arguments;
+
+                  if (tc.id) {
+                    existing.id = tc.id;
+                  }
+                }
+              }
             }
           } catch {
             // Ignore parse errors for malformed chunks
           }
+        }
+      }
+
+      for (const [, tc] of toolCallBuffers) {
+        try {
+          const input = JSON.parse(tc.arguments || '{}');
+          handler.onToolCall?.({ id: tc.id, name: tc.name, input });
+        } catch {
+          handler.onToolCall?.({ id: tc.id, name: tc.name, input: {} });
         }
       }
 

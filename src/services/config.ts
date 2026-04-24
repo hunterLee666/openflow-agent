@@ -17,6 +17,15 @@ export async function loadConfig(): Promise<AgentConfig> {
   const provider = process.env.API_PROVIDER as 'anthropic' | 'openai' | 'dashscope' | undefined;
   const resolvedProvider = provider || (dashscopeApiKey && !anthropicApiKey ? 'dashscope' : undefined);
 
+  let baseUrl: string | undefined;
+  if (process.env.ANTHROPIC_BASE_URL) {
+    baseUrl = process.env.ANTHROPIC_BASE_URL;
+  } else if (process.env.DASHSCOPE_BASE_URL) {
+    baseUrl = process.env.DASHSCOPE_BASE_URL;
+  } else if (resolvedProvider === 'dashscope' || resolvedProvider === 'openai') {
+    baseUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+  }
+
   const defaults: AgentConfig = {
     apiKey: dashscopeApiKey || anthropicApiKey,
     model: process.env.MODEL || process.env.ANTHROPIC_MODEL || "qwen3-32b",
@@ -28,7 +37,7 @@ export async function loadConfig(): Promise<AgentConfig> {
     permissionMode: "acceptEdits",
     compactionThreshold: 100000,
     maxCompactionFailures: 3,
-    baseUrl: process.env.ANTHROPIC_BASE_URL || process.env.DASHSCOPE_BASE_URL,
+    baseUrl,
   };
 
   if (existsSync(CONFIG_PATH)) {
