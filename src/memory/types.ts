@@ -369,6 +369,41 @@ export interface SessionLifecycleConfig {
   maxObservationsPerSession: number;
 }
 
+export const MEMORY_TYPE_VALUES = [
+  'User',
+  'Project',
+  'Local',
+  'Managed',
+  'AutoMem',
+  'TeamMem',
+] as const;
+
+export type MemoryType = (typeof MEMORY_TYPE_VALUES)[number];
+
+export interface ManagedMemoryConfig {
+  type: MemoryType;
+  path: string;
+  maxSizeBytes?: number;
+  ttlDays?: number;
+  syncIntervalMinutes?: number;
+  encryptionEnabled?: boolean;
+}
+
+export interface TeamMemoryConfig extends ManagedMemoryConfig {
+  teamId: string;
+  members: string[];
+  permissions: Record<string, 'read' | 'write' | 'admin'>;
+}
+
+export interface MemoryStore {
+  type: MemoryType;
+  get(key: string): Promise<MemoryEntry | null>;
+  set(key: string, entry: MemoryEntry): Promise<void>;
+  delete(key: string): Promise<void>;
+  list(prefix?: string): Promise<MemoryEntry[]>;
+  query(text: string, limit?: number): Promise<MemoryEntry[]>;
+}
+
 export interface SessionHooks {
   onEvent?: (session: Session, event: SessionEvent) => void;
   onObservation?: (session: Session, observation: SessionObservation) => void;

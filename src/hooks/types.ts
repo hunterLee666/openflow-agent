@@ -1,86 +1,128 @@
 export type HookEvent =
-  | "SessionStart"
-  | "UserPromptSubmit"
-  | "PreToolUse"
-  | "PostToolUse"
-  | "PermissionRequest"
-  | "StreamChunk";
+  | 'PreToolUse'
+  | 'PostToolUse'
+  | 'PreCompact'
+  | 'PostCompact'
+  | 'SessionStart'
+  | 'SessionEnd'
+  | 'SubagentStart'
+  | 'SubagentStop'
+  | 'TaskCreated'
+  | 'TaskCompleted'
+  | 'Setup'
+  | 'Stop'
+  | 'StopFailure'
+  | 'UserPromptSubmit';
 
-export interface HookPayload {
-  event: HookEvent;
-  sessionId?: string;
+export const HOOK_EVENTS: HookEvent[] = [
+  'PreToolUse',
+  'PostToolUse',
+  'PreCompact',
+  'PostCompact',
+  'SessionStart',
+  'SessionEnd',
+  'SubagentStart',
+  'SubagentStop',
+  'TaskCreated',
+  'TaskCompleted',
+  'Setup',
+  'Stop',
+  'StopFailure',
+  'UserPromptSubmit',
+];
+
+export interface HookContext {
+  toolName?: string;
   tool?: string;
+  toolInput?: Record<string, unknown>;
   input?: Record<string, unknown>;
   output?: unknown;
-  risk?: RiskAssessment;
-  chunk?: string;
   prompt?: string;
-  timestamp: number;
+  cwd?: string;
+  sessionId?: string;
+  agentId?: string;
+  taskId?: string;
+  error?: Error;
+  result?: unknown;
+  args?: Record<string, unknown>;
+  type?: string;
+  reason?: string;
 }
 
-export interface RiskAssessment {
-  level: "low" | "medium" | "high" | "critical";
-  categories: string[];
-  description: string;
+export type HookFn = (context: HookContext) => HookResult | Promise<HookResult>;
+
+export interface HookResult {
+  action?: 'allow' | 'deny' | 'block' | 'continue' | 'modify';
+  modifiedInput?: Record<string, unknown>;
+  message?: string;
+  metadata?: Record<string, unknown>;
 }
 
-export type HookDecision =
-  | { type: "allow" }
-  | { type: "block"; reason: string }
-  | { type: "modify"; name?: string; args?: Record<string, unknown> };
+export type SyncHookFn = (context: HookContext) => HookResult;
+export type AsyncHookFn = (context: HookContext) => Promise<HookResult>;
 
-export type HookCallback = (payload: HookPayload) => Promise<HookDecision>;
-
-export interface RegisteredHook {
+export interface HookRegistration {
   id: string;
   event: HookEvent;
-  matcher?: HookMatcher;
-  callback: HookCallback;
-  priority: number;
+  fn: HookFn;
+  source: 'shell' | 'http' | 'agent' | 'builtin';
+  timeout?: number;
+  enabled?: boolean;
 }
 
-export type HookMatcher =
-  | { type: "exact"; name: string }
-  | { type: "prefix"; value: string }
-  | { type: "regex"; pattern: RegExp }
-  | { type: "risk"; minLevel: RiskAssessment["level"] }
-  | { type: "all" };
-
-export interface HookRegistry {
-  register(hook: RegisteredHook): void;
-  unregister(id: string): void;
-  dispatch(event: HookEvent, payload: Omit<HookPayload, "event" | "timestamp">): Promise<HookDecision>;
-  list(event?: HookEvent): RegisteredHook[];
+export interface HookExecutionResult {
+  hookId: string;
+  success: boolean;
+  result?: HookResult;
+  error?: Error;
+  durationMs: number;
 }
 
-export function matchTool(matcher: HookMatcher, name: string): boolean {
-  switch (matcher.type) {
-    case "exact":
-      return name === matcher.name;
-    case "prefix":
-      return name.startsWith(matcher.value);
-    case "regex":
-      return matcher.pattern.test(name);
-    case "all":
-      return true;
-    default:
-      return false;
-  }
+export interface PreToolUseHookContext extends HookContext {
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  canUseTool: boolean;
 }
 
-export function mergeDecisions(acc: HookDecision, next: HookDecision): HookDecision {
-  if (acc.type === "block" || next.type === "block") {
-    return next.type === "block" ? next : acc;
-  }
-  if (next.type === "modify") {
-    return {
-      type: "modify",
-      name: next.name ?? (acc.type === "modify" ? acc.name : undefined),
-      args: {
-        ...(acc.type === "modify" ? acc.args : {}),
-        ...next.args,
-      },
-    };
-  }
-  return acc;
+export interface PostToolUseHookContext extends HookContext {
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  toolResult: unknown;
+  success: boolean;
+}
+
+export interface SessionHookContext extends HookContext {
+  sessionId: string;
+  startTime?: number;
+  endTime?: number;
+}
+
+export interface SubagentHookContext extends HookContext {
+  agentId: string;
+  agentType: string;
+  parentAgentId?: string;
+}
+
+export interface TaskHookContext extends HookContext {
+  taskId: string;
+  taskType: string;
+  status: string;
+}
+
+export interface CompactHookContext extends HookContext {
+  messageCount: number;
+  tokenCount: number;
+  messagesSummary?: string;
+}
+
+export function createHookId(prefix: string = 'hook'): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+export function isAllowed(result: HookResult): boolean {
+  return result.action === 'allow' || result.action === 'continue';
+}
+
+export function isDenied(result: HookResult): boolean {
+  return result.action === 'deny' || result.action === 'block';
 }

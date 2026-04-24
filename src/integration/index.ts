@@ -6,7 +6,7 @@ import { getTaskAgentTools } from "../agent/task-agent.js";
 import { FileSessionStore } from "../services/session.js";
 import { ConsoleTelemetry } from "../services/telemetry.js";
 import { DefaultMemorySystem } from "../memory/index.js";
-import { DefaultHookRegistry } from "../hooks/registry.js";
+import { DefaultHookRegistry } from "../hooks/index.js";
 import { DefaultPromptCache } from "../cache/prompt-cache.js";
 import { DefaultCommandRegistry, createBuiltinCommands } from "../commands/registry.js";
 import { WorkspaceBoundaryValidator } from "../security/workspace-boundary.js";

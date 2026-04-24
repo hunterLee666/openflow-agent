@@ -13,7 +13,7 @@ import { ConsoleTelemetry } from "./services/telemetry.js";
 import { query } from "./core/query-engine.js";
 import { streamEventToUIMessage, queryResultToUIMessage } from "./ui/query-integration.js";
 import { DefaultMemorySystem } from "./memory/index.js";
-import { DefaultHookRegistry } from "./hooks/registry.js";
+import { DefaultHookRegistry } from "./hooks/index.js";
 import { DefaultPromptCache } from "./cache/prompt-cache.js";
 import { DefaultCommandRegistry, createBuiltinCommands } from "./commands/registry.js";
 import { getTaskAgentTools } from "./agent/task-agent.js";

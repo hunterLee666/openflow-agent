@@ -14,7 +14,7 @@ import type {
   ContextMetrics,
 } from "../types/index.js";
 import { DefaultSystemPromptBuilder } from "../prompts/system-prompt.js";
-import type { HookPayload } from "../hooks/types.js";
+import type { HookContext } from "../hooks/types.js";
 import { createUnifiedClient, type MessageParam, type ToolParam } from "../services/api/unified-client.js";
 import { invokeTool, formatToolError } from "../tools/invoke.js";
 import { FourteenStepGovernancePipeline, type GovernanceContext, type GovernanceHooks } from "../tools/governance.js";
@@ -133,12 +133,13 @@ async function* queryLoop(
 
     // Dispatch pre-turn hook
     if (ctx.hooks) {
-      const decision = await ctx.hooks.dispatch("UserPromptSubmit", {
+      const results = await ctx.hooks.dispatch("UserPromptSubmit", {
         sessionId: state.threadId,
         prompt: extractLastUserText(state.messages),
       });
-      if (decision.type === "block") {
-        return finalizeResult(state, "cancelled", `Blocked by hook: ${decision.reason}`);
+      const firstResult = results[0];
+      if (firstResult?.result?.action === "block") {
+        return finalizeResult(state, "cancelled", `Blocked by hook: ${firstResult.result.message ?? "unknown"}`);
       }
     }
 
@@ -869,19 +870,20 @@ async function runSingleTool(
     preToolUse: async (gCtx) => {
       if (!ctx.hooks) return { action: "allow" };
 
-      const hookDecision = await ctx.hooks.dispatch("PreToolUse", {
+      const results = await ctx.hooks.dispatch("PreToolUse", {
         sessionId: state.threadId,
         tool: gCtx.tool,
         input: gCtx.input,
       });
 
-      if (hookDecision.type === "block") {
-        return { action: "deny", reason: hookDecision.reason };
+      const firstResult = results[0];
+      if (firstResult?.result?.action === "block") {
+        return { action: "deny", reason: firstResult.result.message };
       }
-      if (hookDecision.type === "modify") {
+      if (firstResult?.result?.action === "modify") {
         return {
           action: "modify",
-          input: hookDecision.args ? { ...gCtx.input, ...hookDecision.args } : gCtx.input,
+          input: firstResult.result.modifiedInput ?? gCtx.input,
         };
       }
       return { action: "allow" };

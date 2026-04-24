@@ -126,14 +126,13 @@ export type {
 } from "./memory/types.js";
 
 export type {
-  HookRegistry,
   HookEvent,
-  HookPayload,
-  HookDecision,
-  HookMatcher,
-  RegisteredHook,
-  RiskAssessment,
-} from "./hooks/types.js";
+  HookContext,
+  HookFn,
+  HookResult,
+  HookRegistration,
+  HookExecutionResult,
+} from "./hooks/index.js";
 
 export type {
   Coordinator,

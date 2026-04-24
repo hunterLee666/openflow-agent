@@ -89,7 +89,7 @@ export interface QueryContext {
   abortSignal: AbortSignal;
   toolRegistry: ToolRegistry;
   memory?: import("../memory/types.js").MemorySystem;
-  hooks?: import("../hooks/types.js").HookRegistry;
+  hooks?: InstanceType<typeof import("../hooks/registry.js").HookRegistry>;
   permissionPipeline?: import("../permissions/types.js").PermissionPipeline;
   promptCache?: import("../cache/types.js").PromptCache;
   commandRegistry?: import("../commands/types.js").CommandRegistry;
@@ -107,6 +107,7 @@ export interface AgentConfig {
   model: string;
   provider?: 'anthropic' | 'openai' | 'dashscope' | 'zhipu' | 'zhipuai' | 'deepseek' | 'minimax' | 'moonshot' | 'openrouter' | 'nvidia';
   maxTokens: number;
+  maxOutputTokens?: number;
   maxTurns: number;
   tokenBudget: number;
   moneyBudgetUsd?: number;
@@ -115,6 +116,10 @@ export interface AgentConfig {
   maxCompactionFailures: number;
   baseUrl?: string;
   maskSensitiveOutputs?: boolean;
+  systemPrompt?: string;
+  userContext?: Record<string, string>;
+  systemContext?: Record<string, string>;
+  tools?: unknown[];
 }
 
 export type PermissionMode = "acceptAll" | "acceptEdits" | "askUser" | "readonly";

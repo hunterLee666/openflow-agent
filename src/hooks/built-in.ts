@@ -1,58 +1,81 @@
-import type { RegisteredHook, HookDecision } from "./types.js";
+import type { HookRegistration, HookResult } from "./types.js";
 
-export function createBuiltInHooks(): RegisteredHook[] {
-  return [
-    // Block dangerous commands
-    {
-      id: "block-rm-rf",
-      event: "PreToolUse",
-      matcher: { type: "exact", name: "bash" },
-      priority: 1,
-      callback: async (payload) => {
-        const cmd = (payload.input?.command as string) || "";
-        if (/rm\s+-rf\s+\//.test(cmd) || /rm\s+-rf\s+~/.test(cmd)) {
-          return { type: "block", reason: "Dangerous command blocked: rm -rf on root/home" };
-        }
-        return { type: "allow" };
-      },
+export function createBuiltinHooks(): HookRegistration[] {
+  const hooks: HookRegistration[] = [];
+
+  hooks.push({
+    id: "block-rm-rf",
+    event: "PreToolUse",
+    fn: async (context) => {
+      const cmd = (context.toolInput?.command as string) || "";
+      if (/rm\s+-rf\s+\//.test(cmd) || /rm\s+-rf\s+~/.test(cmd)) {
+        return { action: "block", message: "Dangerous command blocked: rm -rf on root/home" };
+      }
+      return { action: "allow" };
     },
-    // Audit MCP tools
-    {
-      id: "audit-mcp",
-      event: "PreToolUse",
-      matcher: { type: "prefix", value: "mcp__" },
-      priority: 5,
-      callback: async (payload) => {
-        console.log(`[AUDIT] MCP tool called: ${payload.tool} at ${new Date().toISOString()}`);
-        return { type: "allow" };
-      },
+    source: "builtin",
+  });
+
+  hooks.push({
+    id: "audit-mcp",
+    event: "PreToolUse",
+    fn: async (context) => {
+      if (context.toolName?.startsWith("mcp__")) {
+        console.log(`[AUDIT] MCP tool called: ${context.toolName} at ${new Date().toISOString()}`);
+      }
+      return { action: "allow" };
     },
-    // Block high-risk operations without explicit confirmation
-    {
-      id: "block-high-risk",
-      event: "PreToolUse",
-      matcher: { type: "risk", minLevel: "high" },
-      priority: 1,
-      callback: async (payload) => {
-        if (payload.risk?.level === "critical") {
-          return {
-            type: "block",
-            reason: `Critical risk operation blocked: ${payload.risk.description}`,
-          };
-        }
-        return { type: "allow" };
-      },
+    source: "builtin",
+  });
+
+  hooks.push({
+    id: "log-tool-use",
+    event: "PostToolUse",
+    fn: async () => {
+      return { action: "allow" };
     },
-    // Log all tool usage
-    {
-      id: "log-tool-use",
-      event: "PostToolUse",
-      matcher: { type: "all" },
-      priority: 100,
-      callback: async (payload) => {
-        // Silent logging - could write to file
-        return { type: "allow" };
-      },
+    source: "builtin",
+  });
+
+  return hooks;
+}
+
+export function createBlockRmRfHook(): HookRegistration {
+  return {
+    id: "block-rm-rf",
+    event: "PreToolUse",
+    fn: async (context) => {
+      const cmd = (context.toolInput?.command as string) || "";
+      if (/rm\s+-rf\s+\//.test(cmd) || /rm\s+-rf\s+~/.test(cmd)) {
+        return { action: "block", message: "Dangerous command blocked" };
+      }
+      return { action: "allow" };
     },
-  ];
+    source: "builtin",
+  };
+}
+
+export function createAuditMcpHook(): HookRegistration {
+  return {
+    id: "audit-mcp",
+    event: "PreToolUse",
+    fn: async (context) => {
+      if (context.toolName?.startsWith("mcp__")) {
+        console.log(`[AUDIT] MCP tool called: ${context.toolName}`);
+      }
+      return { action: "allow" };
+    },
+    source: "builtin",
+  };
+}
+
+export function createLogToolUseHook(): HookRegistration {
+  return {
+    id: "log-tool-use",
+    event: "PostToolUse",
+    fn: async () => {
+      return { action: "allow" };
+    },
+    source: "builtin",
+  };
 }
