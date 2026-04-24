@@ -293,3 +293,42 @@ export type { EasterEgg, EasterEggTrigger, EasterEggReward, EggCollection, Badge
 
 export { ParallelPrefetcher, PrefetchCache, DependencyGraph, createPrefetcher, createDependencyGraph, DEFAULT_PREFETCH_CONFIG } from "./modes/prefetch.js";
 export type { PrefetchConfig, PrefetchRequest, PrefetchResult, CacheEntry, QueueMetrics, PrefetchStrategy, PredictionContext } from "./modes/prefetch.js";
+
+export {
+  Box,
+  Text,
+  Spinner,
+  Markdown,
+  MessageComponent,
+  MessageList,
+  TextInput,
+  App,
+  renderApp,
+  useTerminalSize,
+  useInput,
+} from "./ui/index.js";
+export type {
+  BoxProps,
+  TextProps,
+  SpinnerProps,
+  MarkdownProps,
+  MessageProps,
+  MessageRole,
+  MessageContent,
+  TextInputProps,
+  AppProps,
+  KeyEvent,
+  UseInputOptions,
+  TerminalSize,
+  Color,
+  Style,
+  Cursor,
+  Node,
+  FlexDirection,
+  FlexWrap,
+  AlignItems,
+  AlignContent,
+  JustifyContent,
+  Spacing,
+  BorderStyle,
+} from "./ui/index.js";
