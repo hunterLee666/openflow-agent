@@ -214,7 +214,7 @@ export class SevenStepPermissionPipeline implements PermissionPipeline {
     }
 
     for (const rule of this.customRules) {
-      if (rule.action === "deny" && this.matchesRule(ctx, rule.tool, rule.pattern)) {
+      if (rule.behavior === "deny" && this.matchesRule(ctx, rule.ruleContent?.toolName, rule.ruleContent?.pathPattern ? new RegExp(rule.ruleContent.pathPattern) : undefined)) {
         return {
           step: 1,
           action: "deny",
@@ -238,7 +238,7 @@ export class SevenStepPermissionPipeline implements PermissionPipeline {
     }
 
     for (const rule of this.customRules) {
-      if (rule.action === "ask" && this.matchesRule(ctx, rule.tool, rule.pattern)) {
+      if (rule.behavior === "ask" && this.matchesRule(ctx, rule.ruleContent?.toolName, rule.ruleContent?.pathPattern ? new RegExp(rule.ruleContent.pathPattern) : undefined)) {
         return {
           step: 2,
           action: "ask",
@@ -480,6 +480,21 @@ export class SevenStepPermissionPipeline implements PermissionPipeline {
 
   addSafetyGuard(guard: SafetyGuard): void {
     this.safetyGuards.push(guard);
+  }
+
+  getRules(source?: string): PermissionRule[] {
+    if (source) {
+      return this.customRules.filter((r) => r.source === source);
+    }
+    return [...this.customRules];
+  }
+
+  clearRules(source?: string): void {
+    if (source) {
+      this.customRules = this.customRules.filter((r) => r.source !== source);
+    } else {
+      this.customRules = [];
+    }
   }
 }
 

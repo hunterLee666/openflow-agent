@@ -19,6 +19,10 @@ import { DefaultCommandRegistry, createBuiltinCommands } from "./commands/regist
 import { getTaskAgentTools } from "./agent/task-agent.js";
 import { WorkspaceBoundaryValidator } from "./security/workspace-boundary.js";
 import { createPermissionPipeline } from "./permissions/index.js";
+import { SettingsLoader, DEFAULT_SETTINGS, getDefaultSettings } from "./config/settings.js";
+import { CommandParser, getCommandCategory } from "./utils/command-parser.js";
+import { MemoryTruncator, DEFAULT_MEMORY_LIMITS } from "./memory/memory-truncator.js";
+import { createSandboxAdapter, getDefaultSandboxConfig } from "./security/sandbox.js";
 
 const program = new Command();
 
@@ -39,6 +43,10 @@ for (const cmd of createBuiltinCommands()) {
 
 let workspaceValidator: WorkspaceBoundaryValidator;
 let permissionPipeline: ReturnType<typeof createPermissionPipeline>;
+let settingsLoader: SettingsLoader;
+let memoryTruncator: MemoryTruncator;
+let sandboxAdapter: ReturnType<typeof createSandboxAdapter>;
+let commandParser: CommandParser;
 
 interface ChatState {
   messages: Message[];
@@ -50,9 +58,12 @@ interface ChatState {
 
 async function initializeApp(): Promise<void> {
   const config = await loadConfig();
+  const homeDir = process.env.HOME || process.env.USERPROFILE || "~";
+  const projectDir = process.cwd();
+
   workspaceValidator = new WorkspaceBoundaryValidator({
     boundaries: {
-      root: process.cwd(),
+      root: projectDir,
       allowedPaths: [],
       deniedPaths: ["/.git/", "/.ssh/", "/.aws/", "/etc/passwd", "/etc/shadow"],
     },
@@ -60,6 +71,17 @@ async function initializeApp(): Promise<void> {
     checkOnWrite: true,
     checkOnExecute: true,
   });
+
+  settingsLoader = new SettingsLoader(homeDir, projectDir);
+
+  memoryTruncator = new MemoryTruncator({
+    maxEntryPointLines: DEFAULT_MEMORY_LIMITS.maxEntryPointLines,
+    maxEntryPointBytes: DEFAULT_MEMORY_LIMITS.maxEntryPointBytes,
+    retentionDays: DEFAULT_MEMORY_LIMITS.retentionDays,
+  });
+
+  sandboxAdapter = createSandboxAdapter();
+  commandParser = new CommandParser();
 
   const agentConfig: AgentConfig = {
     apiKey: config.apiKey,
@@ -79,6 +101,11 @@ async function initializeApp(): Promise<void> {
   }
 
   permissionPipeline = createPermissionPipeline();
+
+  const rules = settingsLoader.getPermissionRules("userSettings");
+  for (const rule of rules) {
+    permissionPipeline.addRule(rule);
+  }
 }
 
 async function createQueryContext(abortController: AbortController): Promise<QueryContext> {
