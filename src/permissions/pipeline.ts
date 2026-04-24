@@ -104,7 +104,7 @@ export class SevenStepPermissionPipeline implements PermissionPipeline {
     const step3 = this.step3ToolSpecific(ctx);
     if (step3.action !== "continue") return this.toDecision(step3);
 
-    const step4 = this.step4SpeculativeClassifier(ctx);
+    const step4 = await this.step4SpeculativeClassifier(ctx);
     if (step4.action !== "continue") return this.toDecision(step4);
 
     const step5 = this.step5UserInteraction(ctx);
@@ -155,19 +155,20 @@ export class SevenStepPermissionPipeline implements PermissionPipeline {
     return { step: 8, action: "continue" };
   }
 
-  private step4SpeculativeClassifier(ctx: PermissionContext): PipelineStepResult {
+  private async step4SpeculativeClassifier(ctx: PermissionContext): Promise<PipelineStepResult> {
     const classifier = new DefaultSpeculativeClassifier();
-    const risk = classifier.classify({
+    const risk = await classifier.classify({
       tool: ctx.tool,
       input: ctx.input,
       cwd: ctx.cwd,
+      mode: ctx.mode,
       isReadOnly: ctx.isReadOnly,
       isDestructive: ctx.isDestructive,
-      isNetworkAccess: ctx.isGitCommand ? false : ctx.tool === "bash" && /curl|wget|nc|ssh/i.test(String(ctx.input.command || "")),
+      isNetworkCommand: ctx.isGitCommand ? false : ctx.tool === "bash" && /curl|wget|nc|ssh/i.test(String(ctx.input.command || "")),
       isGitCommand: ctx.isGitCommand,
     });
 
-    if (risk.level === "critical") {
+    if (risk.decision.type === "ask" && risk.decision.risk === "critical") {
       return {
         step: 4,
         action: "deny",
@@ -175,7 +176,7 @@ export class SevenStepPermissionPipeline implements PermissionPipeline {
       };
     }
 
-    if (risk.level === "high" && ctx.mode === "readonly") {
+    if (risk.decision.type === "ask" && risk.decision.risk === "high" && ctx.mode === "readonly") {
       return {
         step: 4,
         action: "deny",

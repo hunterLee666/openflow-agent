@@ -1,2 +1,15 @@
-export { DefaultFeatureFlagRegistry } from "./registry.js";
-export * from "./types.js";
+export {
+  feature,
+  isFeatureEnabled,
+  enableFeature,
+  disableFeature,
+  resetFeatureCache,
+  getAllFeatures,
+  getFeaturesByCategory,
+  getEnabledFeatures,
+  isBuildTimeEnabled,
+  type FeatureName,
+  type FeatureConfig,
+  FEATURE_CONFIGS,
+  DefaultFeatureFlagRegistry,
+} from "./feature-flags.js";

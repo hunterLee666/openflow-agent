@@ -8,11 +8,8 @@
     "dev": "bun run --watch src/main.tsx",
     "build": "bun build src/main.tsx --outdir ./dist",
     "typecheck": "tsc --noEmit",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "test:watch": "vitest watch",
-    "test:coverage": "vitest run --coverage",
-    "test:ui": "vitest --ui"
+    "test": "bun test",
+    "test:run": "bun test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
@@ -26,10 +23,7 @@
   "devDependencies": {
     "@types/bun": "latest",
     "@types/react": "^18.3.18",
-    "@vitest/coverage-v8": "^4.1.5",
-    "@vitest/ui": "^4.1.5",
-    "typescript": "^5.8.0",
-    "vitest": "^4.1.5"
+    "typescript": "^5.8.0"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"

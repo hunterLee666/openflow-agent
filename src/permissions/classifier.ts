@@ -1,210 +1,649 @@
-export type RiskLevel = "low" | "medium" | "high" | "critical";
+import type {
+  PermissionDecision,
+  PermissionContext,
+  RiskLevel,
+} from "./types.js";
 
-export interface RiskScore {
-  level: RiskLevel;
-  score: number;
-  factors: string[];
+export type ClassifierResult = {
+  decision: PermissionDecision;
+  confidence: number;
   reasons: string[];
-}
-
-export interface SpeculativeClassifier {
-  classify(ctx: ClassifierContext): RiskScore;
-}
-
-export interface ClassifierContext {
-  tool: string;
-  input: Record<string, unknown>;
-  cwd: string;
-  isReadOnly: boolean;
-  isDestructive: boolean;
-  isNetworkAccess: boolean;
-  isGitCommand: boolean;
-}
-
-const RISK_WEIGHTS = {
-  isDestructive: 40,
-  isNetworkAccess: 25,
-  isGitCommand: 15,
-  pathTraversal: 20,
-  sensitivePath: 25,
-  largeData: 10,
-  shellInjection: 35,
-  privilegeEscalation: 30,
+  metadata?: Record<string, unknown>;
 };
 
-const SENSITIVE_PATTERNS = [
-  /\.ssh\//,
-  /\.aws\//,
-  /\.config\//,
-  /\/etc\/passwd/,
-  /\/etc\/shadow/,
-  /\.env$/,
-  /\.npmrc$/,
-  /\.git\/config$/,
-];
+export interface PermissionClassifier {
+  classify(context: PermissionContext): Promise<ClassifierResult>;
+  train?(examples: TrainingExample[]): Promise<void>;
+  reset?(): void;
+}
 
-const NETWORK_PATTERNS = [
-  /^curl\s+/i,
-  /^wget\s+/i,
-  /^nc\s+/i,
-  /^nmap\s+/i,
-  /^telnet\s+/i,
-  /^ssh\s+/i,
-  /^ftp\s+/i,
-];
+export interface TrainingExample {
+  context: PermissionContext;
+  expected: PermissionDecision;
+  weight?: number;
+}
 
-const SHELL_INJECTION_PATTERNS = [
-  /;\s*rm\s+/i,
-  /;\s*cat\s+/i,
-  /\|\s*bash/i,
-  /\|\s*sh\b/,
-  /\`.*\`/,
-  /\$\(.*\)/,
-  /&&\s*rm\s+/i,
-  /\|\|\s*rm\s+/i,
-];
+export class BashCommandClassifier implements PermissionClassifier {
+  private knownSafeCommands = new Set<string>([
+    "ls",
+    "pwd",
+    "cd",
+    "echo",
+    "cat",
+    "head",
+    "tail",
+    "grep",
+    "find",
+    "sort",
+    "uniq",
+    "wc",
+    "mkdir",
+    "rmdir",
+    "touch",
+    "cp",
+    "mv",
+    "date",
+    "whoami",
+    "id",
+    "env",
+    "printenv",
+    "which",
+    "type",
+    "history",
+  ]);
 
-const DESTRUCTIVE_PATTERNS = [
-  /^rm\s+-rf\b/,
-  /^rm\s+-r\b/,
-  /^dd\s+/,
-  /^mkfs\b/,
-  /^format\b/,
-  /^fdisk\b/,
-  /:\|:\|:;/,
-];
+  private knownDangerousCommands = new Set<string>([
+    "rm",
+    "dd",
+    "mkfs",
+    "fdisk",
+    "parted",
+    ":(){:|:&};:",
+    "chmod",
+    "chown",
+  ]);
 
-export class DefaultSpeculativeClassifier implements SpeculativeClassifier {
-  classify(ctx: ClassifierContext): RiskScore {
-    const factors: string[] = [];
+  private networkCommands = new Set<string>([
+    "curl",
+    "wget",
+    "ssh",
+    "scp",
+    "rsync",
+    "ftp",
+    "sftp",
+    "nc",
+    "netcat",
+    "ping",
+    "traceroute",
+    "nslookup",
+    "dig",
+  ]);
+
+  private editCommands = new Set<string>([
+    "vim",
+    "vi",
+    "nano",
+    "emacs",
+    "sed",
+    "awk",
+    "tee",
+  ]);
+
+  async classify(context: PermissionContext): Promise<ClassifierResult> {
+    const command = this.extractCommand(context.input);
     const reasons: string[] = [];
-    let score = 0;
+    let confidence = 0.5;
 
-    if (ctx.isDestructive) {
-      score += RISK_WEIGHTS.isDestructive;
-      factors.push("destructive_operation");
-      reasons.push("Operation may delete or overwrite data");
+    if (!command) {
+      return {
+        decision: { type: "ask", prompt: "Unable to determine command", risk: "medium" },
+        confidence: 0,
+        reasons: ["Could not extract command from input"],
+      };
     }
 
-    if (ctx.isNetworkAccess) {
-      score += RISK_WEIGHTS.isNetworkAccess;
-      factors.push("network_access");
-      reasons.push("Command accesses external network");
+    const baseCommand = command.split(" ")[0];
+
+    if (this.knownSafeCommands.has(baseCommand)) {
+      reasons.push(`Command '${baseCommand}' is in the safe list`);
+      confidence += 0.3;
     }
 
-    if (ctx.isGitCommand) {
-      score += RISK_WEIGHTS.isGitCommand;
-      factors.push("git_operation");
-      reasons.push("Modifies version control state");
-    }
+    if (this.knownDangerousCommands.has(baseCommand)) {
+      reasons.push(`Command '${baseCommand}' is in the dangerous list`);
+      confidence -= 0.3;
 
-    if (ctx.tool === "bash" || ctx.tool === "shell") {
-      const cmd = String(ctx.input.command || "");
-
-      for (const pattern of SENSITIVE_PATTERNS) {
-        if (pattern.test(cmd)) {
-          score += RISK_WEIGHTS.sensitivePath;
-          factors.push("sensitive_path");
-          reasons.push(`Access to sensitive path: ${pattern}`);
-        }
-      }
-
-      for (const pattern of SHELL_INJECTION_PATTERNS) {
-        if (pattern.test(cmd)) {
-          score += RISK_WEIGHTS.shellInjection;
-          factors.push("shell_injection_risk");
-          reasons.push(`Potential shell injection detected`);
-        }
-      }
-
-      for (const pattern of DESTRUCTIVE_PATTERNS) {
-        if (pattern.test(cmd)) {
-          score += RISK_WEIGHTS.isDestructive;
-          factors.push("destructive_command");
-          reasons.push(`Destructive command pattern detected`);
-        }
-      }
-
-      const pathArgs = cmd.match(/['"]?(\/[^\s'"]+)/g);
-      if (pathArgs) {
-        for (const p of pathArgs) {
-          const normalizedPath = p.replace(/['"]/g, "");
-          if (normalizedPath.includes("..")) {
-            score += RISK_WEIGHTS.pathTraversal;
-            factors.push("path_traversal");
-            reasons.push("Path contains .. traversal");
-          }
-        }
+      if (this.hasDangerousFlags(command)) {
+        reasons.push("Command has dangerous flags");
+        confidence -= 0.2;
       }
     }
 
-    if (ctx.tool === "write" || ctx.tool === "edit" || ctx.tool === "write_file") {
-      const filePath = String(ctx.input.path || "");
-      for (const pattern of SENSITIVE_PATTERNS) {
-        if (pattern.test(filePath)) {
-          score += RISK_WEIGHTS.sensitivePath;
-          factors.push("sensitive_path_write");
-          reasons.push(`Writing to sensitive path: ${pattern}`);
-        }
-      }
+    if (this.networkCommands.has(baseCommand)) {
+      reasons.push(`Command '${baseCommand}' is a network command`);
+      confidence -= 0.1;
     }
 
-    if (ctx.isReadOnly) {
-      score = Math.floor(score * 0.3);
-      factors.push("read_only_operation");
+    if (this.isReadOnlyOperation(command)) {
+      reasons.push("Operation is read-only");
+      confidence += 0.2;
     }
 
-    const level = this.scoreToLevel(score);
-    return { level, score, factors: [...new Set(factors)], reasons: [...new Set(reasons)] };
+    if (context.isDestructive) {
+      reasons.push("Operation is marked as destructive");
+      confidence -= 0.3;
+    }
+
+    if (context.isNetworkCommand) {
+      reasons.push("Operation involves network access");
+      confidence -= 0.1;
+    }
+
+    confidence = Math.max(0, Math.min(1, confidence));
+
+    if (confidence >= 0.8 && !context.isDestructive && !context.isNetworkCommand) {
+      return {
+        decision: { type: "allow", reason: `Auto-approved: ${reasons.join(", ")}` },
+        confidence,
+        reasons,
+      };
+    }
+
+    if (confidence >= 0.7 && this.isReadOnlyOperation(command)) {
+      return {
+        decision: { type: "allow", reason: `Auto-approved read-only: ${reasons.join(", ")}` },
+        confidence,
+        reasons,
+      };
+    }
+
+    if (confidence <= 0.2) {
+      return {
+        decision: {
+          type: "deny",
+          reason: `Auto-denied due to high risk: ${reasons.join(", ")}`,
+        },
+        confidence,
+        reasons,
+      };
+    }
+
+    const risk = this.calculateRisk(context, confidence);
+    return {
+      decision: {
+        type: "ask",
+        prompt: this.generatePrompt(command, context, risk),
+        risk,
+        suggestions: this.generateSuggestions(command, context),
+      },
+      confidence,
+      reasons,
+    };
   }
 
-  private scoreToLevel(score: number): RiskLevel {
-    if (score >= 70) return "critical";
-    if (score >= 40) return "high";
-    if (score >= 20) return "medium";
+  private extractCommand(input: Record<string, unknown>): string | null {
+    if (typeof input.command === "string") {
+      return input.command;
+    }
+    if (typeof input.cmd === "string") {
+      return input.cmd;
+    }
+    if (typeof input.script === "string") {
+      return input.script;
+    }
+    return null;
+  }
+
+  private hasDangerousFlags(command: string): boolean {
+    const dangerousFlags = [
+      "-rf",
+      "-r",
+      "-f",
+      "--force",
+      "--recursive",
+      "-x",
+      "--delete",
+      "--remove",
+    ];
+    const lowerCommand = command.toLowerCase();
+    return dangerousFlags.some((flag) => lowerCommand.includes(flag));
+  }
+
+  private isReadOnlyOperation(command: string): boolean {
+    const readOnlyIndicators = [
+      "cat",
+      "head",
+      "tail",
+      "less",
+      "more",
+      "grep",
+      "find",
+      "locate",
+      "which",
+      "whereis",
+      "type",
+      "file",
+      "stat",
+      "wc",
+      "sort",
+      "uniq",
+    ];
+    const baseCommand = command.split(" ")[0];
+    return readOnlyIndicators.includes(baseCommand);
+  }
+
+  private calculateRisk(context: PermissionContext, confidence: number): RiskLevel {
+    if (context.isDestructive) {
+      return "critical";
+    }
+    if (context.isNetworkCommand) {
+      return "high";
+    }
+    if (confidence < 0.5) {
+      return "high";
+    }
+    if (confidence < 0.7) {
+      return "medium";
+    }
+    return "low";
+  }
+
+  private generatePrompt(
+    command: string,
+    context: PermissionContext,
+    risk: RiskLevel
+  ): string {
+    return `Execute bash command?\n\nCommand: \`${command}\`\n\nRisk: ${risk}\nMode: ${context.mode}`;
+  }
+
+  private generateSuggestions(
+    command: string,
+    context: PermissionContext
+  ): string[] | undefined {
+    const suggestions: string[] = [];
+    const baseCommand = command.split(" ")[0];
+
+    if (this.knownSafeCommands.has(baseCommand)) {
+      suggestions.push("Approve (safe command)");
+    }
+
+    if (this.hasDangerousFlags(command)) {
+      suggestions.push("Deny (dangerous flags detected)");
+    }
+
+    suggestions.push("Approve once");
+    suggestions.push("Deny");
+
+    return suggestions;
+  }
+}
+
+export class FileOperationClassifier implements PermissionClassifier {
+  private safeExtensions = new Set<string>([
+    ".txt",
+    ".md",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".xml",
+    ".csv",
+    ".log",
+    ".ini",
+    ".conf",
+    ".config",
+  ]);
+
+  private dangerousExtensions = new Set<string>([
+    ".exe",
+    ".dll",
+    ".so",
+    ".dylib",
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".ps1",
+    ".bat",
+    ".cmd",
+  ]);
+
+  private sourceExtensions = new Set<string>([
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".py",
+    ".go",
+    ".rs",
+    ".java",
+    ".c",
+    ".cpp",
+    ".h",
+    ".hpp",
+  ]);
+
+  async classify(context: PermissionContext): Promise<ClassifierResult> {
+    const reasons: string[] = [];
+    let confidence = 0.5;
+
+    const path = this.extractPath(context.input);
+    if (!path) {
+      return {
+        decision: { type: "ask", prompt: "Unable to determine file path", risk: "medium" },
+        confidence: 0,
+        reasons: ["Could not extract file path from input"],
+      };
+    }
+
+    const ext = this.getExtension(path);
+
+    if (this.safeExtensions.has(ext)) {
+      reasons.push(`File extension '${ext}' is typically safe`);
+      confidence += 0.2;
+    }
+
+    if (this.dangerousExtensions.has(ext)) {
+      reasons.push(`File extension '${ext}' may be executable/script`);
+      confidence -= 0.3;
+    }
+
+    if (this.sourceExtensions.has(ext)) {
+      reasons.push(`File extension '${ext}' is source code`);
+      confidence += 0.1;
+    }
+
+    if (context.isDestructive) {
+      reasons.push("Operation is destructive");
+      confidence -= 0.3;
+    }
+
+    confidence = Math.max(0, Math.min(1, confidence));
+
+    if (confidence >= 0.8 && !context.isDestructive) {
+      return {
+        decision: { type: "allow", reason: `Auto-approved: ${reasons.join(", ")}` },
+        confidence,
+        reasons,
+      };
+    }
+
+    const risk = this.calculateRisk(context, confidence);
+    return {
+      decision: {
+        type: "ask",
+        prompt: `File operation?\n\nPath: ${path}\nTool: ${context.tool}\nRisk: ${risk}`,
+        risk,
+      },
+      confidence,
+      reasons,
+    };
+  }
+
+  private extractPath(input: Record<string, unknown>): string | null {
+    if (typeof input.path === "string") {
+      return input.path;
+    }
+    if (typeof input.file === "string") {
+      return input.file;
+    }
+    if (typeof input.dest === "string") {
+      return input.dest;
+    }
+    if (typeof input.target === "string") {
+      return input.target;
+    }
+    return null;
+  }
+
+  private getExtension(path: string): string {
+    const lastDot = path.lastIndexOf(".");
+    if (lastDot === -1 || lastDot === 0) {
+      return "";
+    }
+    return path.slice(lastDot);
+  }
+
+  private calculateRisk(context: PermissionContext, confidence: number): RiskLevel {
+    if (context.isDestructive) {
+      return "critical";
+    }
+    if (confidence < 0.4) {
+      return "high";
+    }
+    if (confidence < 0.7) {
+      return "medium";
+    }
     return "low";
   }
 }
 
-export function createClassifierContext(
-  tool: string,
-  input: Record<string, unknown>,
-  cwd: string,
-  options?: {
-    isReadOnly?: boolean;
-    isDestructive?: boolean;
-    isNetworkAccess?: boolean;
-    isGitCommand?: boolean;
+export class NetworkOperationClassifier implements PermissionClassifier {
+  private safeDomains = new Set<string>([
+    "api.github.com",
+    "registry.npmjs.org",
+    "pypi.org",
+    "hub.docker.com",
+  ]);
+
+  private safeEndpoints = new Set<string>([
+    "/repos/",
+    "/packages/",
+    "/users/",
+    "/search/",
+  ]);
+
+  async classify(context: PermissionContext): Promise<ClassifierResult> {
+    const reasons: string[] = [];
+    let confidence = 0.5;
+
+    const url = this.extractUrl(context.input);
+    if (!url) {
+      return {
+        decision: { type: "ask", prompt: "Unable to determine URL", risk: "medium" },
+        confidence: 0,
+        reasons: ["Could not extract URL from input"],
+      };
+    }
+
+    try {
+      const urlObj = new URL(url);
+      const host = urlObj.hostname;
+
+      if (this.safeDomains.has(host)) {
+        reasons.push(`Domain '${host}' is in the safe list`);
+        confidence += 0.3;
+      }
+
+      const path = urlObj.pathname;
+      if (Array.from(this.safeEndpoints).some((endpoint) => path.startsWith(endpoint))) {
+        reasons.push(`Endpoint '${path}' is typically safe`);
+        confidence += 0.2;
+      }
+
+      if (url.startsWith("https://")) {
+        reasons.push("Using HTTPS");
+        confidence += 0.1;
+      } else if (url.startsWith("http://")) {
+        reasons.push("Using unencrypted HTTP");
+        confidence -= 0.2;
+      }
+    } catch {
+      reasons.push("Could not parse URL");
+      confidence -= 0.2;
+    }
+
+    confidence = Math.max(0, Math.min(1, confidence));
+
+    if (confidence >= 0.8) {
+      return {
+        decision: { type: "allow", reason: `Auto-approved: ${reasons.join(", ")}` },
+        confidence,
+        reasons,
+      };
+    }
+
+    const risk = confidence < 0.5 ? "high" : confidence < 0.7 ? "medium" : "low";
+    return {
+      decision: {
+        type: "ask",
+        prompt: `Network request?\n\nURL: ${url}\nTool: ${context.tool}\nRisk: ${risk}`,
+        risk,
+      },
+      confidence,
+      reasons,
+    };
   }
-): ClassifierContext {
-  return {
-    tool,
-    input,
-    cwd,
-    isReadOnly: options?.isReadOnly ?? false,
-    isDestructive: options?.isDestructive ?? false,
-    isNetworkAccess: options?.isNetworkAccess ?? false,
-    isGitCommand: options?.isGitCommand ?? false,
-  };
-}
 
-export function isHighRisk(ctx: ClassifierContext, threshold = 40): boolean {
-  const classifier = new DefaultSpeculativeClassifier();
-  const result = classifier.classify(ctx);
-  return result.score >= threshold;
-}
-
-export function shouldRequireConfirmation(ctx: ClassifierContext): boolean {
-  const classifier = new DefaultSpeculativeClassifier();
-  const result = classifier.classify(ctx);
-  return result.level === "high" || result.level === "critical";
-}
-
-export function getRiskLevelColor(level: RiskLevel): string {
-  switch (level) {
-    case "low": return "green";
-    case "medium": return "yellow";
-    case "high": return "orange";
-    case "critical": return "red";
+  private extractUrl(input: Record<string, unknown>): string | null {
+    if (typeof input.url === "string") {
+      return input.url;
+    }
+    if (typeof input.uri === "string") {
+      return input.uri;
+    }
+    if (typeof input.endpoint === "string") {
+      return input.endpoint;
+    }
+    return null;
   }
 }
+
+export class CompositeClassifier implements PermissionClassifier {
+  private classifiers: Map<string, PermissionClassifier> = new Map();
+
+  register(name: string, classifier: PermissionClassifier): void {
+    this.classifiers.set(name, classifier);
+  }
+
+  async classify(context: PermissionContext): Promise<ClassifierResult> {
+    const applicableClassifiers = this.getApplicableClassifiers(context);
+
+    if (applicableClassifiers.length === 0) {
+      return {
+        decision: { type: "ask", prompt: "No applicable classifier", risk: "medium" },
+        confidence: 0,
+        reasons: ["No classifier found for this tool type"],
+      };
+    }
+
+    const results: ClassifierResult[] = [];
+    for (const classifier of applicableClassifiers) {
+      try {
+        const result = await classifier.classify(context);
+        results.push(result);
+      } catch (error) {
+        console.error("Classifier error:", error);
+      }
+    }
+
+    return this.aggregateResults(results);
+  }
+
+  private getApplicableClassifiers(context: PermissionContext): PermissionClassifier[] {
+    const applicable: PermissionClassifier[] = [];
+
+    if (context.tool === "bash" || context.tool === "shell" || context.tool === "exec") {
+      const bashClassifier = this.classifiers.get("bash");
+      if (bashClassifier) {
+        applicable.push(bashClassifier);
+      }
+    }
+
+    if (
+      context.tool === "file_read" ||
+      context.tool === "file_write" ||
+      context.tool === "file_edit" ||
+      context.tool === "edit"
+    ) {
+      const fileClassifier = this.classifiers.get("file");
+      if (fileClassifier) {
+        applicable.push(fileClassifier);
+      }
+    }
+
+    if (
+      context.tool === "http_request" ||
+      context.tool === "web_fetch" ||
+      context.tool === "web_search" ||
+      context.isNetworkCommand
+    ) {
+      const networkClassifier = this.classifiers.get("network");
+      if (networkClassifier) {
+        applicable.push(networkClassifier);
+      }
+    }
+
+    return applicable;
+  }
+
+  private aggregateResults(results: ClassifierResult[]): ClassifierResult {
+    if (results.length === 0) {
+      return {
+        decision: { type: "ask", prompt: "No results to aggregate", risk: "medium" },
+        confidence: 0,
+        reasons: [],
+      };
+    }
+
+    if (results.length === 1) {
+      return results[0];
+    }
+
+    const totalConfidence = results.reduce((sum, r) => sum + r.confidence, 0);
+    const avgConfidence = totalConfidence / results.length;
+
+    const allReasons = results.flatMap((r) => r.reasons);
+
+    const anyAllow = results.some((r) => r.decision.type === "allow");
+    const anyDeny = results.some((r) => r.decision.type === "deny");
+    const allAsk = results.every((r) => r.decision.type === "ask");
+
+    if (anyDeny && !anyAllow) {
+      return {
+        decision: {
+          type: "deny",
+          reason: "Multiple classifiers voted to deny",
+        },
+        confidence: avgConfidence,
+        reasons: allReasons,
+      };
+    }
+
+    if (anyAllow && !anyDeny && avgConfidence >= 0.7) {
+      return {
+        decision: {
+          type: "allow",
+          reason: "Multiple classifiers voted to allow",
+        },
+        confidence: avgConfidence,
+        reasons: allReasons,
+      };
+    }
+
+    const maxConfidence = Math.max(...results.map((r) => r.confidence));
+    const bestResult = results.find((r) => r.confidence === maxConfidence) || results[0];
+
+    return {
+      ...bestResult,
+      confidence: avgConfidence,
+      reasons: allReasons,
+    };
+  }
+}
+
+export function createDefaultClassifier(): CompositeClassifier {
+  const composite = new CompositeClassifier();
+  composite.register("bash", new BashCommandClassifier());
+  composite.register("file", new FileOperationClassifier());
+  composite.register("network", new NetworkOperationClassifier());
+  return composite;
+}
+
+export type SpeculativeClassifier = PermissionClassifier;
+
+export interface RiskScore {
+  level: RiskLevel;
+  confidence: number;
+  factors: string[];
+}
+
+export const DefaultSpeculativeClassifier = CompositeClassifier;
