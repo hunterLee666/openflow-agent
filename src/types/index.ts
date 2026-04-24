@@ -95,7 +95,7 @@ export interface SessionStore {
 export interface AgentConfig {
   apiKey: string;
   model: string;
-  provider?: 'anthropic' | 'openai' | 'dashscope';
+  provider?: 'anthropic' | 'openai' | 'dashscope' | 'zhipu' | 'zhipuai' | 'deepseek' | 'minimax' | 'moonshot' | 'openrouter' | 'nvidia';
   maxTokens: number;
   maxTurns: number;
   tokenBudget: number;

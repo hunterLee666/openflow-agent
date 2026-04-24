@@ -13,8 +13,7 @@ import type {
 } from "../types/index.js";
 import { DefaultSystemPromptBuilder } from "../prompts/system-prompt.js";
 import type { HookPayload } from "../hooks/types.js";
-import { AnthropicApiClient } from "../services/api/client.js";
-import type { OpenAIMessage } from "../services/api/types.js";
+import { createUnifiedClient, type MessageParam, type ToolParam } from "../services/api/unified-client.js";
 
 export async function* query(
   input: QueryInput,
@@ -55,14 +54,15 @@ async function* queryLoop(
   mode: string,
 ): AsyncGenerator<StreamEvent, QueryResult, undefined> {
   const provider = ctx.config.provider || "anthropic";
-  const anthropicClient = new Anthropic({
+  const anthropicClient = provider === "anthropic" ? new Anthropic({
     apiKey: ctx.config.apiKey,
     baseURL: ctx.config.baseUrl,
-  });
-  const apiClient = new AnthropicApiClient({
+  }) : null;
+  const unifiedClient = createUnifiedClient({
     apiKey: ctx.config.apiKey,
+    provider: provider as any,
     baseUrl: ctx.config.baseUrl,
-    provider,
+    model: state.model,
   });
 
   // Record session start in memory
@@ -109,7 +109,7 @@ async function* queryLoop(
 
     let assistantMsg: Message;
     try {
-      if (provider === "anthropic") {
+      if (provider === "anthropic" && anthropicClient) {
         const stream = await anthropicClient.messages.create({
           model: state.model,
           max_tokens: ctx.config.maxTokens,
@@ -124,7 +124,7 @@ async function* queryLoop(
         });
         assistantMsg = await collectAssistantMessage(stream);
       } else {
-        assistantMsg = await collectOpenAICompatibleMessage(state, ctx, apiClient);
+        assistantMsg = await collectUnifiedMessage(state, ctx, unifiedClient);
       }
     } catch (e) {
       const recovered = await handleStreamError(e as Error, ctx);
@@ -337,12 +337,12 @@ async function collectAssistantMessage(
   return { role: "assistant", content };
 }
 
-async function collectOpenAICompatibleMessage(
+async function collectUnifiedMessage(
   state: QueryState,
   ctx: QueryContext,
-  apiClient: AnthropicApiClient,
+  client: ReturnType<typeof createUnifiedClient>,
 ): Promise<Message> {
-  const messages: OpenAIMessage[] = state.messages
+  const messages: MessageParam[] = state.messages
     .filter((m) => m.role !== "system")
     .map((m) => {
       if (typeof m.content === "string") {
@@ -353,27 +353,18 @@ async function collectOpenAICompatibleMessage(
     });
 
   const systemPrompt = extractSystemPrompt(state.messages);
-  const tools = ctx.toolRegistry.list().map((t) => ({
-    type: "function" as const,
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: t.inputSchema,
-    },
+  const tools: ToolParam[] = ctx.toolRegistry.list().map((t) => ({
+    name: t.name,
+    description: t.description,
+    parameters: t.inputSchema as Record<string, unknown>,
   }));
 
   let fullContent = "";
   let toolCalls: { id: string; name: string; input: Record<string, unknown> }[] = [];
 
-  await apiClient.createOpenAICompatibleMessage(
+  await client.complete(
     messages,
-    state.model,
-    {
-      system: systemPrompt,
-      temperature: 0.7,
-      maxTokens: ctx.config.maxTokens,
-      stream: false,
-    },
+    tools,
     {
       onText: (text: string) => {
         fullContent += text;

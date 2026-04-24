@@ -3,6 +3,7 @@ import type {
   AnthropicResponse,
   AnthropicStreamEvent,
   ApiClientConfig,
+  ApiProvider,
   RateLimitInfo,
   RetryConfig,
   StreamHandler,
@@ -17,7 +18,7 @@ import { ApiError, RateLimitError, AuthenticationError, NetworkError, Validation
 export class AnthropicApiClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
-  private readonly provider: 'anthropic' | 'openai' | 'dashscope';
+  private readonly provider: ApiProvider;
   private readonly timeout: number;
   private readonly retryConfig: RetryConfig;
   private readonly maxTokens: number;

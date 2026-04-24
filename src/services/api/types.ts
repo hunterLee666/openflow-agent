@@ -147,7 +147,7 @@ export const DEFAULT_RETRY_CONFIG: RetryConfig = {
   backoffMultiplier: 2,
 };
 
-export type ApiProvider = 'anthropic' | 'openai' | 'dashscope';
+export type ApiProvider = 'anthropic' | 'openai' | 'dashscope' | 'zhipu' | 'zhipuai' | 'deepseek' | 'minimax' | 'moonshot' | 'openrouter' | 'nvidia';
 
 export interface ApiClientConfig {
   apiKey: string;
