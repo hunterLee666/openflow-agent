@@ -247,9 +247,10 @@ export type {
   CacheEconomics,
 } from "./cache/types.js";
 
-export { AnthropicApiClient, createApiClient } from "./services/api/client.js";
+export { UnifiedApiClient, createUnifiedClient } from "./services/api/unified-client.js";
 export { ApiError, RateLimitError, AuthenticationError, NetworkError, ValidationError, categorizeError } from "./services/api/errors.js";
-export type { AnthropicMessage, AnthropicContentBlock, AnthropicTool, AnthropicRequest, AnthropicResponse, AnthropicStreamEvent, ApiClientConfig, StreamHandler, TokenUsage } from "./services/api/types.js";
+export type { AnthropicMessage, AnthropicContentBlock, AnthropicTool, AnthropicRequest, AnthropicResponse, AnthropicStreamEvent, ApiClientConfig, StreamHandler, TokenUsage, ApiProvider } from "./services/api/types.js";
+export { PROVIDER_CONFIGS, getProviderConfig, resolveProvider } from "./services/api/providers.js";
 
 export { OAuthTokenManager, createOAuthManager, generatePKCEChallenge, buildAuthorizationUrl, generateState } from "./services/auth/oauth.js";
 export { MemoryStorage, FileStorage, SecureStorage, createPersistentStorage, createSessionStorage } from "./services/auth/storage.js";
