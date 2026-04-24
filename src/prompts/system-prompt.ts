@@ -1,15 +1,18 @@
 import type { AgentConfig, ToolDefinition } from "../types/index.js";
 import type { MemorySystem } from "../memory/types.js";
+import type { PromptCache } from "../cache/types.js";
 
 export interface PromptLayer {
   name: string;
   content: string;
   stability: "static" | "dynamic";
   priority: number;
+  cacheable?: boolean;
 }
 
 export interface SystemPromptBuilder {
-  build(ctx: PromptContext): Promise<string>;
+  build(ctx: PromptContext, cache?: PromptCache): Promise<string>;
+  buildCacheable(ctx: PromptContext, cache?: PromptCache): Promise<{ prefix: string; dynamic: string }>;
   getLayers(ctx: PromptContext): Promise<PromptLayer[]>;
 }
 
@@ -24,26 +27,40 @@ export interface PromptContext {
 }
 
 export class DefaultSystemPromptBuilder implements SystemPromptBuilder {
-  async build(ctx: PromptContext): Promise<string> {
-    const layers = await this.getLayers(ctx);
+  async build(ctx: PromptContext, cache?: PromptCache): Promise<string> {
+    const { prefix, dynamic } = await this.buildCacheable(ctx, cache);
     const boundary = "\n\n=== DYNAMIC POLICY BELOW ===\n\n";
+    return prefix + boundary + dynamic;
+  }
+
+  async buildCacheable(ctx: PromptContext, cache?: PromptCache): Promise<{ prefix: string; dynamic: string }> {
+    const layers = await this.getLayers(ctx);
 
     const staticParts: string[] = [];
     const dynamicParts: string[] = [];
 
     for (const layer of layers.sort((a, b) => a.priority - b.priority)) {
       if (layer.stability === "static") {
-        staticParts.push(`<!-- ${layer.name} -->\n${layer.content}`);
+        const content = `<!-- ${layer.name} -->\n${layer.content}`;
+        if (layer.cacheable && cache) {
+          const cacheKey = `prompt_layer_${layer.name}`;
+          const cached = cache.get(cacheKey);
+          if (cached) {
+            staticParts.push(`[CACHED]<!-- ${layer.name} -->\n${cached}`);
+            continue;
+          }
+          cache.set(cacheKey, layer.content);
+        }
+        staticParts.push(content);
       } else {
         dynamicParts.push(`<!-- ${layer.name} -->\n${layer.content}`);
       }
     }
 
-    return [
-      staticParts.join("\n\n"),
-      boundary,
-      dynamicParts.join("\n\n"),
-    ].join("\n");
+    return {
+      prefix: staticParts.join("\n\n"),
+      dynamic: dynamicParts.join("\n\n"),
+    };
   }
 
   async getLayers(ctx: PromptContext): Promise<PromptLayer[]> {
@@ -55,6 +72,7 @@ export class DefaultSystemPromptBuilder implements SystemPromptBuilder {
     layers.push({
       name: "identity",
       stability: "static",
+      cacheable: true,
       priority: 1,
       content: `You are an AI coding assistant operating in a terminal environment.
 Your role is to help users write, read, debug, and modify code safely and efficiently.
@@ -70,6 +88,7 @@ Core principles:
     layers.push({
       name: "operational_norms",
       stability: "static",
+      cacheable: true,
       priority: 2,
       content: `Work method:
 1. Plan: Understand the request and identify affected files
@@ -88,6 +107,7 @@ Error handling:
     layers.push({
       name: "task_philosophy",
       stability: "static",
+      cacheable: true,
       priority: 3,
       content: `Task completion principles:
 - Focus on the user's actual request; avoid scope creep
@@ -105,6 +125,7 @@ Error handling:
     layers.push({
       name: "tool_discipline",
       stability: "static",
+      cacheable: true,
       priority: 4,
       content: `Available tools:\n${toolDescriptions}\n\nTool usage rules:\n- Use read-only tools before read-write tools\n- Batch independent read operations\n- Never use rm -rf / or similar dangerous commands\n- Respect permission modes`,
     });
@@ -113,6 +134,7 @@ Error handling:
     layers.push({
       name: "safety",
       stability: "static",
+      cacheable: true,
       priority: 5,
       content: `Security rules:
 - Never expose API keys, tokens, or credentials
@@ -125,6 +147,7 @@ Error handling:
     layers.push({
       name: "voice_tone",
       stability: "static",
+      cacheable: true,
       priority: 6,
       content: `Communication style:
 - Be concise: prefer short, direct responses

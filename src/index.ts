@@ -45,6 +45,7 @@ export { DefaultSubAgentCache, DefaultRecursionGuard, buildForkKey } from "./age
 export { DefaultTelemetryCollector, DefaultPerfettoTracer } from "./telemetry/index.js";
 export { computeDiff, TerminalDiffRenderer, createDiffRenderer } from "./diff/index.js";
 export { DefaultPromptCache } from "./cache/index.js";
+export { getTaskAgentTools, createTaskAgent, type TaskAgentType, FORK_PREFIXES, getStandardForkPrefix } from "./agent/task-agent.js";
 
 export type {
   Message,

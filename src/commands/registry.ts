@@ -1,4 +1,5 @@
 import type { CommandRegistry, SlashCommand, CommandContext } from "./types.js";
+import { parseCommandLine, expandCommandTemplate, BUILTIN_COMMANDS, type ParsedCommand } from "./slash.js";
 
 export class DefaultCommandRegistry implements CommandRegistry {
   private commands = new Map<string, SlashCommand>();
@@ -20,16 +21,19 @@ export class DefaultCommandRegistry implements CommandRegistry {
       return `Not a command: ${input}`;
     }
 
-    const parts = trimmed.slice(1).split(" ");
-    const name = parts[0];
-    const args = parts.slice(1).join(" ");
-
-    const cmd = this.commands.get(name);
-    if (!cmd) {
-      return `Unknown command: /${name}. Type /help for available commands.`;
+    const parsed = parseCommandLine(input);
+    if (!parsed.cmd) {
+      return `Invalid command: ${input}`;
     }
 
-    return cmd.handler(args, ctx);
+    const cmd = this.commands.get(parsed.cmd);
+    if (!cmd) {
+      return `Unknown command: /${parsed.cmd}. Type /help for available commands.`;
+    }
+
+    const cmdWithTemplate = cmd as { template?: string; handler: Function };
+    const expandedTemplate = expandCommandTemplate(cmdWithTemplate.template || parsed.args.join(" "), parsed.args, parsed.flags);
+    return cmd.handler(expandedTemplate, ctx);
   }
 
   list(): SlashCommand[] {

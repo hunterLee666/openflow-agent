@@ -250,6 +250,10 @@ export class McpSession {
     return this.instructions;
   }
 
+  setInstructions(instructions: string): void {
+    this.instructions = instructions;
+  }
+
   sendRequest(method: string, params?: Record<string, unknown>): Promise<McpResponse> {
     return new Promise((resolve, reject) => {
       const id = ++this.requestId;

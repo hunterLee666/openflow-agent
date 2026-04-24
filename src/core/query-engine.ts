@@ -17,6 +17,7 @@ import { DefaultSystemPromptBuilder } from "../prompts/system-prompt.js";
 import type { HookPayload } from "../hooks/types.js";
 import { createUnifiedClient, type MessageParam, type ToolParam } from "../services/api/unified-client.js";
 import { invokeTool, formatToolError } from "../tools/invoke.js";
+import { FourteenStepGovernancePipeline, type GovernanceContext, type GovernanceHooks } from "../tools/governance.js";
 import { maskCommandOutput, maskSensitiveString } from "../tools/masking.js";
 import type { PermissionContext, PermissionDecision } from "../permissions/types.js";
 
@@ -844,83 +845,82 @@ async function runSingleTool(
     };
   }
 
-  if (ctx.permissionPipeline) {
-    const permCtx: PermissionContext = {
-      tool: use.name,
-      input: use.input,
-      cwd: process.cwd(),
-      mode: ctx.config.permissionMode as PermissionContext["mode"],
-      isReadOnly: def.isReadOnly,
-      isDestructive: isDestructiveTool(use.name, use.input),
-      isGitCommand: use.name === "bash" && isGitCommand(use.input),
-      isNetworkCommand: isNetworkCommand(use.input),
-    };
+  const govContext: GovernanceContext = {
+    cwd: process.cwd(),
+    tool: use.name,
+    input: use.input,
+    isReadOnly: def.isReadOnly,
+    isDestructive: isDestructiveTool(use.name, use.input),
+    isNetworkAccess: isNetworkCommand(use.input),
+    isGitCommand: isGitCommand(use.input),
+    config: {
+      maskSensitiveOutputs: ctx.config.maskSensitiveOutputs,
+    },
+  };
 
-    const decision = await ctx.permissionPipeline.evaluate(permCtx);
+  const governanceHooks: GovernanceHooks = {
+    preToolUse: async (gCtx) => {
+      if (!ctx.hooks) return { action: "allow" };
 
-    if (decision.type === "deny") {
-      return {
-        type: "tool_result",
-        tool_use_id: use.id,
-        content: `Permission denied: ${decision.reason}`,
-        is_error: true,
-      };
-    }
+      const hookDecision = await ctx.hooks.dispatch("PreToolUse", {
+        sessionId: state.threadId,
+        tool: gCtx.tool,
+        input: gCtx.input,
+      });
 
-    if (decision.type === "ask") {
-      return {
-        type: "tool_result",
-        tool_use_id: use.id,
-        content: `Permission requires confirmation: ${decision.prompt}`,
-        is_error: true,
-      };
-    }
-  }
-
-  // Dispatch PreToolUse hook
-  if (ctx.hooks) {
-    const hookDecision = await ctx.hooks.dispatch("PreToolUse", {
-      sessionId: state.threadId,
-      tool: use.name,
-      input: use.input,
-    });
-    if (hookDecision.type === "block") {
-      return {
-        type: "tool_result",
-        tool_use_id: use.id,
-        content: `Blocked by hook: ${hookDecision.reason}`,
-        is_error: true,
-      };
-    }
-    if (hookDecision.type === "modify") {
-      if (hookDecision.name) {
-        use = { ...use, name: hookDecision.name };
+      if (hookDecision.type === "block") {
+        return { action: "deny", reason: hookDecision.reason };
       }
-      if (hookDecision.args) {
-        use = { ...use, input: { ...use.input, ...hookDecision.args } };
+      if (hookDecision.type === "modify") {
+        return {
+          action: "modify",
+          input: hookDecision.args ? { ...gCtx.input, ...hookDecision.args } : gCtx.input,
+        };
       }
-    }
-  }
+      return { action: "allow" };
+    },
+    postToolUse: async (gCtx, output) => {
+      if (!ctx.hooks) return { action: "allow" };
+
+      await ctx.hooks.dispatch("PostToolUse", {
+        sessionId: state.threadId,
+        tool: gCtx.tool,
+        input: gCtx.input,
+        output,
+      });
+
+      return { action: "allow" };
+    },
+    onTelemetry: (data) => {
+      ctx.telemetry.log("governance", data);
+    },
+  };
+
+  const governance = new FourteenStepGovernancePipeline(governanceHooks, "medium");
 
   try {
-    const toolResult = await invokeTool(def, use.input, {
-      cwd: process.cwd(),
-      signal: ctx.abortSignal,
-      config: ctx.config,
-    });
+    const govResult = await governance.execute(
+      def,
+      use.input,
+      {
+        cwd: process.cwd(),
+        signal: ctx.abortSignal,
+        config: ctx.config,
+      },
+      govContext
+    );
 
-    if (toolResult.type !== "ok") {
+    if (govResult.status !== "ok") {
       return {
         type: "tool_result",
         tool_use_id: use.id,
-        content: formatToolError(toolResult),
+        content: `Governance error: ${govResult.error?.message || "Unknown error"}`,
         is_error: true,
       };
     }
 
-    const result = toolResult.data;
+    const result = govResult.data;
 
-    // Record in working memory
     ctx.memory?.working.addToolResult(use.name, typeof result === "string" ? result : JSON.stringify(result));
     ctx.memory?.episodic.record({
       id: `evt_${Date.now()}`,
@@ -930,22 +930,22 @@ async function runSingleTool(
       content: `${use.name}: ${JSON.stringify(use.input)}`,
     });
 
-    // Dispatch PostToolUse hook
-    if (ctx.hooks) {
-      await ctx.hooks.dispatch("PostToolUse", {
-        sessionId: state.threadId,
-        tool: use.name,
-        input: use.input,
-        output: result,
-      });
-    }
-
     let outputContent: string;
     if (typeof result === "string") {
       outputContent = ctx.config.maskSensitiveOutputs ? maskSensitiveString(result) : result;
     } else {
       const masked = ctx.config.maskSensitiveOutputs ? maskCommandOutput(result) : result;
       outputContent = JSON.stringify(masked);
+    }
+
+    if (govResult.telemetry) {
+      ctx.telemetry.log("tool_call", {
+        tool: use.name,
+        traceId: govResult.telemetry.traceId,
+        spanId: govResult.telemetry.spanId,
+        durationMs: govResult.telemetry.durationMs,
+        riskScore: govResult.telemetry.riskScore,
+      });
     }
 
     return {

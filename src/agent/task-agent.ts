@@ -1,4 +1,4 @@
-import type { AgentConfig, ToolContext } from "../types/index.js";
+import type { AgentConfig, ToolDefinition, ToolContext } from "../types/index.js";
 
 export type TaskAgentType = "explore" | "plan" | "verify" | "general";
 
@@ -315,4 +315,120 @@ export const FORK_PREFIXES = {
 
 export function getStandardForkPrefix(type: TaskAgentType): string {
   return FORK_PREFIXES[type] || FORK_PREFIXES.general;
+}
+
+export function createExploreTool(config: AgentConfig): ToolDefinition {
+  return {
+    name: "task_explore",
+    description: "Explore and analyze code structure, dependencies, and patterns. Use when you need to understand the codebase architecture or find specific code patterns.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        goal: { type: "string", description: "The exploration goal or question" },
+        scope: { type: "string", description: "Scope of exploration (e.g., file, directory, project)" },
+        depth: { type: "string", enum: ["shallow", "medium", "deep"], description: "Depth of exploration" },
+        filePatterns: { type: "array", items: { type: "string" }, description: "File patterns to explore" },
+        excludePatterns: { type: "array", items: { type: "string" }, description: "Patterns to exclude" },
+      },
+      required: ["goal"],
+    },
+    isConcurrencySafe: true,
+    isReadOnly: true,
+    handler: async (input: unknown, _ctx: ToolContext) => {
+      const { goal, scope, depth, filePatterns, excludePatterns } = input as {
+        goal: string;
+        scope?: string | string[];
+        depth?: "shallow" | "medium" | "deep";
+        filePatterns?: string[];
+        excludePatterns?: string[];
+      };
+      const agent = createTaskAgent(config, "explore");
+      const result = await agent.execute({
+        goal,
+        scope: scope ? (Array.isArray(scope) ? scope : [scope]) : undefined,
+        depth,
+        filePatterns,
+        excludePatterns,
+      });
+      return JSON.stringify(result);
+    },
+  };
+}
+
+export function createPlanTool(config: AgentConfig): ToolDefinition {
+  return {
+    name: "task_plan",
+    description: "Create a structured plan for implementing a feature or solving a problem. Use when you need to break down a complex task into steps.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        goal: { type: "string", description: "The goal to plan for" },
+        constraints: { type: "array", items: { type: "string" }, description: "Constraints and requirements" },
+        approach: { type: "string", enum: ["conservative", "aggressive", "incremental"], description: "Implementation approach" },
+      },
+      required: ["goal"],
+    },
+    isConcurrencySafe: true,
+    isReadOnly: true,
+    handler: async (input: unknown, _ctx: ToolContext) => {
+      const { goal, constraints, approach } = input as {
+        goal: string;
+        constraints?: string[];
+        approach?: "conservative" | "aggressive" | "incremental";
+      };
+      const agent = createTaskAgent(config, "plan");
+      const result = await agent.execute({
+        goal,
+        constraints: constraints || [],
+        approach,
+      });
+      return JSON.stringify(result);
+    },
+  };
+}
+
+export function createVerifyTool(config: AgentConfig): ToolDefinition {
+  return {
+    name: "task_verify",
+    description: "Verify implementation against criteria. Use when you need to validate that code meets requirements or passes tests.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: { type: "string", description: "The target to verify (file, function, feature)" },
+        criteria: { type: "array", items: { type: "string" }, description: "Success criteria for verification" },
+        testCommand: { type: "string", description: "Command to run tests" },
+        buildCommand: { type: "string", description: "Command to build" },
+        lintCommand: { type: "string", description: "Command to run linter" },
+      },
+      required: ["target", "criteria"],
+    },
+    isConcurrencySafe: true,
+    isReadOnly: true,
+    handler: async (input: unknown, _ctx: ToolContext) => {
+      const { target, criteria, testCommand, buildCommand, lintCommand } = input as {
+        target: string;
+        criteria: string[];
+        testCommand?: string;
+        buildCommand?: string;
+        lintCommand?: string;
+      };
+      const agent = createTaskAgent(config, "verify");
+      const result = await agent.execute({
+        target,
+        criteria,
+        testCommand,
+        buildCommand,
+        lintCommand,
+      });
+      return JSON.stringify(result);
+    },
+  };
+}
+
+export function getTaskAgentTools(config: AgentConfig): ToolDefinition[] {
+  return [
+    createExploreTool(config),
+    createPlanTool(config),
+    createVerifyTool(config),
+  ];
 }

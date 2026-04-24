@@ -11,6 +11,7 @@ import {
   type SpeculativeClassifier,
   type RiskScore,
 } from "./classifier.js";
+import { WorkspaceBoundaryValidator, type WorkspaceConfig } from "../security/workspace-boundary.js";
 
 export interface ToolDenyRule {
   tool?: string;
@@ -43,6 +44,7 @@ export class SevenStepPermissionPipeline implements PermissionPipeline {
   private askRules: ToolAskRule[] = [];
   private safetyGuards: SafetyGuard[] = [];
   private customRules: PermissionRule[] = [];
+  private workspaceValidator: WorkspaceBoundaryValidator;
 
   private bashBlacklist: RegExp[] = [
     /rm\s+-rf\s+\/(?!tmp)/,
@@ -62,8 +64,9 @@ export class SevenStepPermissionPipeline implements PermissionPipeline {
     /-----BEGIN\s+(RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY-----/i,
   ];
 
-  constructor() {
+  constructor(workspaceConfig?: WorkspaceConfig) {
     this.initDefaultRules();
+    this.workspaceValidator = new WorkspaceBoundaryValidator(workspaceConfig);
   }
 
   private initDefaultRules(): void {
@@ -113,7 +116,43 @@ export class SevenStepPermissionPipeline implements PermissionPipeline {
     const step7 = this.step6ContentSpecific(ctx);
     if (step7.action !== "continue") return this.toDecision(step7);
 
+    const step8 = this.step8WorkspaceBoundary(ctx);
+    if (step8.action !== "continue") return this.toDecision(step8);
+
     return { type: "allow", reason: "All checks passed" };
+  }
+
+  private step8WorkspaceBoundary(ctx: PermissionContext): PipelineStepResult {
+    const pathTools = ["read", "read_file", "write", "write_file", "edit", "bash"];
+    if (!pathTools.includes(ctx.tool)) {
+      return { step: 8, action: "continue" };
+    }
+
+    let path: string | undefined;
+    if (ctx.tool === "bash") {
+      const cmd = String(ctx.input.command || "");
+      const match = cmd.match(/(?:cd\s+)?(?:(?:read|cat|ls|grep|find|head|tail)\s+)?['"]([^'"]+)['"]/);
+      if (match) path = match[1];
+    } else if (ctx.input.path) {
+      path = String(ctx.input.path);
+    }
+
+    if (!path) {
+      return { step: 8, action: "continue" };
+    }
+
+    const operation = ctx.isReadOnly ? "read" : "write";
+    const validation = this.workspaceValidator.validatePath(path, operation);
+
+    if (!validation.valid) {
+      return {
+        step: 8,
+        action: "deny",
+        reason: `Workspace boundary violation: ${validation.reason}`,
+      };
+    }
+
+    return { step: 8, action: "continue" };
   }
 
   private step4SpeculativeClassifier(ctx: PermissionContext): PipelineStepResult {
