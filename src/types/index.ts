@@ -91,6 +91,9 @@ export interface QueryContext {
   memory?: import("../memory/types.js").MemorySystem;
   hooks?: import("../hooks/types.js").HookRegistry;
   permissionPipeline?: import("../permissions/types.js").PermissionPipeline;
+  promptCache?: import("../cache/types.js").PromptCache;
+  commandRegistry?: import("../commands/types.js").CommandRegistry;
+  workspaceValidator?: import("../security/workspace-boundary.js").WorkspaceBoundaryValidator;
 }
 
 export interface SessionStore {

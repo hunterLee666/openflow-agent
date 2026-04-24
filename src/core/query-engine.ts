@@ -49,6 +49,12 @@ export async function* query(
   const mode = ctx.config.permissionMode;
   const threadId = input.threadId || (await ctx.session.createThread());
 
+  if (ctx.hooks) {
+    await ctx.hooks.dispatch("SessionStart", {
+      sessionId: threadId,
+    });
+  }
+
   const initialState: QueryState = {
     turn: 0,
     messages: await ctx.session.loadMessages(threadId),

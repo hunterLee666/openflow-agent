@@ -7,13 +7,17 @@ import { loadConfig } from "./services/config.js";
 import { DefaultToolRegistry } from "./tools/registry.js";
 import { getDefaultTools } from "./tools/file-tools.js";
 import type { Message } from "./ui/components/Message.js";
-import type { StreamEvent, QueryContext, QueryInput } from "./types/index.js";
+import type { StreamEvent, QueryContext, QueryInput, AgentConfig } from "./types/index.js";
 import { FileSessionStore } from "./services/session.js";
 import { ConsoleTelemetry } from "./services/telemetry.js";
 import { query } from "./core/query-engine.js";
 import { streamEventToUIMessage, queryResultToUIMessage } from "./ui/query-integration.js";
 import { DefaultMemorySystem } from "./memory/index.js";
 import { DefaultHookRegistry } from "./hooks/registry.js";
+import { DefaultPromptCache } from "./cache/prompt-cache.js";
+import { DefaultCommandRegistry, createBuiltinCommands } from "./commands/registry.js";
+import { getTaskAgentTools } from "./agent/task-agent.js";
+import { WorkspaceBoundaryValidator } from "./security/workspace-boundary.js";
 
 const program = new Command();
 
@@ -26,17 +30,55 @@ const sessionStore = new FileSessionStore();
 const telemetry = new ConsoleTelemetry();
 const memorySystem = new DefaultMemorySystem();
 const hookRegistry = new DefaultHookRegistry();
+const promptCache = new DefaultPromptCache();
+const commandRegistry = new DefaultCommandRegistry();
+for (const cmd of createBuiltinCommands()) {
+  commandRegistry.register(cmd);
+}
+
+let workspaceValidator: WorkspaceBoundaryValidator;
 
 interface ChatState {
   messages: Message[];
   isLoading: boolean;
   currentAssistantId: string | null;
   error: string | null;
+  abortController: AbortController | null;
 }
 
-async function createQueryContext(): Promise<QueryContext> {
+async function initializeApp(): Promise<void> {
   const config = await loadConfig();
-  const threadId = await sessionStore.createThread();
+  workspaceValidator = new WorkspaceBoundaryValidator({
+    boundaries: {
+      root: process.cwd(),
+      allowedPaths: [],
+      deniedPaths: ["/.git/", "/.ssh/", "/.aws/", "/etc/passwd", "/etc/shadow"],
+    },
+    checkOnRead: true,
+    checkOnWrite: true,
+    checkOnExecute: true,
+  });
+
+  const agentConfig: AgentConfig = {
+    apiKey: config.apiKey,
+    model: config.model,
+    provider: config.provider,
+    baseUrl: config.baseUrl,
+    maxTokens: 8192,
+    maxTurns: 100,
+    tokenBudget: 100000,
+    compactionThreshold: 80000,
+    maxCompactionFailures: 3,
+    permissionMode: "askUser",
+  };
+
+  for (const tool of getTaskAgentTools(agentConfig)) {
+    toolRegistry.register(tool);
+  }
+}
+
+async function createQueryContext(abortController: AbortController): Promise<QueryContext> {
+  const config = await loadConfig();
 
   return {
     session: sessionStore,
@@ -53,16 +95,19 @@ async function createQueryContext(): Promise<QueryContext> {
       permissionMode: "askUser",
     },
     telemetry,
-    abortSignal: new AbortController().signal,
+    abortSignal: abortController.signal,
     toolRegistry,
     memory: memorySystem,
     hooks: hookRegistry,
+    promptCache,
+    commandRegistry,
+    workspaceValidator,
   };
 }
 
 async function handleQuery(
   input: string,
-  state: ChatState,
+  abortController: AbortController,
   setState: React.Dispatch<React.SetStateAction<ChatState>>
 ): Promise<void> {
   const userMessage: Message = {
@@ -75,8 +120,6 @@ async function handleQuery(
   setState((prev) => ({
     ...prev,
     messages: [...prev.messages, userMessage],
-    isLoading: true,
-    error: null,
   }));
 
   const assistantId = `assistant-${Date.now()}`;
@@ -95,7 +138,7 @@ async function handleQuery(
   }));
 
   try {
-    const ctx = await createQueryContext();
+    const ctx = await createQueryContext(abortController);
     const queryInput: QueryInput = {
       message: input,
     };
@@ -173,13 +216,16 @@ function ChatApp(): React.ReactElement {
     isLoading: false,
     currentAssistantId: null,
     error: null,
+    abortController: null,
   });
 
   const handleSendMessage = useCallback(
     async (input: string) => {
-      await handleQuery(input, state, setState);
+      const abortController = new AbortController();
+      setState((prev) => ({ ...prev, abortController, isLoading: true, error: null }));
+      await handleQuery(input, abortController, setState);
     },
-    [state]
+    []
   );
 
   return (
@@ -212,7 +258,7 @@ program
     }
 
     if (message) {
-      const ctx = await createQueryContext();
+      const ctx = await createQueryContext(new AbortController());
       const queryInput: QueryInput = { message };
 
       let fullResponse = "";
