@@ -9,22 +9,6 @@ export type PermissionMode =
 
 export type PermissionBehavior = "allow" | "ask" | "deny";
 
-export interface PermissionContext {
-  tool: string;
-  input: Record<string, unknown>;
-  cwd: string;
-  mode: PermissionMode;
-  isReadOnly: boolean;
-  isDestructive: boolean;
-  isGitCommand: boolean;
-  isNetworkCommand: boolean;
-}
-
-export type PermissionDecision =
-  | { type: "allow"; reason?: string; updatedInput?: Record<string, unknown> }
-  | { type: "deny"; reason: string }
-  | { type: "ask"; prompt: string; risk: RiskLevel; suggestions?: string[] };
-
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 
 export type PermissionRuleSource =
@@ -37,10 +21,68 @@ export type PermissionRuleSource =
   | "command"
   | "session";
 
+export type PermissionDecision =
+  | { type: "allow"; reason?: string; updatedInput?: Record<string, unknown> }
+  | { type: "deny"; reason: string }
+  | { type: "ask"; prompt: string; risk: RiskLevel; suggestions?: string[] };
+
+export interface PermissionContext {
+  tool: string;
+  input: Record<string, unknown>;
+  cwd: string;
+  mode: PermissionMode;
+  isReadOnly: boolean;
+  isDestructive: boolean;
+  isGitCommand: boolean;
+  isNetworkCommand: boolean;
+  sessionId?: string;
+  timestamp?: number;
+}
+
+export interface PermissionRuleCondition {
+  timeRange?: {
+    start: string;
+    end: string;
+  };
+  count?: {
+    max: number;
+    windowMs: number;
+  };
+  context?: {
+    readonly?: boolean;
+    networkAvailable?: boolean;
+    gitRepo?: boolean;
+  };
+}
+
+export interface PermissionRuleMetadata {
+  createdAt: number;
+  updatedAt?: number;
+  expiresAt?: number;
+  tags?: string[];
+  author?: string;
+}
+
+export interface PermissionConflictResolution {
+  resolvedAction: PermissionBehavior;
+  winningRule: PermissionRule;
+  losingRules: PermissionRule[];
+  resolutionStrategy: ConflictStrategy;
+}
+
+export type ConflictStrategy =
+  | "priority-wins"
+  | "deny-wins"
+  | "allow-wins"
+  | "most-specific-wins"
+  | " newest-wins"
+  | "oldest-wins";
+
 export interface PermissionRuleContent {
   toolName?: string;
   commandPattern?: string;
   pathPattern?: string;
+  conditions?: PermissionRuleCondition;
 }
 
 export interface PermissionRule {
@@ -51,7 +93,9 @@ export interface PermissionRule {
   ruleContent: PermissionRuleContent;
   risk?: RiskLevel;
   description?: string;
-  createdAt?: number;
+  metadata?: PermissionRuleMetadata;
+  conflictStrategy?: ConflictStrategy;
+  specificity?: number;
 }
 
 export interface PermissionPipeline {

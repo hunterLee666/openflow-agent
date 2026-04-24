@@ -1,4 +1,15 @@
 export { query } from "./core/query-engine.js";
+export {
+  initializeSystemServices,
+  getSystemServices,
+  createIntegratedQueryContext,
+  executeWithErrorHandling,
+  createTask,
+  executeTaskWithProgress,
+  getCommandCompletions,
+  groupMessage,
+  createMessageVirtualizer,
+} from "./integration/index.js";
 export { DefaultToolRegistry } from "./tools/registry.js";
 export { getDefaultTools } from "./tools/file-tools.js";
 export { registerExternalTools } from "./tools/external-tools.js";

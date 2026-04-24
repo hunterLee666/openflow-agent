@@ -23,6 +23,12 @@ import { SettingsLoader, DEFAULT_SETTINGS, getDefaultSettings } from "./config/s
 import { CommandParser, getCommandCategory } from "./utils/command-parser.js";
 import { MemoryTruncator, DEFAULT_MEMORY_LIMITS } from "./memory/memory-truncator.js";
 import { createSandboxAdapter, getDefaultSandboxConfig } from "./security/sandbox.js";
+import {
+  initializeSystemServices,
+  createIntegratedQueryContext,
+  getCommandCompletions,
+  executeWithErrorHandling,
+} from "./integration/index.js";
 
 const program = new Command();
 
@@ -57,6 +63,8 @@ interface ChatState {
 }
 
 async function initializeApp(): Promise<void> {
+  await initializeSystemServices();
+
   const config = await loadConfig();
   const homeDir = process.env.HOME || process.env.USERPROFILE || "~";
   const projectDir = process.cwd();
@@ -109,32 +117,7 @@ async function initializeApp(): Promise<void> {
 }
 
 async function createQueryContext(abortController: AbortController): Promise<QueryContext> {
-  const config = await loadConfig();
-
-  return {
-    session: sessionStore,
-    config: {
-      apiKey: config.apiKey,
-      model: config.model,
-      provider: config.provider,
-      baseUrl: config.baseUrl,
-      maxTokens: 8192,
-      maxTurns: 100,
-      tokenBudget: 100000,
-      compactionThreshold: 80000,
-      maxCompactionFailures: 3,
-      permissionMode: "askUser",
-    },
-    telemetry,
-    abortSignal: abortController.signal,
-    toolRegistry,
-    memory: memorySystem,
-    hooks: hookRegistry,
-    promptCache,
-    commandRegistry,
-    workspaceValidator,
-    permissionPipeline,
-  };
+  return createIntegratedQueryContext(abortController);
 }
 
 async function handleQuery(
@@ -143,21 +126,33 @@ async function handleQuery(
   setState: React.Dispatch<React.SetStateAction<ChatState>>
 ): Promise<void> {
   if (input.startsWith("/") && commandRegistry) {
-    const result = await commandRegistry.execute(input, {
-      cwd: process.cwd(),
-      memory: memorySystem,
-      config: undefined,
-    });
-    const assistantMessage: Message = {
-      id: `assistant-${Date.now()}`,
-      role: "assistant",
-      content: [{ type: "text", text: result }],
-      timestamp: Date.now(),
-    };
-    setState((prev) => ({
-      ...prev,
-      messages: [...prev.messages, assistantMessage],
-    }));
+    const result = await executeWithErrorHandling(
+      () =>
+        commandRegistry.execute(input, {
+          cwd: process.cwd(),
+          memory: memorySystem,
+          config: undefined,
+        }),
+      { operationId: "command-execution", skipRetry: true }
+    );
+
+    if (result.success) {
+      const assistantMessage: Message = {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: [{ type: "text", text: result.result || "" }],
+        timestamp: Date.now(),
+      };
+      setState((prev) => ({
+        ...prev,
+        messages: [...prev.messages, assistantMessage],
+      }));
+    } else {
+      setState((prev) => ({
+        ...prev,
+        error: result.error || "Command execution failed",
+      }));
+    }
     return;
   }
 

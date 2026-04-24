@@ -145,7 +145,7 @@ export class SettingsLoader {
       priority: SOURCE_PRIORITY[source],
       ruleContent: content,
       description: `${source} ${behavior} rule`,
-      createdAt: Date.now(),
+      metadata: { createdAt: Date.now() },
     };
   }
 

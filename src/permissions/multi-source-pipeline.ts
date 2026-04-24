@@ -64,7 +64,7 @@ export class MultiSourcePermissionPipeline implements PermissionPipeline {
         priority: SOURCE_PRIORITY.userSettings,
         ruleContent: rule,
         description: "System default deny rule",
-        createdAt: Date.now(),
+        metadata: { createdAt: Date.now() },
       });
     }
 
@@ -76,7 +76,7 @@ export class MultiSourcePermissionPipeline implements PermissionPipeline {
         priority: SOURCE_PRIORITY.userSettings,
         ruleContent: rule,
         description: "System default ask rule",
-        createdAt: Date.now(),
+        metadata: { createdAt: Date.now() },
       });
     }
   }
