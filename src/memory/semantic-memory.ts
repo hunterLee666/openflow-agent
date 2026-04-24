@@ -1,7 +1,6 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import type {
   SemanticMemory,
   SemanticFact,
@@ -15,6 +14,7 @@ import type {
   KGInferenceResult,
 } from "./types.js";
 import { KnowledgeGraph, createKnowledgeGraph, KnowledgeGraphBuilder } from "./knowledge-graph.js";
+import { APP_SEMANTIC_DIR } from "../utils/paths.js";
 
 export class FileSemanticMemory implements SemanticMemory {
   private baseDir: string;
@@ -26,7 +26,7 @@ export class FileSemanticMemory implements SemanticMemory {
   private factToEntityMapping: Map<string, string> = new Map();
 
   constructor(baseDir?: string) {
-    this.baseDir = baseDir || join(homedir(), ".ai-coding-agent", "semantic");
+    this.baseDir = baseDir || APP_SEMANTIC_DIR;
     this.kg = createKnowledgeGraph();
     this.load();
     this.loadKG();

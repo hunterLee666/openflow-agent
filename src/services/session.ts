@@ -1,14 +1,14 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import type { Message, SessionStore } from "../types/index.js";
+import { APP_SESSIONS_DIR } from "../utils/paths.js";
 
 export class FileSessionStore implements SessionStore {
   private baseDir: string;
 
   constructor(baseDir?: string) {
-    this.baseDir = baseDir || join(homedir(), ".ai-coding-agent", "sessions");
+    this.baseDir = baseDir || APP_SESSIONS_DIR;
   }
 
   private threadPath(threadId: string): string {

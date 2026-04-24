@@ -1,10 +1,14 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { AgentConfig } from "../types/index.js";
 
-const CONFIG_PATH = join(homedir(), ".ai-coding-agent", "config.json");
+const CONFIG_DIR = process.env.XDG_CONFIG_HOME
+  ? join(process.env.XDG_CONFIG_HOME, "ai-coding-agent")
+  : join(homedir(), ".ai-coding-agent");
+
+const CONFIG_PATH = join(CONFIG_DIR, "config.json");
 
 export async function loadConfig(): Promise<AgentConfig> {
   const defaults: AgentConfig = {
@@ -34,6 +38,12 @@ export async function loadConfig(): Promise<AgentConfig> {
 }
 
 export async function saveConfig(config: Partial<AgentConfig>): Promise<void> {
-  const dir = join(homedir(), ".ai-coding-agent");
-  await Bun.write(CONFIG_PATH, JSON.stringify(config, null, 2));
+  try {
+    if (!existsSync(CONFIG_DIR)) {
+      await mkdir(CONFIG_DIR, { recursive: true });
+    }
+    await Bun.write(CONFIG_PATH, JSON.stringify(config, null, 2));
+  } catch (err) {
+    console.error("Failed to save config:", err);
+  }
 }

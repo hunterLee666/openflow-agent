@@ -12,6 +12,8 @@ import { FileSessionStore } from "./services/session.js";
 import { ConsoleTelemetry } from "./services/telemetry.js";
 import { query } from "./core/query-engine.js";
 import { streamEventToUIMessage, queryResultToUIMessage } from "./ui/query-integration.js";
+import { DefaultMemorySystem } from "./memory/index.js";
+import { DefaultHookRegistry } from "./hooks/registry.js";
 
 const program = new Command();
 
@@ -22,6 +24,8 @@ for (const tool of getDefaultTools()) {
 
 const sessionStore = new FileSessionStore();
 const telemetry = new ConsoleTelemetry();
+const memorySystem = new DefaultMemorySystem();
+const hookRegistry = new DefaultHookRegistry();
 
 interface ChatState {
   messages: Message[];
@@ -49,8 +53,8 @@ async function createQueryContext(): Promise<QueryContext> {
     telemetry,
     abortSignal: new AbortController().signal,
     toolRegistry,
-    memory: undefined,
-    hooks: undefined,
+    memory: memorySystem,
+    hooks: hookRegistry,
   };
 }
 

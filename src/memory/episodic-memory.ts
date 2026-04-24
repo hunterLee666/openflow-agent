@@ -1,14 +1,14 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import type { EpisodicMemory, EpisodicEvent } from "./types.js";
+import { APP_EPISODES_DIR } from "../utils/paths.js";
 
 export class FileEpisodicMemory implements EpisodicMemory {
   private baseDir: string;
 
   constructor(baseDir?: string) {
-    this.baseDir = baseDir || join(homedir(), ".ai-coding-agent", "episodes");
+    this.baseDir = baseDir || APP_EPISODES_DIR;
   }
 
   private sessionPath(sessionId: string): string {
