@@ -3,6 +3,60 @@ export interface AnthropicMessage {
   content: string | AnthropicContentBlock[];
 }
 
+export interface OpenAIMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string;
+  name?: string;
+  tool_calls?: OpenAIToolCall[];
+  tool_call_id?: string;
+}
+
+export interface OpenAIToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+export interface OpenAIResponse {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: OpenAIChoice[];
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+}
+
+export interface OpenAIChoice {
+  index: number;
+  message: OpenAIMessage;
+  finish_reason: string;
+}
+
+export interface OpenAIStreamChunk {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: OpenAIStreamChoice[];
+}
+
+export interface OpenAIStreamChoice {
+  index: number;
+  delta: {
+    content?: string;
+    role?: string;
+    tool_calls?: OpenAIToolCall[];
+  };
+  finish_reason?: string;
+}
+
 export interface AnthropicContentBlock {
   type: 'text' | 'tool_use' | 'tool_result';
   text?: string;
@@ -92,13 +146,20 @@ export const DEFAULT_RETRY_CONFIG: RetryConfig = {
   backoffMultiplier: 2,
 };
 
+export type ApiProvider = 'anthropic' | 'openai' | 'dashscope';
+
 export interface ApiClientConfig {
   apiKey: string;
   baseUrl?: string;
+  provider?: ApiProvider;
   timeout?: number;
   retryConfig?: Partial<RetryConfig>;
   maxTokens?: number;
 }
+
+export const DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+export const OPENAI_BASE_URL = 'https://api.openai.com/v1';
+export const ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
 
 export interface TokenUsage {
   inputTokens: number;

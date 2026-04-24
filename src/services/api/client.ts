@@ -7,13 +7,17 @@ import type {
   RetryConfig,
   StreamHandler,
   TokenUsage,
+  OpenAIMessage,
+  OpenAIResponse,
+  OpenAIStreamChunk,
 } from './types';
-import { DEFAULT_RETRY_CONFIG } from './types';
+import { DEFAULT_RETRY_CONFIG, DASHSCOPE_BASE_URL, OPENAI_BASE_URL, ANTHROPIC_BASE_URL } from './types';
 import { ApiError, RateLimitError, AuthenticationError, NetworkError, ValidationError, categorizeError } from './errors';
 
 export class AnthropicApiClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
+  private readonly provider: 'anthropic' | 'openai' | 'dashscope';
   private readonly timeout: number;
   private readonly retryConfig: RetryConfig;
   private readonly maxTokens: number;
@@ -21,10 +25,23 @@ export class AnthropicApiClient {
 
   constructor(config: ApiClientConfig) {
     this.apiKey = config.apiKey;
-    this.baseUrl = config.baseUrl || 'https://api.anthropic.com';
+    this.provider = config.provider || 'anthropic';
+    this.baseUrl = config.baseUrl || this.getDefaultBaseUrl();
     this.timeout = config.timeout || 60000;
     this.retryConfig = { ...DEFAULT_RETRY_CONFIG, ...config.retryConfig };
     this.maxTokens = config.maxTokens || 8192;
+  }
+
+  private getDefaultBaseUrl(): string {
+    switch (this.provider) {
+      case 'dashscope':
+        return DASHSCOPE_BASE_URL;
+      case 'openai':
+        return OPENAI_BASE_URL;
+      case 'anthropic':
+      default:
+        return ANTHROPIC_BASE_URL;
+    }
   }
 
   async createMessage(
@@ -42,6 +59,216 @@ export class AnthropicApiClient {
     }
 
     return this.executeWithRetry(() => this.executeRequest(fullRequest));
+  }
+
+  async createOpenAICompatibleMessage(
+    messages: OpenAIMessage[],
+    model: string,
+    options?: {
+      system?: string;
+      temperature?: number;
+      maxTokens?: number;
+      stream?: boolean;
+    },
+    handler?: StreamHandler
+  ): Promise<OpenAIResponse> {
+    const requestBody: Record<string, unknown> = {
+      model,
+      messages: options?.system
+        ? [{ role: 'system' as const, content: options.system }, ...messages]
+        : messages,
+      temperature: options?.temperature ?? 0.7,
+      max_tokens: options?.maxTokens || this.maxTokens,
+    };
+
+    if (handler) {
+      return this.streamOpenAIMessage(requestBody, handler);
+    }
+
+    return this.executeOpenAIRequest(requestBody);
+  }
+
+  private async executeOpenAIRequest(requestBody: Record<string, unknown>): Promise<OpenAIResponse> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: this.getOpenAIHeaders(),
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      return this.handleOpenAIResponse(response);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof ApiError) throw error;
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') throw new NetworkError('Request timed out');
+        throw new NetworkError(error.message);
+      }
+      throw categorizeError(error);
+    }
+  }
+
+  private async streamOpenAIMessage(
+    requestBody: Record<string, unknown>,
+    handler: StreamHandler
+  ): Promise<OpenAIResponse> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: this.getOpenAIHeaders(),
+        body: JSON.stringify({ ...requestBody, stream: true }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw await this.handleOpenAIResponseError(response);
+      }
+
+      if (!response.body) {
+        throw new NetworkError('Response body is null');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullContent = '';
+      const usage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') continue;
+
+          try {
+            const chunk: OpenAIStreamChunk = JSON.parse(data);
+            const delta = chunk.choices[0]?.delta?.content;
+
+            if (delta) {
+              fullContent += delta;
+              handler.onToken?.(delta);
+            }
+          } catch {
+            // Ignore parse errors for malformed chunks
+          }
+        }
+      }
+
+      handler.onComplete?.(usage);
+      return {
+        id: `openai-${Date.now()}`,
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: (requestBody.model as string) || 'unknown',
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: fullContent },
+          finish_reason: 'stop',
+        }],
+        usage: {
+          prompt_tokens: usage.inputTokens,
+          completion_tokens: usage.outputTokens,
+          total_tokens: usage.totalTokens,
+        },
+      };
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof ApiError) {
+        handler.onError?.(error);
+        throw error;
+      }
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          const networkError = new NetworkError('Request timed out');
+          handler.onError?.(networkError);
+          throw networkError;
+        }
+        const networkError = new NetworkError(error.message);
+        handler.onError?.(networkError);
+        throw networkError;
+      }
+      const apiError = categorizeError(error);
+      handler.onError?.(apiError);
+      throw apiError;
+    }
+  }
+
+  private getOpenAIHeaders(): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${this.apiKey}`,
+    };
+  }
+
+  private async handleOpenAIResponse(response: Response): Promise<OpenAIResponse> {
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('retry-after');
+      const resetAt = new Date(Date.now() + (parseInt(retryAfter || '1000', 10) * 1000));
+      const limit = parseInt(response.headers.get('x-ratelimit-limit') || '100', 10);
+      const remaining = parseInt(response.headers.get('x-ratelimit-remaining') || '0', 10);
+      this.rateLimitInfo = { limit, requestsRemaining: remaining, resetAt };
+      throw new RateLimitError('Rate limit exceeded', this.rateLimitInfo);
+    }
+
+    if (response.status === 401) {
+      throw new AuthenticationError('Invalid API key or authentication failed');
+    }
+
+    if (response.status === 400) {
+      const errorBody = await response.json().catch(() => ({})) as Record<string, unknown>;
+      throw new ValidationError((errorBody.error as { message?: string })?.message || 'Invalid request', errorBody);
+    }
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({})) as Record<string, unknown>;
+      throw new ApiError(
+        'api_error',
+        `HTTP_${response.status}`,
+        (errorBody.error as { message?: string })?.message || `API error: ${response.status}`,
+        response.status >= 500,
+        response.status
+      );
+    }
+
+    return response.json() as Promise<OpenAIResponse>;
+  }
+
+  private async handleOpenAIResponseError(response: Response): Promise<ApiError> {
+    try {
+      const errorBody = await response.json() as Record<string, unknown>;
+      return new ApiError(
+        'api_error',
+        `HTTP_${response.status}`,
+        (errorBody.error as { message?: string })?.message || `API error: ${response.status}`,
+        response.status >= 500,
+        response.status
+      );
+    } catch {
+      return new ApiError(
+        'api_error',
+        `HTTP_${response.status}`,
+        `API error: ${response.status}`,
+        response.status >= 500,
+        response.status
+      );
+    }
   }
 
   private async executeRequest(request: AnthropicRequest): Promise<AnthropicResponse> {

@@ -11,9 +11,16 @@ const CONFIG_DIR = process.env.XDG_CONFIG_HOME
 const CONFIG_PATH = join(CONFIG_DIR, "config.json");
 
 export async function loadConfig(): Promise<AgentConfig> {
+  const dashscopeApiKey = process.env.DASHSCOPE_API_KEY || process.env.OPENAI_API_KEY || "";
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY || "";
+
+  const provider = process.env.API_PROVIDER as 'anthropic' | 'openai' | 'dashscope' | undefined;
+  const resolvedProvider = provider || (dashscopeApiKey && !anthropicApiKey ? 'dashscope' : undefined);
+
   const defaults: AgentConfig = {
-    apiKey: process.env.ANTHROPIC_API_KEY || "",
-    model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
+    apiKey: dashscopeApiKey || anthropicApiKey,
+    model: process.env.MODEL || process.env.ANTHROPIC_MODEL || "qwen3-32b",
+    provider: resolvedProvider,
     maxTokens: 8192,
     maxTurns: 50,
     tokenBudget: 200000,
@@ -21,7 +28,7 @@ export async function loadConfig(): Promise<AgentConfig> {
     permissionMode: "acceptEdits",
     compactionThreshold: 100000,
     maxCompactionFailures: 3,
-    baseUrl: process.env.ANTHROPIC_BASE_URL,
+    baseUrl: process.env.ANTHROPIC_BASE_URL || process.env.DASHSCOPE_BASE_URL,
   };
 
   if (existsSync(CONFIG_PATH)) {
