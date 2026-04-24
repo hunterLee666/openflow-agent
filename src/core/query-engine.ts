@@ -270,7 +270,7 @@ async function buildSystemPrompt(ctx: QueryContext): Promise<string> {
     cwd: process.cwd(),
     turn: 0,
     sessionId: undefined,
-  });
+  }, ctx.promptCache);
   return prompt;
 }
 

@@ -18,6 +18,7 @@ import { DefaultPromptCache } from "./cache/prompt-cache.js";
 import { DefaultCommandRegistry, createBuiltinCommands } from "./commands/registry.js";
 import { getTaskAgentTools } from "./agent/task-agent.js";
 import { WorkspaceBoundaryValidator } from "./security/workspace-boundary.js";
+import { createPermissionPipeline } from "./permissions/index.js";
 
 const program = new Command();
 
@@ -37,6 +38,7 @@ for (const cmd of createBuiltinCommands()) {
 }
 
 let workspaceValidator: WorkspaceBoundaryValidator;
+let permissionPipeline: ReturnType<typeof createPermissionPipeline>;
 
 interface ChatState {
   messages: Message[];
@@ -75,6 +77,8 @@ async function initializeApp(): Promise<void> {
   for (const tool of getTaskAgentTools(agentConfig)) {
     toolRegistry.register(tool);
   }
+
+  permissionPipeline = createPermissionPipeline();
 }
 
 async function createQueryContext(abortController: AbortController): Promise<QueryContext> {
@@ -102,6 +106,7 @@ async function createQueryContext(abortController: AbortController): Promise<Que
     promptCache,
     commandRegistry,
     workspaceValidator,
+    permissionPipeline,
   };
 }
 
@@ -110,6 +115,23 @@ async function handleQuery(
   abortController: AbortController,
   setState: React.Dispatch<React.SetStateAction<ChatState>>
 ): Promise<void> {
+  if (input.startsWith("/") && commandRegistry) {
+    const result = await commandRegistry.execute(input, {
+      cwd: process.cwd(),
+    });
+    const assistantMessage: Message = {
+      id: `assistant-${Date.now()}`,
+      role: "assistant",
+      content: [{ type: "text", text: result }],
+      timestamp: Date.now(),
+    };
+    setState((prev) => ({
+      ...prev,
+      messages: [...prev.messages, assistantMessage],
+    }));
+    return;
+  }
+
   const userMessage: Message = {
     id: `user-${Date.now()}`,
     role: "user",
@@ -257,7 +279,17 @@ program
       process.exit(1);
     }
 
+    await initializeApp();
+
     if (message) {
+      if (message.startsWith("/") && commandRegistry) {
+        const result = await commandRegistry.execute(message, {
+          cwd: process.cwd(),
+        });
+        console.log(result);
+        return;
+      }
+
       const ctx = await createQueryContext(new AbortController());
       const queryInput: QueryInput = { message };
 
