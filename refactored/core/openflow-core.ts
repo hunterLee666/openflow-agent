@@ -27,6 +27,9 @@ import { createLogger, createMetricsCollector, createHealthChecker } from "./tel
 import type { Logger, MetricsCollector, HealthChecker } from "./telemetry/index.js";
 import { TokenRefreshScheduler } from "./token/token-refresh.js";
 import { serializeMessages, deserializeMessages } from "./serialization/index.js";
+import { CommandRegistry, createCommandRegistry } from "./commands/command-registry.js";
+import { createPluginCommands } from "./commands/plugin-commands.js";
+import { createAgentCommands } from "./commands/agent-commands.js";
 
 export interface OpenFlowConfig {
   workspaceRoot: string;
@@ -99,6 +102,7 @@ export class OpenFlowCore {
   private metricsCollector: MetricsCollector;
   private healthChecker: HealthChecker;
   private tokenRefreshScheduler: TokenRefreshScheduler;
+  private commandRegistry: CommandRegistry;
 
   constructor(context: CapabilityContext, config: OpenFlowConfig) {
     this.config = config;
@@ -159,6 +163,8 @@ export class OpenFlowCore {
       return this.config.llmConfig?.apiKey;
     });
 
+    this.commandRegistry = createCommandRegistry();
+
     if (config.llmConfig?.apiKey) {
       this.llmClient = createLLMClient({
         apiKey: config.llmConfig.apiKey,
@@ -194,6 +200,64 @@ export class OpenFlowCore {
     await this.unifiedEngine.initialize();
 
     this.memoryCore.startNudgeCycle();
+
+    this.registerCommands();
+  }
+
+  private registerCommands(): void {
+    const pluginCommands = createPluginCommands(this.pluginManager);
+    for (const [name, handler] of Object.entries(pluginCommands)) {
+      this.commandRegistry.register({
+        name: `plugin:${name}`,
+        description: `Plugin command: ${name}`,
+        handler,
+      });
+    }
+
+    const agentCommands = createAgentCommands(this.pluginManager);
+    for (const [name, handler] of Object.entries(agentCommands)) {
+      this.commandRegistry.register({
+        name: `agent:${name}`,
+        description: `Agent command: ${name}`,
+        handler,
+      });
+    }
+
+    this.commandRegistry.register({
+      name: "plugin",
+      description: "Manage plugins (list, enable, disable, reload, info, health, stats)",
+      handler: async (args: string) => {
+        const parts = args.trim().split(/\s+/);
+        const subcommand = parts[0] || "list";
+        const subArgs = parts.slice(1).join(" ");
+
+        const pluginCommands = createPluginCommands(this.pluginManager);
+        const handler = pluginCommands[subcommand];
+        if (!handler) {
+          return `Unknown plugin subcommand: ${subcommand}\nAvailable: list, enable, disable, reload, info, health, stats`;
+        }
+        return handler(subArgs);
+      },
+      aliases: ["plugins"],
+    });
+
+    this.commandRegistry.register({
+      name: "agent",
+      description: "Manage agents (run, analyze, list, modes)",
+      handler: async (args: string) => {
+        const parts = args.trim().split(/\s+/);
+        const subcommand = parts[0] || "list";
+        const subArgs = parts.slice(1).join(" ");
+
+        const agentCommands = createAgentCommands(this.pluginManager);
+        const handler = agentCommands[subcommand];
+        if (!handler) {
+          return `Unknown agent subcommand: ${subcommand}\nAvailable: run, analyze, list, modes`;
+        }
+        return handler(subArgs);
+      },
+      aliases: ["agents"],
+    });
   }
 
   async shutdown(): Promise<void> {
@@ -212,6 +276,10 @@ export class OpenFlowCore {
 
   getPluginManager(): PluginManager {
     return this.pluginManager;
+  }
+
+  getCommandRegistry(): CommandRegistry {
+    return this.commandRegistry;
   }
 
   getMemoryCore(): MemoryCore {

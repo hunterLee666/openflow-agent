@@ -1,4 +1,5 @@
 import type { ToolDefinition } from "../types/index.js";
+import type { CommandRegistry } from "../commands/command-registry.js";
 
 export interface TodoItem {
   content: string;
@@ -32,7 +33,7 @@ interface TodoState {
 
 let todoState: TodoState = { todos: [], updatedAt: 0 };
 
-export function createUtilityTools(): ToolDefinition[] {
+export function createUtilityTools(commandRegistry?: CommandRegistry): ToolDefinition[] {
   return [
     {
       name: "TodoWrite",
@@ -98,7 +99,9 @@ export function createUtilityTools(): ToolDefinition[] {
     },
     {
       name: "SlashCommand",
-      description: "Execute slash commands within the conversation. Only available commands can be executed.",
+      description: commandRegistry
+        ? `Execute slash commands within the conversation. Available commands: ${commandRegistry.getNames().join(", ")}`
+        : "Execute slash commands within the conversation. Only available commands can be executed.",
       inputSchema: {
         type: "object",
         properties: {
@@ -112,6 +115,12 @@ export function createUtilityTools(): ToolDefinition[] {
 
         if (!typed.command.startsWith("/")) {
           return "Error: Command must start with '/'";
+        }
+
+        if (commandRegistry) {
+          const commandName = typed.command.split(" ")[0].slice(1);
+          const args = typed.command.includes(" ") ? typed.command.split(" ").slice(1).join(" ") : "";
+          return commandRegistry.execute(commandName, args);
         }
 
         const commandName = typed.command.split(" ")[0].slice(1);

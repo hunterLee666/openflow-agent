@@ -7,6 +7,7 @@ import { createAgentTool } from "./agent-tool.js";
 import { createWebTools } from "./web-tools.js";
 import { createUtilityTools } from "./utility-tools.js";
 import { createMultimediaTools } from "./multimedia-tools.js";
+import type { CommandRegistry } from "../commands/command-registry.js";
 
 export { createFileTools } from "./file-tools.js";
 export { createGitTools } from "./git-tools.js";
@@ -94,13 +95,13 @@ export function resolveToolProfile(profile: string): string[] {
   return [...new Set(resolved)];
 }
 
-export function createAllTools(workspaceRoot: string): ToolDefinition[] {
+export function createAllTools(workspaceRoot: string, commandRegistry?: CommandRegistry): ToolDefinition[] {
   const fileTools = createFileTools(workspaceRoot);
   const searchTools = createSearchTools(workspaceRoot);
   const bashTools = createBashTools();
   const gitTools = createGitTools();
   const webTools = createWebTools();
-  const utilityTools = createUtilityTools();
+  const utilityTools = createUtilityTools(commandRegistry);
   const multimediaTools = createMultimediaTools();
 
   return [...fileTools, ...searchTools, ...bashTools, ...gitTools, ...webTools, ...utilityTools, ...multimediaTools];
