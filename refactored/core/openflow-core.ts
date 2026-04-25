@@ -30,6 +30,7 @@ import { serializeMessages, deserializeMessages } from "./serialization/index.js
 import { CommandRegistry, createCommandRegistry } from "./commands/command-registry.js";
 import { createPluginCommands } from "./commands/plugin-commands.js";
 import { createAgentCommands } from "./commands/agent-commands.js";
+import { createDevCommands } from "./commands/development-commands.js";
 
 export interface OpenFlowConfig {
   workspaceRoot: string;
@@ -257,6 +258,100 @@ export class OpenFlowCore {
         return handler(subArgs);
       },
       aliases: ["agents"],
+    });
+
+    const devCommands = createDevCommands(this.config.workspaceRoot);
+
+    this.commandRegistry.register({
+      name: "review",
+      description: "Review code for quality, security, and performance",
+      handler: devCommands.review,
+      aliases: ["code-review"],
+    });
+
+    this.commandRegistry.register({
+      name: "init",
+      description: "Initialize project with AI configuration",
+      handler: devCommands.init,
+    });
+
+    this.commandRegistry.register({
+      name: "tree",
+      description: "Show project directory tree",
+      handler: devCommands.tree,
+    });
+
+    this.commandRegistry.register({
+      name: "overview",
+      description: "Show project overview and analysis",
+      handler: devCommands.overview,
+    });
+
+    this.commandRegistry.register({
+      name: "diff",
+      description: "View code changes (git diff)",
+      handler: devCommands.diff,
+      aliases: ["changes"],
+    });
+
+    this.commandRegistry.register({
+      name: "staged",
+      description: "View staged changes",
+      handler: devCommands.staged,
+    });
+
+    this.commandRegistry.register({
+      name: "undo",
+      description: "Undo last change or restore to checkpoint",
+      handler: devCommands.undo,
+      aliases: ["rewind"],
+    });
+
+    this.commandRegistry.register({
+      name: "checkpoint",
+      description: "Manage checkpoints (create, list)",
+      handler: devCommands.checkpoint,
+      aliases: ["checkpoints"],
+    });
+
+    this.commandRegistry.register({
+      name: "dev",
+      description: "Development commands (review, init, tree, overview, diff, undo, checkpoint)",
+      handler: async (args: string) => {
+        const parts = args.trim().split(/\s+/);
+        const subcommand = parts[0] || "help";
+        const subArgs = parts.slice(1).join(" ");
+
+        const commandMap: Record<string, (args: string) => Promise<string>> = {
+          review: devCommands.review,
+          init: devCommands.init,
+          tree: devCommands.tree,
+          overview: devCommands.overview,
+          diff: devCommands.diff,
+          staged: devCommands.staged,
+          undo: devCommands.undo,
+          checkpoint: devCommands.checkpoint,
+        };
+
+        if (subcommand === "help") {
+          return `Available development commands:
+- /dev review [path] - Review code
+- /dev init [name] - Initialize project
+- /dev tree [path] - Show directory tree
+- /dev overview - Show project overview
+- /dev diff [target] - View changes
+- /dev staged - View staged changes
+- /dev undo [last|to <id>] - Undo changes
+- /dev checkpoint [create|list] - Manage checkpoints`;
+        }
+
+        const handler = commandMap[subcommand];
+        if (!handler) {
+          return `Unknown dev subcommand: ${subcommand}\nUse /dev help for available commands`;
+        }
+        return handler(subArgs);
+      },
+      aliases: ["development"],
     });
   }
 

@@ -43,6 +43,8 @@ export function createFileTools(workspaceRoot: string): ToolDefinition[] {
     return resolved;
   };
 
+  const readFileState = new Map<string, { content: string; readAt: number }>();
+
   const tools: ToolDefinition[] = [
     {
       name: "Read",
@@ -62,6 +64,9 @@ export function createFileTools(workspaceRoot: string): ToolDefinition[] {
         const filePath = safePath(typed.file_path);
         await access(filePath, constants.R_OK);
         const content = await readFile(filePath, "utf-8");
+
+        readFileState.set(filePath, { content, readAt: Date.now() });
+
         const lines = content.split("\n");
         const startOffset = typed.offset ? typed.offset - 1 : 0;
         const readLimit = typed.limit || 2000;
@@ -115,18 +120,70 @@ export function createFileTools(workspaceRoot: string): ToolDefinition[] {
       handler: async (input: unknown) => {
         const typed = input as EditToolInput;
         const filePath = safePath(typed.file_path);
-        const content = await readFile(filePath, "utf-8");
 
-        if (!content.includes(typed.old_str)) {
-          throw new Error(`old_str not found in file: ${typed.file_path}`);
+        const readState = readFileState.get(filePath);
+        if (!readState) {
+          throw new Error(
+            `File must be read with Read tool before editing. ` +
+            `This ensures you have the latest content and prevents hallucinated edits.`
+          );
+        }
+
+        const content = readState.content;
+        const oldStr = typed.old_str;
+
+        if (!content.includes(oldStr)) {
+          throw new Error(
+            `old_str not found in file: ${typed.file_path}\n\n` +
+            `The file content may have changed since you last read it. ` +
+            `Please read the file again with Read tool to get the latest content.`
+          );
+        }
+
+        const occurrences: number[] = [];
+        let idx = content.indexOf(oldStr);
+        while (idx !== -1) {
+          occurrences.push(idx);
+          idx = content.indexOf(oldStr, idx + 1);
+        }
+
+        const matchCount = occurrences.length;
+
+        if (matchCount > 1 && !typed.replace_all) {
+          const lines = content.split("\n");
+          const lineNumbers = occurrences.map((pos) => {
+            const textBefore = content.slice(0, pos);
+            return textBefore.split("\n").length;
+          });
+
+          throw new Error(
+            `old_str appears ${matchCount} times in the file (lines: ${lineNumbers.join(", ")}). ` +
+            `To avoid unintended replacements, old_str must be unique.\n\n` +
+            `Options:\n` +
+            `1. Make old_str more specific by including surrounding context\n` +
+            `2. Set replace_all=true to replace all ${matchCount} occurrences\n` +
+            `3. Use MultiEdit to make different replacements at different locations`
+          );
         }
 
         const newContent = typed.replace_all
-          ? content.replaceAll(typed.old_str, typed.new_str)
-          : content.replace(typed.old_str, typed.new_str);
+          ? content.replaceAll(oldStr, typed.new_str)
+          : content.replace(oldStr, typed.new_str);
 
         await writeFile(filePath, newContent, "utf-8");
-        return `File edited: ${relative(workspaceRoot, filePath)}`;
+
+        readFileState.set(filePath, { content: newContent, readAt: Date.now() });
+
+        const diffLines = [
+          `File edited: ${relative(workspaceRoot, filePath)}`,
+          "",
+          "Changes:",
+          `- ${oldStr.split("\n").length} line(s) removed`,
+          `+ ${typed.new_str.split("\n").length} line(s) added`,
+          matchCount > 1 ? `\nReplaced ${matchCount} occurrences` : "",
+        ].filter(Boolean);
+
+        return diffLines.join("\n");
       },
     },
     {
@@ -154,18 +211,61 @@ export function createFileTools(workspaceRoot: string): ToolDefinition[] {
       handler: async (input: unknown) => {
         const typed = input as MultiEditToolInput;
         const filePath = safePath(typed.file_path);
-        let content = await readFile(filePath, "utf-8");
+
+        const readState = readFileState.get(filePath);
+        if (!readState) {
+          throw new Error(
+            `File must be read with Read tool before editing. ` +
+            `This ensures you have the latest content and prevents hallucinated edits.`
+          );
+        }
+
+        let content = readState.content;
+        const results: string[] = [];
 
         for (let i = 0; i < typed.edits.length; i++) {
           const edit = typed.edits[i];
+
           if (!content.includes(edit.old_str)) {
-            throw new Error(`Edit ${i + 1}: old_str not found in file`);
+            throw new Error(
+              `Edit ${i + 1}: old_str not found in file\n\n` +
+              `The file content may have changed. ` +
+              `Please read the file again with Read tool to get the latest content.`
+            );
           }
+
+          const occurrences: number[] = [];
+          let idx = content.indexOf(edit.old_str);
+          while (idx !== -1) {
+            occurrences.push(idx);
+            idx = content.indexOf(edit.old_str, idx + 1);
+          }
+
+          if (occurrences.length > 1) {
+            const lineNumbers = occurrences.map((pos) => {
+              const textBefore = content.slice(0, pos);
+              return textBefore.split("\n").length;
+            });
+
+            throw new Error(
+              `Edit ${i + 1}: old_str appears ${occurrences.length} times (lines: ${lineNumbers.join(", ")}). ` +
+              `Make old_str more unique or use separate edits for each location.`
+            );
+          }
+
           content = content.replace(edit.old_str, edit.new_str);
+          results.push(`Edit ${i + 1}: -${edit.old_str.split("\n").length}/+${edit.new_str.split("\n").length} lines`);
         }
 
         await writeFile(filePath, content, "utf-8");
-        return `File edited with ${typed.edits.length} changes: ${relative(workspaceRoot, filePath)}`;
+
+        readFileState.set(filePath, { content, readAt: Date.now() });
+
+        return [
+          `File edited with ${typed.edits.length} changes: ${relative(workspaceRoot, filePath)}`,
+          "",
+          ...results,
+        ].join("\n");
       },
     },
     {
