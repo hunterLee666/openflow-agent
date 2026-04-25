@@ -33,6 +33,10 @@ import { createPluginCommands } from "./commands/plugin-commands.js";
 import { createAgentCommands } from "./commands/agent-commands.js";
 import { createDevCommands } from "./commands/development-commands.js";
 import { createLoopCommand } from "./commands/loop-command.js";
+import { createIMCommands, loadIMConfigFromFile } from "./commands/im-commands.js";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import { CronScheduler } from "./scheduler/cron-scheduler.js";
 import { MessagingGateway, createMessagingGateway } from "./messaging/index.js";
 import type { GatewayConfig, PlatformMessage, PlatformType } from "./messaging/index.js";
@@ -114,6 +118,13 @@ export class OpenFlowCore {
   private messagingGateway: MessagingGateway | null = null;
 
   constructor(context: CapabilityContext, config: OpenFlowConfig) {
+    if (!config.messagingConfig) {
+      const imConfig = loadIMConfigFromFile();
+      if (imConfig) {
+        config.messagingConfig = imConfig;
+      }
+    }
+
     this.config = config;
     this.abortController = new AbortController();
     this.pluginManager = new PluginManager({
@@ -397,6 +408,36 @@ export class OpenFlowCore {
       description: "Create and manage scheduled cron jobs",
       handler: createLoopCommand(this.cronScheduler).handler,
       aliases: ["cron", "schedule"],
+    });
+
+    createIMCommands(this.commandRegistry);
+
+    this.commandRegistry.register({
+      name: "im",
+      description: "IM platform commands (setup, status, test)",
+      handler: async (args: string) => {
+        const parts = args.trim().split(/\s+/);
+        const subcommand = parts[0] || "help";
+        const subArgs = parts.slice(1);
+
+        if (subcommand === "help") {
+          return `IM 平台命令:
+- /im setup <平台> enable [参数...] - 启用平台
+- /im setup <平台> disable - 禁用平台
+- /im setup <平台> show - 查看配置
+- /im status - 查看所有状态
+- /im test <平台> - 测试连接
+
+支持的平台: telegram, slack, dingtalk, feishu, wecom, whatsapp, line, wechat`;
+        }
+
+        const handler = this.commandRegistry.get(`im-${subcommand}`);
+        if (!handler) {
+          return `未知 IM 子命令: ${subcommand}\n使用 /im help 查看可用命令`;
+        }
+        return handler.handler(subArgs);
+      },
+      aliases: ["messaging", "chat"],
     });
   }
 
