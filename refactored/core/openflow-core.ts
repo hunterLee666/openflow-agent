@@ -34,6 +34,8 @@ import { createAgentCommands } from "./commands/agent-commands.js";
 import { createDevCommands } from "./commands/development-commands.js";
 import { createLoopCommand } from "./commands/loop-command.js";
 import { CronScheduler } from "./scheduler/cron-scheduler.js";
+import { MessagingGateway, createMessagingGateway } from "./messaging/index.js";
+import type { GatewayConfig, PlatformMessage, PlatformType } from "./messaging/index.js";
 
 export interface OpenFlowConfig {
   workspaceRoot: string;
@@ -80,6 +82,7 @@ export interface OpenFlowConfig {
     refreshBeforeExpiryMs?: number;
     defaultExpiryMs?: number;
   };
+  messagingConfig?: GatewayConfig;
 }
 
 export class OpenFlowCore {
@@ -108,6 +111,7 @@ export class OpenFlowCore {
   private tokenRefreshScheduler: TokenRefreshScheduler;
   private commandRegistry: CommandRegistry;
   private cronScheduler: CronScheduler;
+  private messagingGateway: MessagingGateway | null = null;
 
   constructor(context: CapabilityContext, config: OpenFlowConfig) {
     this.config = config;
@@ -224,6 +228,15 @@ export class OpenFlowCore {
     await this.layeredConfigLoader.loadAll();
 
     await this.unifiedEngine.initialize();
+
+    if (this.config.messagingConfig) {
+      this.messagingGateway = createMessagingGateway(this.config.messagingConfig);
+      await this.messagingGateway.initialize();
+      this.messagingGateway.onMessage(async (message, platform) => {
+        await this.handleMessagingMessage(message, platform);
+      });
+      await this.messagingGateway.start();
+    }
 
     this.memoryCore.startNudgeCycle();
 
@@ -395,6 +408,10 @@ export class OpenFlowCore {
     await this.disconnectTransport();
     await this.cronScheduler.shutdown();
 
+    if (this.messagingGateway) {
+      await this.messagingGateway.stop();
+    }
+
     // 清理新增模块
     this.tokenRefreshScheduler.cancelAll();
     this.logger.info("OpenFlowCore shutdown complete");
@@ -412,6 +429,10 @@ export class OpenFlowCore {
 
   getCommandRegistry(): CommandRegistry {
     return this.commandRegistry;
+  }
+
+  getMessagingGateway(): MessagingGateway | null {
+    return this.messagingGateway;
   }
 
   getMemoryCore(): EnhancedMemoryCoreType {
@@ -754,6 +775,75 @@ export class OpenFlowCore {
           channel: "query",
           payload: { error: (error as Error).message },
           timestamp: new Date(),
+        });
+      }
+    }
+  }
+
+  private async handleMessagingMessage(message: PlatformMessage, platform: PlatformType): Promise<void> {
+    if (!this.llmClient) {
+      await this.messagingGateway?.sendMessage({
+        ...message,
+        direction: "outbound",
+        content: "LLM 未配置，无法处理消息",
+      });
+      return;
+    }
+
+    if (this.messagingGateway) {
+      await this.messagingGateway.sendTypingIndicator(platform, message.chatId);
+    }
+
+    const envContext = await this.memoryCore.loadExplorationContext();
+    const intentResult = await this.memoryCore.recognizeIntent(message.content);
+
+    const messages: LLMMessage[] = [
+      { role: "system", content: `你是 OpenFlow AI 助手。当前平台: ${platform}\n\n${envContext}` },
+      { role: "user", content: message.content },
+    ];
+
+    try {
+      const result = await this.llmClient.complete(messages);
+      const responseContent = result.content || "无响应";
+
+      if (this.messagingGateway) {
+        await this.messagingGateway.sendMessage({
+          id: `resp_${Date.now()}`,
+          platform,
+          type: "text",
+          direction: "outbound",
+          chatId: message.chatId,
+          userId: message.userId,
+          content: responseContent,
+          timestamp: new Date(),
+          threadId: message.threadId,
+        });
+      }
+
+      await this.memoryCore.addMemory({
+        content: `用户 (${platform}): ${message.content}\n助手: ${responseContent}`,
+        type: "conversation",
+        tags: [platform, intentResult.intent],
+        metadata: {
+          platform,
+          chatId: message.chatId,
+          userId: message.userId,
+          intent: intentResult.intent,
+        },
+      });
+    } catch (error) {
+      this.logger.error(`Messaging error on ${platform}: ${(error as Error).message}`);
+      if (this.messagingGateway) {
+        await this.messagingGateway.sendMessage({
+          id: `err_${Date.now()}`,
+          platform,
+          type: "text",
+          direction: "outbound",
+          chatId: message.chatId,
+          userId: message.userId,
+          content: `处理消息时出错: ${(error as Error).message}`,
+          timestamp: new Date(),
+          threadId: message.threadId,
         });
       }
     }
