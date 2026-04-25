@@ -21,6 +21,20 @@ import { SHOW_CURSOR, HIDE_CURSOR } from "./ansi.js";
 import { useHistory } from "./hooks/useHistory.js";
 import { useDoublePress } from "./hooks/useDoublePress.js";
 import type { KeybindingContextName } from "./keybindings/schema.js";
+import {
+  VimStateMachine,
+  createVimStateMachine,
+  type VimMode,
+  type VimState,
+  type VimConfig,
+  DEFAULT_VIM_CONFIG,
+  formatModeIndicator,
+} from "./vim/index.js";
+import {
+  detectTerminalFromEnv,
+  getMouseProtocolSequence,
+  type TerminalInfo,
+} from "./termio/index.js";
 
 export interface AppProps {
   title?: string;
@@ -35,6 +49,8 @@ export interface AppProps {
   showNotifications?: boolean;
   showStatusBar?: boolean;
   prompt?: string;
+  enableVimMode?: boolean;
+  vimConfig?: Partial<VimConfig>;
 }
 
 export interface AppState {
@@ -44,6 +60,9 @@ export interface AppState {
   selectedIndex: number;
   showHelp: boolean;
   notifications: Array<{ id: string; type: 'info' | 'warning' | 'error'; message: string }>;
+  vimMode: VimMode;
+  vimState: VimState | null;
+  terminalInfo: TerminalInfo | null;
 }
 
 export function App({
@@ -59,6 +78,8 @@ export function App({
   showNotifications: initialShowNotifications = true,
   showStatusBar: initialShowStatusBar = true,
   prompt = ">",
+  enableVimMode = false,
+  vimConfig = {},
 }: AppProps): ReactElement {
   const [input, setInput] = useState("");
   const [internalMessages, setInternalMessages] = useState<Message[]>(messages);
@@ -66,10 +87,44 @@ export function App({
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [showHelp, setShowHelp] = useState(initialShowHelp);
   const [notifications, setNotifications] = useState<AppState['notifications']>([]);
+  const [vimMode, setVimMode] = useState<VimMode>(enableVimMode ? 'normal' : 'insert');
+  const [vimState, setVimState] = useState<VimState | null>(null);
+  const [terminalInfo, setTerminalInfo] = useState<TerminalInfo | null>(null);
   const terminalSize = useTerminalSize();
   const inputHistory = useHistory<string>({ maxSize: 100 });
+  const vimMachineRef = useRef<VimStateMachine | null>(null);
 
   const isLoading = externalIsLoading || internalIsLoading;
+
+  useEffect(() => {
+    const info = detectTerminalFromEnv()
+    setTerminalInfo(info)
+
+    if (info.supportsMouse) {
+      const { enable } = getMouseProtocolSequence(info.program)
+      process.stdout.write(enable)
+    }
+
+    if (enableVimMode) {
+      vimMachineRef.current = createVimStateMachine({
+        ...DEFAULT_VIM_CONFIG,
+        ...vimConfig,
+        enableVimMode: true,
+      })
+      setVimState(vimMachineRef.current.getState())
+    }
+  }, [])
+
+  useEffect(() => {
+    process.stdout.write(HIDE_CURSOR);
+    return () => {
+      process.stdout.write(SHOW_CURSOR);
+
+      if (terminalInfo?.supportsMouse) {
+        process.stdout.write('\x1b[?9l\x1b[?1000l\x1b[?1001l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1016l')
+      }
+    };
+  }, [terminalInfo]);
 
   const addNotification = useCallback(
     (type: 'info' | 'warning' | 'error', message: string) => {
@@ -95,13 +150,6 @@ export function App({
     }
   )
 
-  useEffect(() => {
-    process.stdout.write(HIDE_CURSOR);
-    return () => {
-      process.stdout.write(SHOW_CURSOR);
-    };
-  }, []);
-
   const handleHistoryUp = useCallback(() => {
     const item = inputHistory.goBack()
     if (item !== null) {
@@ -120,7 +168,11 @@ export function App({
 
   useInput({
     onEscape: () => {
-      if (showHelp) {
+      if (enableVimMode && vimMachineRef.current) {
+        const result = vimMachineRef.current.handleKey('<Esc>')
+        setVimMode(result.newState.mode)
+        setVimState(result.newState)
+      } else if (showHelp) {
         setShowHelp(false)
       } else if (input) {
         setInput('')
@@ -129,7 +181,13 @@ export function App({
       }
     },
     onCtrlC: () => {
-      handleExitDoublePress()
+      if (enableVimMode && vimMachineRef.current && vimMode !== 'insert') {
+        const result = vimMachineRef.current.handleKey('<Ctrl-c>')
+        setVimMode(result.newState.mode)
+        setVimState(result.newState)
+      } else {
+        handleExitDoublePress()
+      }
     },
     onCtrlL: () => {
       setInternalMessages([])
@@ -139,12 +197,20 @@ export function App({
       addNotification('info', 'History search not implemented')
     },
     onArrowUp: () => {
-      if (!input) {
+      if (enableVimMode && vimMachineRef.current && vimMode === 'normal') {
+        const result = vimMachineRef.current.handleKey('k')
+        setVimMode(result.newState.mode)
+        setVimState(result.newState)
+      } else if (!input) {
         handleHistoryUp()
       }
     },
     onArrowDown: () => {
-      if (!input) {
+      if (enableVimMode && vimMachineRef.current && vimMode === 'normal') {
+        const result = vimMachineRef.current.handleKey('j')
+        setVimMode(result.newState.mode)
+        setVimState(result.newState)
+      } else if (!input) {
         handleHistoryDown()
       }
     },
@@ -152,8 +218,31 @@ export function App({
       // Auto-complete logic can be added here
     },
     onEnter: () => {
-      if (input.trim()) {
+      if (enableVimMode && vimMachineRef.current && vimMode === 'command') {
+        const result = vimMachineRef.current.handleKey('<Enter>')
+        setVimMode(result.newState.mode)
+        setVimState(result.newState)
+      } else if (input.trim()) {
         handleSend(input);
+      }
+    },
+    onKey: (key: string) => {
+      if (enableVimMode && vimMachineRef.current) {
+        const result = vimMachineRef.current.handleKey(key)
+        setVimMode(result.newState.mode)
+        setVimState(result.newState)
+
+        if (result.action === 'insert_text' && result.text) {
+          setInput(prev => prev + result.text)
+        } else if (result.action === 'delete_char') {
+          setInput(prev => prev.slice(0, -1))
+        } else if (result.action === 'delete_line') {
+          setInput('')
+        } else if (result.action === 'submit') {
+          if (input.trim()) {
+            handleSend(input)
+          }
+        }
       }
     },
   });
@@ -257,6 +346,14 @@ export function App({
         backgroundColor="#1a1a2e"
         gap={1}
       >
+        {enableVimMode && vimState && (
+          <Text
+            color={vimMode === 'normal' ? 'green' : vimMode === 'insert' ? 'cyan' : vimMode === 'visual' ? 'yellow' : 'magenta'}
+            bold
+          >
+            {formatModeIndicator(vimState)}
+          </Text>
+        )}
         <Text color="cyan" bold>
           {prompt}
         </Text>
@@ -266,8 +363,8 @@ export function App({
             value={input}
             onChange={handleInputChange}
             onSubmit={handleSubmit}
-            placeholder="Type a message..."
-            autoFocus
+            placeholder={enableVimMode && vimMode === 'normal' ? 'Normal mode - press i to insert' : 'Type a message...'}
+            autoFocus={vimMode === 'insert' || !enableVimMode}
           />
         </Box>
 
@@ -277,9 +374,10 @@ export function App({
       {initialShowStatusBar && (
         <StatusBar
           segments={[
-            { label: 'mode', value: 'chat' },
+            { label: 'mode', value: enableVimMode ? vimMode : 'chat' },
             { label: 'connection', value: 'connected' },
             { label: 'tokens', value: 0 },
+            ...(terminalInfo ? [{ label: 'terminal', value: terminalInfo.name }] : []),
           ]}
         />
       )}

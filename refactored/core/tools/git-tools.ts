@@ -1,56 +1,76 @@
+import { z } from "zod";
 import type { ToolDefinition } from "../types/index.js";
+import { createReadOnlyTool } from "./tool-factory.js";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
 
+const GitStatusInputSchema = z.object({});
+
+const GitDiffInputSchema = z.object({
+  staged: z.boolean().optional(),
+});
+
+const GitLogInputSchema = z.object({
+  limit: z.number().int().positive().optional(),
+});
+
+const GitBranchInputSchema = z.object({
+  remote: z.boolean().optional(),
+});
+
+const GitOutputSchema = z.object({
+  output: z.string(),
+});
+
 export function createGitTools(): ToolDefinition[] {
-  return [
-    {
-      name: "git_status",
-      description: "Show the current git status",
-      inputSchema: { type: "object", properties: {} },
-      isReadOnly: true,
-      handler: async () => {
-        const { stdout } = await execAsync("git status --short");
-        return stdout || "Working tree clean";
-      },
+  const gitStatusTool = createReadOnlyTool({
+    name: "git_status",
+    description: "Show the current git status",
+    inputSchema: GitStatusInputSchema,
+    outputSchema: GitOutputSchema,
+    handler: async () => {
+      const { stdout } = await execAsync("git status --short");
+      return { output: stdout || "Working tree clean" };
     },
-    {
-      name: "git_diff",
-      description: "Show git diff for unstaged changes",
-      inputSchema: { type: "object", properties: { staged: { type: "boolean" } } },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const typed = input as { staged?: boolean };
-        const flag = typed.staged ? "--staged" : "";
-        const { stdout } = await execAsync(`git diff ${flag}`);
-        return stdout || "No changes";
-      },
+  });
+
+  const gitDiffTool = createReadOnlyTool({
+    name: "git_diff",
+    description: "Show git diff for unstaged changes",
+    inputSchema: GitDiffInputSchema,
+    outputSchema: GitOutputSchema,
+    handler: async (input) => {
+      const flag = input.staged ? "--staged" : "";
+      const { stdout } = await execAsync(`git diff ${flag}`);
+      return { output: stdout || "No changes" };
     },
-    {
-      name: "git_log",
-      description: "Show recent git commits",
-      inputSchema: { type: "object", properties: { limit: { type: "number" } } },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const typed = input as { limit?: number };
-        const limit = typed.limit || 10;
-        const { stdout } = await execAsync(`git log --oneline -${limit}`);
-        return stdout;
-      },
+  });
+
+  const gitLogTool = createReadOnlyTool({
+    name: "git_log",
+    description: "Show recent git commits",
+    inputSchema: GitLogInputSchema,
+    outputSchema: GitOutputSchema,
+    handler: async (input) => {
+      const limit = input.limit || 10;
+      const { stdout } = await execAsync(`git log --oneline -${limit}`);
+      return { output: stdout };
     },
-    {
-      name: "git_branch",
-      description: "List git branches",
-      inputSchema: { type: "object", properties: { remote: { type: "boolean" } } },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const typed = input as { remote?: boolean };
-        const flag = typed.remote ? "-r" : "";
-        const { stdout } = await execAsync(`git branch ${flag}`);
-        return stdout;
-      },
+  });
+
+  const gitBranchTool = createReadOnlyTool({
+    name: "git_branch",
+    description: "List git branches",
+    inputSchema: GitBranchInputSchema,
+    outputSchema: GitOutputSchema,
+    handler: async (input) => {
+      const flag = input.remote ? "-r" : "";
+      const { stdout } = await execAsync(`git branch ${flag}`);
+      return { output: stdout };
     },
-  ];
+  });
+
+  return [gitStatusTool, gitDiffTool, gitLogTool, gitBranchTool];
 }

@@ -311,6 +311,23 @@ export class PluginManager extends EventEmitter {
     this.context.telemetry.log("plugin:unregistered", { name });
   }
 
+  getDisabledModelInvocations(name: string): string[] {
+    const entry = this.plugins.get(name);
+    return entry?.manifest.disableModelInvocationFor || [];
+  }
+
+  getAllDisabledModelInvocations(): Set<string> {
+    const disabled = new Set<string>();
+    for (const entry of this.plugins.values()) {
+      if (entry.status === PluginStatus.ACTIVATED && entry.info.enabled) {
+        for (const item of entry.manifest.disableModelInvocationFor || []) {
+          disabled.add(item);
+        }
+      }
+    }
+    return disabled;
+  }
+
   get(name: string): PluginInfo | null {
     const entry = this.plugins.get(name);
     return entry?.info || null;

@@ -111,3 +111,15 @@ export type {
   DesensitizationStats,
   DesensitizationResult,
 } from "./exploration-desensitizer.js";
+
+export { ClaudeMdLoader, createClaudeMdLoader } from "./claude-md-loader.js";
+export type { ClaudeMdLayer, ClaudeMdStackResult } from "./claude-md-loader.js";
+
+export { DualModelRetriever, createDualModelRetriever } from "./dual-model-retriever.js";
+export type { MemoryCard, MemoryRetrievalResult, DualModelRetrieverConfig } from "./dual-model-retriever.js";
+
+export { AutoMemoryExtractor, createAutoMemoryExtractor } from "./auto-memory-extractor.js";
+export type { MemoryObservation, AutoMemoryConfig } from "./auto-memory-extractor.js";
+
+export { KairosDreaming, createKairosDreaming } from "./kairos-dreaming.js";
+export type { DreamEntry, DistilledCard, KairosDreamingConfig, DreamResult } from "./kairos-dreaming.js";

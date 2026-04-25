@@ -1,11 +1,14 @@
 import type { Message, ContentBlock } from "../session/types.js";
 import type { LLMClient, LLMMessage, LLMToolDefinition, StreamCallbacks, CompletionResult, LLMToolCall } from "../llm/index.js";
 import type { SessionManager } from "../session/session.js";
-import { compactMessages, shouldCompact, estimateTokenCount, tier1MicroCompaction, COMPACT_TOKEN_BUDGET, estimateCost, buildTier3SummaryPrompt, formatTier3Summary, type Tier3Summary } from "../compaction/index.js";
+import { compactMessages, shouldCompact, estimateTokenCount, tier1MicroCompaction, COMPACT_TOKEN_BUDGET, estimateCost, buildTier3SummaryPrompt, formatTier3Summary, cacheAwareTier1Compaction, cacheAwareCompaction, type CacheEditResult, type Tier3Summary } from "../compaction/index.js";
 import { FourteenStepGovernancePipeline, type GovernanceContext, type GovernanceHooks } from "../governance/index.js";
 import { HookSystem, type HookContext, type HookResult, type HookEvent } from "../hooks/index.js";
 import type { EnhancedMemoryCore } from "../memory/enhanced-memory-core.js";
 import type { IntentRecognitionResult, SafetyLevel } from "../memory/intent-recognizer.js";
+import type { PermissionSystem } from "../permissions/index.js";
+import { PermissionDecision } from "../permissions/index.js";
+import type { PromptCacheMonitor } from "../prompts/cache-monitor.js";
 
 export interface QueryInput {
   message: string;
@@ -58,9 +61,18 @@ export type StreamEvent =
   | { kind: "completion"; text: string }
   | { kind: "error"; error: string };
 
+export interface QueryToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  isConcurrencySafe: boolean;
+  resourceKeys?: string[];
+  handler: (input: Record<string, unknown>) => Promise<unknown>;
+}
+
 export interface QueryToolRegistry {
-  list(): Array<{ name: string; description: string; inputSchema: Record<string, unknown>; handler: (input: Record<string, unknown>) => Promise<unknown> }>;
-  get(name: string): { name: string; description: string; inputSchema: Record<string, unknown>; handler: (input: Record<string, unknown>) => Promise<unknown> } | undefined;
+  list(): QueryToolDefinition[];
+  get(name: string): QueryToolDefinition | undefined;
 }
 
 export interface QueryContext {
@@ -70,10 +82,12 @@ export interface QueryContext {
   config: QueryConfig;
   abortSignal: AbortSignal;
   onStreamEvent?: (event: StreamEvent) => void;
+  cacheMonitor?: PromptCacheMonitor;
   hooks?: GovernanceHooks;
   governancePipeline?: FourteenStepGovernancePipeline;
   hookSystem?: HookSystem;
   memoryCore?: EnhancedMemoryCore;
+  permissionSystem?: PermissionSystem;
 }
 
 export async function* query(
@@ -222,9 +236,9 @@ async function* queryLoop(
     const toolResults = await executeTools(toolUses, state, ctx);
     state.messages.push(...toolResults.map((r) => ({ role: "tool" as const, content: [r] })));
 
-    const tier1 = tier1MicroCompaction(state.messages);
-    if (tier1.elidedCount > 0) {
-      state.messages = tier1.compacted;
+    const tier1Result = cacheAwareTier1Compaction(state.messages);
+    if (tier1Result.editsApplied > 0) {
+      state.messages = tier1Result.messages;
     }
   }
 }
@@ -248,11 +262,25 @@ async function prepareMessagesWithCompaction(
 
   const totalTokens = estimateTokenCount(messages);
   const threshold = ctx.config.compactionThreshold;
+  const contextWindow = ctx.config.maxTokens || threshold;
+
+  if (ctx.cacheMonitor) {
+    const report = ctx.cacheMonitor.getHealthReport(totalTokens, contextWindow);
+    if (report.contextWarning) {
+      console.warn(report.contextWarning);
+    }
+  }
 
   if (totalTokens > threshold * 0.87) {
     try {
-      messages = await runCompaction(messages, ctx);
-      state.compactionFailures = 0;
+      const cacheResult = cacheAwareCompaction(messages, threshold);
+      if (cacheResult.editsApplied > 0) {
+        messages = cacheResult.messages;
+        state.compactionFailures = 0;
+      } else {
+        messages = await runCompaction(messages, ctx);
+        state.compactionFailures = 0;
+      }
     } catch (e) {
       state.compactionFailures += 1;
       if (state.compactionFailures >= ctx.config.maxCompactionFailures) {
@@ -260,6 +288,13 @@ async function prepareMessagesWithCompaction(
         throw new Error("Compaction circuit breaker open");
       }
       messages = fallbackTrim(messages);
+    }
+  } else if (totalTokens > threshold * 0.60) {
+    if (ctx.cacheMonitor) {
+      const report = ctx.cacheMonitor.getHealthReport(totalTokens, contextWindow);
+      if (report.contextUsageRatio && report.contextUsageRatio >= 0.60) {
+        console.warn(`⚠️ 上下文使用率已达 ${(report.contextUsageRatio * 100).toFixed(1)}%，建议执行 /compact 或拆分任务`);
+      }
     }
   }
 
@@ -399,82 +434,186 @@ function extractVisibleText(msg: Message): string {
     .join("");
 }
 
+type PlannedGroup =
+  | { mode: "parallel"; items: LLMToolCall[] }
+  | { mode: "serial"; items: LLMToolCall[] };
+
+function planToolExecution(
+  uses: LLMToolCall[],
+  registry: QueryToolRegistry,
+  maxParallel?: number,
+): PlannedGroup[] {
+  const groups: PlannedGroup[] = [];
+  let buffer: LLMToolCall[] = [];
+  const max = maxParallel ?? 4;
+
+  const flushParallel = () => {
+    if (buffer.length === 0) return;
+    if (buffer.length > max) {
+      for (let i = 0; i < buffer.length; i += max) {
+        groups.push({ mode: "parallel", items: buffer.slice(i, i + max) });
+      }
+    } else {
+      groups.push({ mode: "parallel", items: buffer });
+    }
+    buffer = [];
+  };
+
+  for (const u of uses) {
+    const def = registry.get(u.name);
+    const safe = def?.isConcurrencySafe ?? false;
+    const hasResourceConflict = safe && buffer.some((existing) => {
+      const existingDef = registry.get(existing.name);
+      const uDef = registry.get(u.name);
+      if (!existingDef?.resourceKeys || !uDef?.resourceKeys) return false;
+      const existingKeys = extractResourceKeys(existing.input, existingDef.resourceKeys);
+      const uKeys = extractResourceKeys(u.input, uDef.resourceKeys);
+      return existingKeys.some((k) => uKeys.includes(k));
+    });
+
+    if (safe && !hasResourceConflict) {
+      buffer.push(u);
+    } else {
+      flushParallel();
+      groups.push({ mode: "serial", items: [u] });
+    }
+  }
+  flushParallel();
+  return groups;
+}
+
+function extractResourceKeys(input: Record<string, unknown>, keys: string[]): string[] {
+  return keys
+    .map((k) => {
+      const val = input[k];
+      return typeof val === "string" ? val : "";
+    })
+    .filter(Boolean);
+}
+
+async function executePlan(
+  plan: PlannedGroup[],
+  ctx: QueryContext,
+  state: QueryState,
+): Promise<ContentBlock[]> {
+  const out: ContentBlock[] = [];
+
+  for (const g of plan) {
+    if (g.mode === "parallel") {
+      const chunk = await Promise.all(
+        g.items.map((u) => runSingleTool(u, ctx, state)),
+      );
+      out.push(...chunk);
+    } else {
+      for (const u of g.items) {
+        out.push(await runSingleTool(u, ctx, state));
+      }
+    }
+  }
+
+  return out;
+}
+
+async function runSingleTool(
+  tu: LLMToolCall,
+  ctx: QueryContext,
+  state: QueryState,
+): Promise<ContentBlock> {
+  const tool = ctx.toolRegistry.get(tu.name);
+  if (!tool) {
+    return {
+      type: "tool_result",
+      tool_use_id: tu.id,
+      content: [{ type: "text", text: `Tool "${tu.name}" not found` }],
+    };
+  }
+
+  try {
+    let output: unknown;
+    
+    if (ctx.permissionSystem) {
+      const permissionResult = await ctx.permissionSystem.checkPermission({
+        toolName: tu.name,
+        input: tu.input,
+      });
+
+      if (permissionResult.decision === PermissionDecision.Deny) {
+        return {
+          type: "tool_result",
+          tool_use_id: tu.id,
+          content: [{ type: "text", text: `权限拒绝: ${permissionResult.reason || "未知原因"} [步骤 ${permissionResult.step}]` }],
+        };
+      }
+
+      if (permissionResult.decision === PermissionDecision.Ask) {
+        return {
+          type: "tool_result",
+          tool_use_id: tu.id,
+          content: [{ type: "text", text: `需要用户确认: ${permissionResult.reason || "未知原因"} [步骤 ${permissionResult.step}]` }],
+        };
+      }
+    }
+    
+    if (ctx.governancePipeline) {
+      const governanceCtx: GovernanceContext = {
+        cwd: process.cwd(),
+        tool: tu.name,
+        input: tu.input,
+        isReadOnly: ctx.config.permissionMode === "readonly",
+        isDestructive: isDestructiveTool(tu.name, tu.input),
+        isNetworkAccess: isNetworkTool(tu.name, tu.input),
+        isGitCommand: isGitCommand(tu.input),
+        config: {
+          maskSensitiveOutputs: true,
+          riskThreshold: "medium",
+        },
+      };
+
+      const governanceResult = await ctx.governancePipeline.execute(
+        tu.name,
+        tu.input,
+        tool.handler,
+        governanceCtx
+      );
+
+      if (governanceResult.status === "error") {
+        const errorMsg = governanceResult.error?.message || "Tool execution denied by governance";
+        return {
+          type: "tool_result",
+          tool_use_id: tu.id,
+          content: [{ type: "text", text: `Governance Error: ${errorMsg}` }],
+        };
+      }
+
+      output = governanceResult.data;
+    } else {
+      output = await tool.handler(tu.input);
+    }
+
+    const outputText = typeof output === "string" ? output : JSON.stringify(output);
+    ctx.onStreamEvent?.({ kind: "tool_result", toolName: tu.name, result: outputText });
+    return {
+      type: "tool_result",
+      tool_use_id: tu.id,
+      content: [{ type: "text", text: outputText }],
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return {
+      type: "tool_result",
+      tool_use_id: tu.id,
+      content: [{ type: "text", text: `Error: ${errorMsg}` }],
+    };
+  }
+}
+
 async function executeTools(
   toolUses: LLMToolCall[],
   state: QueryState,
   ctx: QueryContext,
 ): Promise<ContentBlock[]> {
-  const results: ContentBlock[] = [];
-
-  for (const tu of toolUses) {
-    const tool = ctx.toolRegistry.get(tu.name);
-    if (!tool) {
-      results.push({
-        type: "tool_result",
-        tool_use_id: tu.id,
-        content: [{ type: "text", text: `Tool "${tu.name}" not found` }],
-      });
-      continue;
-    }
-
-    try {
-      let output: unknown;
-      
-      if (ctx.governancePipeline) {
-        const governanceCtx: GovernanceContext = {
-          cwd: process.cwd(),
-          tool: tu.name,
-          input: tu.input,
-          isReadOnly: ctx.config.permissionMode === "readonly",
-          isDestructive: isDestructiveTool(tu.name, tu.input),
-          isNetworkAccess: isNetworkTool(tu.name, tu.input),
-          isGitCommand: isGitCommand(tu.input),
-          config: {
-            maskSensitiveOutputs: true,
-            riskThreshold: "medium",
-          },
-        };
-
-        const governanceResult = await ctx.governancePipeline.execute(
-          tu.name,
-          tu.input,
-          tool.handler,
-          governanceCtx
-        );
-
-        if (governanceResult.status === "error") {
-          const errorMsg = governanceResult.error?.message || "Tool execution denied by governance";
-          results.push({
-            type: "tool_result",
-            tool_use_id: tu.id,
-            content: [{ type: "text", text: `Governance Error: ${errorMsg}` }],
-          });
-          continue;
-        }
-
-        output = governanceResult.data;
-      } else {
-        output = await tool.handler(tu.input);
-      }
-
-      const outputText = typeof output === "string" ? output : JSON.stringify(output);
-      results.push({
-        type: "tool_result",
-        tool_use_id: tu.id,
-        content: [{ type: "text", text: outputText }],
-      });
-      ctx.onStreamEvent?.({ kind: "tool_result", toolName: tu.name, result: outputText });
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      results.push({
-        type: "tool_result",
-        tool_use_id: tu.id,
-        content: [{ type: "text", text: `Error: ${errorMsg}` }],
-      });
-    }
-  }
-
-  return results;
+  const plan = planToolExecution(toolUses, ctx.toolRegistry);
+  return executePlan(plan, ctx, state);
 }
 
 function isDestructiveTool(tool: string, input: Record<string, unknown>): boolean {

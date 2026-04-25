@@ -1,10 +1,63 @@
+import { z } from "zod";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { stat } from "node:fs/promises";
 import type { ToolDefinition } from "../types/index.js";
+import { createReadOnlyTool, createWriteTool } from "./tool-factory.js";
 
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"];
 const AUDIO_EXTENSIONS = [".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a"];
 const VIDEO_EXTENSIONS = [".mp4", ".webm", ".avi", ".mov", ".mkv", ".flv"];
+
+const ImageAnalysisInputSchema = z.object({
+  image_path: z.string().min(1, "image_path 不能为空"),
+  analysis_type: z.enum(["basic", "detailed", "ocr", "object_detection"]).optional(),
+});
+
+const ImageGenerationInputSchema = z.object({
+  prompt: z.string().min(1, "prompt 不能为空"),
+  size: z.enum(["256x256", "512x512", "1024x1024", "1024x1792", "1792x1024"]).optional(),
+  style: z.enum(["realistic", "artistic", "abstract", "minimalist"]).optional(),
+  output_path: z.string().optional(),
+});
+
+const AudioAnalysisInputSchema = z.object({
+  audio_path: z.string().min(1, "audio_path 不能为空"),
+});
+
+const AudioGenerationInputSchema = z.object({
+  text: z.string().min(1, "text 不能为空"),
+  voice: z.string().optional(),
+  language: z.string().optional(),
+  output_path: z.string().optional(),
+});
+
+const VideoAnalysisInputSchema = z.object({
+  video_path: z.string().min(1, "video_path 不能为空"),
+});
+
+const VideoGenerationInputSchema = z.object({
+  prompt: z.string().min(1, "prompt 不能为空"),
+  duration: z.number().positive().optional(),
+  resolution: z.enum(["720p", "1080p", "4K"]).optional(),
+  output_path: z.string().optional(),
+});
+
+const MediaAnalysisOutputSchema = z.object({
+  type: z.enum(["image", "audio", "video"]),
+  format: z.string(),
+  size: z.number().int().nonnegative(),
+  dimensions: z.object({ width: z.number(), height: z.number() }).optional(),
+  duration: z.number().optional(),
+  description: z.string().optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+const GenerationOutputSchema = z.object({
+  status: z.string(),
+  message: z.string(),
+  parameters: z.record(z.unknown()),
+  outputPath: z.string().optional(),
+});
 
 export interface MediaAnalysisResult {
   type: "image" | "audio" | "video";
@@ -17,255 +70,196 @@ export interface MediaAnalysisResult {
 }
 
 export function createMultimediaTools(): ToolDefinition[] {
-  return [
-    {
-      name: "ImageAnalysis",
-      description: "Analyze images and extract information. Supports PNG, JPG, GIF, WebP, BMP, SVG. Returns format, dimensions, size, and content description.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          image_path: { type: "string", description: "The absolute path to the image file" },
-          analysis_type: { type: "string", enum: ["basic", "detailed", "ocr", "object_detection"], description: "Type of analysis to perform" },
-        },
-        required: ["image_path"],
-      },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const typed = input as { image_path: string; analysis_type?: string };
-        const imagePath = typed.image_path;
+  const imageAnalysisTool = createReadOnlyTool({
+    name: "ImageAnalysis",
+    description: "Analyze images and extract information. Supports PNG, JPG, GIF, WebP, BMP, SVG. Returns format, dimensions, size, and content description.",
+    inputSchema: ImageAnalysisInputSchema,
+    outputSchema: MediaAnalysisOutputSchema,
+    handler: async (input) => {
+      const imagePath = input.image_path;
 
-        try {
-          const fileStat = await stat(imagePath);
-          const ext = imagePath.slice(imagePath.lastIndexOf(".")).toLowerCase();
+      const fileStat = await stat(imagePath);
+      const ext = imagePath.slice(imagePath.lastIndexOf(".")).toLowerCase();
 
-          if (!IMAGE_EXTENSIONS.includes(ext)) {
-            return `Error: Not a supported image format. Supported: ${IMAGE_EXTENSIONS.join(", ")}`;
-          }
+      if (!IMAGE_EXTENSIONS.includes(ext)) {
+        throw new Error(`Not a supported image format. Supported: ${IMAGE_EXTENSIONS.join(", ")}`);
+      }
 
-          const result: MediaAnalysisResult = {
-            type: "image",
-            format: ext.slice(1),
-            size: fileStat.size,
-          };
+      const result: MediaAnalysisResult = {
+        type: "image",
+        format: ext.slice(1),
+        size: fileStat.size,
+      };
 
-          if (ext === ".png" || ext === ".jpg" || ext === ".jpeg") {
-            const dimensions = await getImageDimensions(imagePath);
-            if (dimensions) {
-              result.dimensions = dimensions;
-            }
-          }
-
-          const analysisType = typed.analysis_type || "basic";
-          result.description = `Image analysis (${analysisType}): ${result.format.toUpperCase()} image, ${result.dimensions ? `${result.dimensions.width}x${result.dimensions.height}` : "unknown dimensions"}, ${(result.size / 1024).toFixed(1)}KB`;
-
-          return JSON.stringify(result, null, 2);
-        } catch (error) {
-          return `Error analyzing image: ${(error as Error).message}`;
+      if (ext === ".png" || ext === ".jpg" || ext === ".jpeg") {
+        const dimensions = await getImageDimensions(imagePath);
+        if (dimensions) {
+          result.dimensions = dimensions;
         }
-      },
+      }
+
+      const analysisType = input.analysis_type || "basic";
+      result.description = `Image analysis (${analysisType}): ${result.format.toUpperCase()} image, ${result.dimensions ? `${result.dimensions.width}x${result.dimensions.height}` : "unknown dimensions"}, ${(result.size / 1024).toFixed(1)}KB`;
+
+      return result;
     },
-    {
-      name: "ImageGeneration",
-      description: "Generate images from text descriptions. Returns a placeholder with generation parameters. For actual generation, configure an external image generation service.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          prompt: { type: "string", description: "Text description of the image to generate" },
-          size: { type: "string", enum: ["256x256", "512x512", "1024x1024", "1024x1792", "1792x1024"], description: "Image size" },
-          style: { type: "string", enum: ["realistic", "artistic", "abstract", "minimalist"], description: "Image style" },
-          output_path: { type: "string", description: "Path to save the generated image" },
+  });
+
+  const imageGenerationTool = createWriteTool({
+    name: "ImageGeneration",
+    description: "Generate images from text descriptions. Returns a placeholder with generation parameters. For actual generation, configure an external image generation service.",
+    inputSchema: ImageGenerationInputSchema,
+    outputSchema: GenerationOutputSchema,
+    handler: async (input) => {
+      const size = input.size || "1024x1024";
+      const style = input.style || "realistic";
+
+      const result = {
+        status: "placeholder",
+        prompt: input.prompt,
+        size,
+        style,
+        message: "Image generation requires external service configuration. This is a placeholder response.",
+        parameters: {
+          model: "dall-e-3",
+          quality: "hd",
+          n: 1,
         },
-        required: ["prompt"],
-      },
-      isReadOnly: false,
-      handler: async (input: unknown) => {
-        const typed = input as { prompt: string; size?: string; style?: string; output_path?: string };
+      };
 
-        const size = typed.size || "1024x1024";
-        const style = typed.style || "realistic";
+      if (input.output_path) {
+        await writeFile(input.output_path, JSON.stringify(result, null, 2));
+        result.message += ` Parameters saved to: ${input.output_path}`;
+      }
 
-        const result = {
-          status: "placeholder",
-          prompt: typed.prompt,
-          size,
-          style,
-          message: "Image generation requires external service configuration. This is a placeholder response.",
-          parameters: {
-            model: "dall-e-3",
-            quality: "hd",
-            n: 1,
-          },
-        };
-
-        if (typed.output_path) {
-          try {
-            await writeFile(typed.output_path, JSON.stringify(result, null, 2));
-            result.message += ` Parameters saved to: ${typed.output_path}`;
-          } catch (error) {
-            result.message += ` Failed to save parameters: ${(error as Error).message}`;
-          }
-        }
-
-        return JSON.stringify(result, null, 2);
-      },
+      return {
+        status: result.status,
+        message: result.message,
+        parameters: result.parameters,
+        outputPath: input.output_path,
+      };
     },
-    {
-      name: "AudioAnalysis",
-      description: "Analyze audio files and extract metadata. Supports MP3, WAV, OGG, FLAC, AAC, M4A.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          audio_path: { type: "string", description: "The absolute path to the audio file" },
+  });
+
+  const audioAnalysisTool = createReadOnlyTool({
+    name: "AudioAnalysis",
+    description: "Analyze audio files and extract metadata. Supports MP3, WAV, OGG, FLAC, AAC, M4A.",
+    inputSchema: AudioAnalysisInputSchema,
+    outputSchema: MediaAnalysisOutputSchema,
+    handler: async (input) => {
+      const audioPath = input.audio_path;
+
+      const fileStat = await stat(audioPath);
+      const ext = audioPath.slice(audioPath.lastIndexOf(".")).toLowerCase();
+
+      if (!AUDIO_EXTENSIONS.includes(ext)) {
+        throw new Error(`Not a supported audio format. Supported: ${AUDIO_EXTENSIONS.join(", ")}`);
+      }
+
+      const result: MediaAnalysisResult = {
+        type: "audio",
+        format: ext.slice(1),
+        size: fileStat.size,
+        description: `Audio file: ${ext.slice(1).toUpperCase()}, ${(fileStat.size / 1024 / 1024).toFixed(2)}MB`,
+      };
+
+      return result;
+    },
+  });
+
+  const audioGenerationTool = createWriteTool({
+    name: "AudioGeneration",
+    description: "Generate audio from text (text-to-speech). Returns a placeholder with generation parameters.",
+    inputSchema: AudioGenerationInputSchema,
+    outputSchema: GenerationOutputSchema,
+    handler: async (input) => {
+      const result = {
+        status: "placeholder",
+        text: input.text.slice(0, 100) + (input.text.length > 100 ? "..." : ""),
+        voice: input.voice || "default",
+        language: input.language || "en",
+        message: "Audio generation requires external TTS service configuration. This is a placeholder response.",
+        parameters: {
+          model: "tts-1",
+          response_format: "mp3",
+          speed: 1.0,
         },
-        required: ["audio_path"],
-      },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const typed = input as { audio_path: string };
-        const audioPath = typed.audio_path;
+      };
 
-        try {
-          const fileStat = await stat(audioPath);
-          const ext = audioPath.slice(audioPath.lastIndexOf(".")).toLowerCase();
+      if (input.output_path) {
+        await writeFile(input.output_path, JSON.stringify(result, null, 2));
+        result.message += ` Parameters saved to: ${input.output_path}`;
+      }
 
-          if (!AUDIO_EXTENSIONS.includes(ext)) {
-            return `Error: Not a supported audio format. Supported: ${AUDIO_EXTENSIONS.join(", ")}`;
-          }
-
-          const result: MediaAnalysisResult = {
-            type: "audio",
-            format: ext.slice(1),
-            size: fileStat.size,
-            description: `Audio file: ${ext.slice(1).toUpperCase()}, ${(fileStat.size / 1024 / 1024).toFixed(2)}MB`,
-          };
-
-          return JSON.stringify(result, null, 2);
-        } catch (error) {
-          return `Error analyzing audio: ${(error as Error).message}`;
-        }
-      },
+      return {
+        status: result.status,
+        message: result.message,
+        parameters: result.parameters,
+        outputPath: input.output_path,
+      };
     },
-    {
-      name: "AudioGeneration",
-      description: "Generate audio from text (text-to-speech). Returns a placeholder with generation parameters.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          text: { type: "string", description: "Text to convert to speech" },
-          voice: { type: "string", description: "Voice identifier" },
-          language: { type: "string", description: "Language code (e.g., en, zh, ja)" },
-          output_path: { type: "string", description: "Path to save the generated audio" },
+  });
+
+  const videoAnalysisTool = createReadOnlyTool({
+    name: "VideoAnalysis",
+    description: "Analyze video files and extract metadata. Supports MP4, WebM, AVI, MOV, MKV, FLV.",
+    inputSchema: VideoAnalysisInputSchema,
+    outputSchema: MediaAnalysisOutputSchema,
+    handler: async (input) => {
+      const videoPath = input.video_path;
+
+      const fileStat = await stat(videoPath);
+      const ext = videoPath.slice(videoPath.lastIndexOf(".")).toLowerCase();
+
+      if (!VIDEO_EXTENSIONS.includes(ext)) {
+        throw new Error(`Not a supported video format. Supported: ${VIDEO_EXTENSIONS.join(", ")}`);
+      }
+
+      const result: MediaAnalysisResult = {
+        type: "video",
+        format: ext.slice(1),
+        size: fileStat.size,
+        description: `Video file: ${ext.slice(1).toUpperCase()}, ${(fileStat.size / 1024 / 1024).toFixed(2)}MB`,
+      };
+
+      return result;
+    },
+  });
+
+  const videoGenerationTool = createWriteTool({
+    name: "VideoGeneration",
+    description: "Generate video from text descriptions. Returns a placeholder with generation parameters.",
+    inputSchema: VideoGenerationInputSchema,
+    outputSchema: GenerationOutputSchema,
+    handler: async (input) => {
+      const result = {
+        status: "placeholder",
+        prompt: input.prompt,
+        duration: input.duration || 5,
+        resolution: input.resolution || "1080p",
+        message: "Video generation requires external service configuration. This is a placeholder response.",
+        parameters: {
+          model: "video-gen-1",
+          fps: 24,
+          format: "mp4",
         },
-        required: ["text"],
-      },
-      isReadOnly: false,
-      handler: async (input: unknown) => {
-        const typed = input as { text: string; voice?: string; language?: string; output_path?: string };
+      };
 
-        const result = {
-          status: "placeholder",
-          text: typed.text.slice(0, 100) + (typed.text.length > 100 ? "..." : ""),
-          voice: typed.voice || "default",
-          language: typed.language || "en",
-          message: "Audio generation requires external TTS service configuration. This is a placeholder response.",
-          parameters: {
-            model: "tts-1",
-            response_format: "mp3",
-            speed: 1.0,
-          },
-        };
+      if (input.output_path) {
+        await writeFile(input.output_path, JSON.stringify(result, null, 2));
+        result.message += ` Parameters saved to: ${input.output_path}`;
+      }
 
-        if (typed.output_path) {
-          try {
-            await writeFile(typed.output_path, JSON.stringify(result, null, 2));
-            result.message += ` Parameters saved to: ${typed.output_path}`;
-          } catch (error) {
-            result.message += ` Failed to save parameters: ${(error as Error).message}`;
-          }
-        }
-
-        return JSON.stringify(result, null, 2);
-      },
+      return {
+        status: result.status,
+        message: result.message,
+        parameters: result.parameters,
+        outputPath: input.output_path,
+      };
     },
-    {
-      name: "VideoAnalysis",
-      description: "Analyze video files and extract metadata. Supports MP4, WebM, AVI, MOV, MKV, FLV.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          video_path: { type: "string", description: "The absolute path to the video file" },
-        },
-        required: ["video_path"],
-      },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const typed = input as { video_path: string };
-        const videoPath = typed.video_path;
+  });
 
-        try {
-          const fileStat = await stat(videoPath);
-          const ext = videoPath.slice(videoPath.lastIndexOf(".")).toLowerCase();
-
-          if (!VIDEO_EXTENSIONS.includes(ext)) {
-            return `Error: Not a supported video format. Supported: ${VIDEO_EXTENSIONS.join(", ")}`;
-          }
-
-          const result: MediaAnalysisResult = {
-            type: "video",
-            format: ext.slice(1),
-            size: fileStat.size,
-            description: `Video file: ${ext.slice(1).toUpperCase()}, ${(fileStat.size / 1024 / 1024).toFixed(2)}MB`,
-          };
-
-          return JSON.stringify(result, null, 2);
-        } catch (error) {
-          return `Error analyzing video: ${(error as Error).message}`;
-        }
-      },
-    },
-    {
-      name: "VideoGeneration",
-      description: "Generate video from text descriptions. Returns a placeholder with generation parameters.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          prompt: { type: "string", description: "Text description of the video to generate" },
-          duration: { type: "number", description: "Video duration in seconds" },
-          resolution: { type: "string", enum: ["720p", "1080p", "4K"], description: "Video resolution" },
-          output_path: { type: "string", description: "Path to save the generated video" },
-        },
-        required: ["prompt"],
-      },
-      isReadOnly: false,
-      handler: async (input: unknown) => {
-        const typed = input as { prompt: string; duration?: number; resolution?: string; output_path?: string };
-
-        const result = {
-          status: "placeholder",
-          prompt: typed.prompt,
-          duration: typed.duration || 5,
-          resolution: typed.resolution || "1080p",
-          message: "Video generation requires external service configuration. This is a placeholder response.",
-          parameters: {
-            model: "video-gen-1",
-            fps: 24,
-            format: "mp4",
-          },
-        };
-
-        if (typed.output_path) {
-          try {
-            await writeFile(typed.output_path, JSON.stringify(result, null, 2));
-            result.message += ` Parameters saved to: ${typed.output_path}`;
-          } catch (error) {
-            result.message += ` Failed to save parameters: ${(error as Error).message}`;
-          }
-        }
-
-        return JSON.stringify(result, null, 2);
-      },
-    },
-  ];
+  return [imageAnalysisTool, imageGenerationTool, audioAnalysisTool, audioGenerationTool, videoAnalysisTool, videoGenerationTool];
 }
 
 async function getImageDimensions(imagePath: string): Promise<{ width: number; height: number } | null> {

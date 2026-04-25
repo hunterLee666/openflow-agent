@@ -1,14 +1,8 @@
 import type { SubAgentMessage, SubAgentTask, SubAgentResult, SubAgentContext } from "./sub-agent-system.js";
 import type { ToolDefinition } from "../types/index.js";
-
-export interface SwarmAgent {
-  id: string;
-  name: string;
-  description: string;
-  systemPrompt: string;
-  allowedTools: string[];
-  handoffs: string[];
-}
+import { SwarmAgent } from "./agent-types.js";
+import { MessageRouter } from "./message-router.js";
+export { SwarmAgent } from "./agent-types.js";
 
 export interface SwarmConfig {
   maxIterations: number;
@@ -29,6 +23,7 @@ export class SwarmMode {
   private config: SwarmConfig;
   private llmProvider: ((messages: SubAgentMessage[], tools: ToolDefinition[]) => Promise<{ content: string; toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }> }>) | null = null;
   private toolExecutor: ((toolName: string, args: Record<string, unknown>) => Promise<unknown>) | null = null;
+  private messageRouter: MessageRouter;
 
   constructor(config?: Partial<SwarmConfig>) {
     this.config = {
@@ -37,6 +32,7 @@ export class SwarmMode {
       enableParallelExecution: config?.enableParallelExecution ?? true,
       parallelLimit: config?.parallelLimit || 3,
     };
+    this.messageRouter = new MessageRouter();
   }
 
   setLlmProvider(provider: (messages: SubAgentMessage[], tools: ToolDefinition[]) => Promise<{ content: string; toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }> }>): void {
@@ -125,9 +121,12 @@ export class SwarmMode {
 
     const duration = Date.now() - startTime;
 
+    const finalContent = finalOutput || swarmCtx.conversationHistory[swarmCtx.conversationHistory.length - 1]?.content || "";
+    const structuredOutput = this.messageRouter.parseStructuredResponse(finalContent);
+
     return {
       taskId: task.id,
-      output: finalOutput || swarmCtx.conversationHistory[swarmCtx.conversationHistory.length - 1]?.content || "",
+      output: this.messageRouter.formatForParent(structuredOutput),
       duration,
       status: "success",
       turns: iteration,

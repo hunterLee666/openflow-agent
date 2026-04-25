@@ -1,21 +1,63 @@
+import { z } from "zod";
 import type { ToolDefinition } from "../types/index.js";
+import { defineTool, createWriteTool } from "./tool-factory.js";
+import type { InputValidator, ToolValidationContext, ValidationResult } from "./validation.js";
 import { spawn, ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 
-export interface BashToolInput {
-  command: string;
-  description?: string;
-  timeout?: number;
-  run_in_background?: boolean;
-}
+const BashInputSchema = z.object({
+  command: z.string().min(1, "command 不能为空"),
+  description: z.string().optional(),
+  timeout: z.number().int().positive().optional(),
+  run_in_background: z.boolean().optional(),
+});
 
-export interface BashOutputInput {
-  bash_id: string;
-  filter?: string;
-}
+const BashOutputInputSchema = z.object({
+  bash_id: z.string().min(1, "bash_id 不能为空"),
+  filter: z.string().optional(),
+});
 
-export interface KillShellInput {
-  shell_id: string;
+const KillShellInputSchema = z.object({
+  shell_id: z.string().min(1, "shell_id 不能为空"),
+});
+
+const BashOutputSchema = z.object({
+  id: z.string(),
+  output: z.string(),
+  status: z.string(),
+  exitCode: z.number().nullable(),
+});
+
+const DANGEROUS_COMMANDS = [
+  "rm -rf /",
+  "rm -rf /*",
+  "mkfs",
+  "dd if=",
+  "> /dev/sda",
+  ":(){ :|:& };:",
+  "chmod -R 777 /",
+  "chmod -R 000 /",
+];
+
+function createBashCommandValidator(): InputValidator<any> {
+  return async (input: any, ctx: ToolValidationContext): Promise<ValidationResult<any>> => {
+    const cmd = input.command?.toLowerCase() || "";
+
+    for (const dangerous of DANGEROUS_COMMANDS) {
+      if (cmd.includes(dangerous.toLowerCase())) {
+        return {
+          ok: false,
+          error: {
+            type: "validation",
+            message: `拒绝执行危险命令: ${input.command}`,
+            recoverable: true,
+          },
+        };
+      }
+    }
+
+    return { ok: true, data: input };
+  };
 }
 
 interface RunningShell {
@@ -92,96 +134,86 @@ class BashShellManager extends EventEmitter {
 const shellManager = new BashShellManager();
 
 export function createBashTools(): ToolDefinition[] {
-  return [
-    {
-      name: "Bash",
-      description: "Execute shell commands in a persistent session. Use for terminal operations: git, npm, docker, pytest, etc. NEVER use for file reading (use Read), editing (use Edit), or writing (use Write).",
-      inputSchema: {
-        type: "object",
-        properties: {
-          command: { type: "string", description: "The shell command to execute" },
-          description: { type: "string", description: "Clear 5-10 word description of the command" },
-          timeout: { type: "number", description: "Milliseconds before timeout (default: 120000ms, max: 600000ms)" },
-          run_in_background: { type: "boolean", description: "Run command in background" },
-        },
-        required: ["command"],
-      },
-      isReadOnly: false,
-      handler: async (input: unknown) => {
-        const typed = input as BashToolInput;
-        const timeout = Math.min(typed.timeout || 120000, 600000);
+  const bashValidator = createBashCommandValidator();
 
-        if (typed.run_in_background) {
-          const shell = shellManager.createShell(typed.command, timeout);
-          return `Background shell started: ${shell.id}\nUse BashOutput to check progress, KillShell to terminate.`;
-        }
+  const bashTool = createWriteTool({
+    name: "Bash",
+    description: "Execute shell commands in a persistent session. Use for terminal operations: git, npm, docker, pytest, etc. NEVER use for file reading (use Read), editing (use Edit), or writing (use Write).",
+    inputSchema: BashInputSchema,
+    outputSchema: BashOutputSchema,
+    validateInput: bashValidator,
+    handler: async (input) => {
+      const shell = shellManager.createShell(input.command, input.timeout);
 
-        return new Promise((resolve) => {
-          const shell = shellManager.createShell(typed.command, timeout);
+      if (input.run_in_background) {
+        return {
+          id: shell.id,
+          output: "Command started in background",
+          status: "running",
+          exitCode: null,
+        };
+      }
 
-          shell.process.on("close", () => {
-            const output = shell.output.join("");
-            const result = output || "Command executed successfully";
-            shellManager.killShell(shell.id);
-            resolve(result);
+      return new Promise((resolve, reject) => {
+        shell.process.on("close", (code) => {
+          resolve({
+            id: shell.id,
+            output: shell.output.join(""),
+            status: shell.status,
+            exitCode: shell.exitCode,
           });
         });
-      },
+
+        shell.process.on("error", (err) => {
+          reject(err);
+        });
+      });
     },
-    {
-      name: "BashOutput",
-      description: "Retrieve output from running or completed background bash shells. Returns only new output since last check.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          bash_id: { type: "string", description: "ID of the background shell" },
-          filter: { type: "string", description: "Regular expression to filter output lines" },
-        },
-        required: ["bash_id"],
-      },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const typed = input as BashOutputInput;
-        const shell = shellManager.getShell(typed.bash_id);
+  });
 
-        if (!shell) {
-          return `Shell not found: ${typed.bash_id}`;
-        }
+  const bashOutputTool = defineTool({
+    name: "BashOutput",
+    description: "Get output from a running background shell.",
+    inputSchema: BashOutputInputSchema,
+    isReadOnly: true,
+    isConcurrencySafe: true,
+    handler: async (input) => {
+      const shell = shellManager.getShell(input.bash_id);
+      if (!shell) {
+        throw new Error(`Shell not found: ${input.bash_id}`);
+      }
 
-        const newOutput = shell.output.slice(shell.lastReadIndex);
-        shell.lastReadIndex = shell.output.length;
+      const newOutput = shell.output.slice(shell.lastReadIndex).join("");
+      shell.lastReadIndex = shell.output.length;
 
-        let filteredOutput = newOutput.join("");
-
-        if (typed.filter) {
-          const regex = new RegExp(typed.filter);
-          filteredOutput = filteredOutput
-            .split("\n")
-            .filter((line) => regex.test(line))
-            .join("\n");
-        }
-
-        return filteredOutput || "No new output";
-      },
+      return {
+        id: shell.id,
+        output: newOutput,
+        status: shell.status,
+        exitCode: shell.exitCode,
+      };
     },
-    {
-      name: "KillShell",
-      description: "Terminate a running background bash shell.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          shell_id: { type: "string", description: "ID of shell to terminate" },
-        },
-        required: ["shell_id"],
-      },
-      isReadOnly: false,
-      handler: async (input: unknown) => {
-        const typed = input as KillShellInput;
-        const killed = shellManager.killShell(typed.shell_id);
-        return killed ? `Shell ${typed.shell_id} terminated` : `Shell not found: ${typed.shell_id}`;
-      },
+  });
+
+  const killShellTool = defineTool({
+    name: "KillShell",
+    description: "Kill a running background shell.",
+    inputSchema: KillShellInputSchema,
+    isReadOnly: false,
+    isConcurrencySafe: false,
+    handler: async (input) => {
+      const killed = shellManager.killShell(input.shell_id);
+      if (!killed) {
+        throw new Error(`Shell not found: ${input.shell_id}`);
+      }
+      return {
+        id: input.shell_id,
+        output: "Shell killed",
+        status: "killed",
+        exitCode: -1,
+      };
     },
-  ];
+  });
+
+  return [bashTool, bashOutputTool, killShellTool];
 }
-
-export { shellManager };

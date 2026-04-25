@@ -6,6 +6,7 @@ export interface SkillManifest {
   version: string;
   description: string;
   trigger?: string[];
+  allowedTools?: string[];
   metadata?: Record<string, unknown>;
   agentskillsIo?: {
     name: string;
@@ -129,6 +130,14 @@ export class SkillRegistry {
     }
 
     return matching;
+  }
+
+  getEffectiveTools(skill: SkillDefinition, globalAllow: Set<string>): Set<string> {
+    const allowed = skill.manifest.allowedTools;
+    if (!allowed || allowed.length === 0) return globalAllow;
+
+    const skillSet = new Set(allowed);
+    return new Set([...globalAllow].filter((t) => skillSet.has(t)));
   }
 
   getProgressiveDisclosureContent(skillName: string): string {
@@ -262,12 +271,14 @@ export class SkillRegistry {
       const versionMatch = frontmatter.match(/version:\s*(.+)/);
       const descriptionMatch = frontmatter.match(/description:\s*(.+)/);
       const triggerMatch = frontmatter.match(/trigger:\s*\[([^\]]*)\]/);
+      const allowedToolsMatch = frontmatter.match(/allowed-tools:\s*\[([^\]]*)\]/);
 
       return {
         name: nameMatch?.[1]?.trim() || dirname(path).split("/").pop() || "unknown",
         version: versionMatch?.[1]?.trim() || "1.0.0",
         description: descriptionMatch?.[1]?.trim() || "",
         trigger: triggerMatch?.[1]?.split(",").map((t) => t.trim()) || [],
+        allowedTools: allowedToolsMatch?.[1]?.split(",").map((t) => t.trim()) || [],
       };
     }
 

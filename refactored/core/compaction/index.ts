@@ -27,3 +27,25 @@ export type {
   TokenEstimate,
   BudgetAllocationStats,
 } from "./types.js";
+export {
+  applyCacheEdits,
+  createElideEdits,
+  createTruncateEdits,
+  cacheAwareTier1Compaction,
+  cacheAwareCompaction,
+  hashContent,
+  hashMessage,
+  getCacheStabilityReport,
+  type CacheEdit,
+  type CacheEditResult,
+  type CacheAwareConfig,
+} from "./cache-edits.js";
+export {
+  getCompactionHeaders,
+  isCompactionSupported,
+  getCompactionProfile,
+  listCompactionProfiles,
+  selectBestCompactionProfile,
+  DEFAULT_COMPACTION_CONFIG,
+  type CompactionConfig,
+} from "./compaction-headers.js";

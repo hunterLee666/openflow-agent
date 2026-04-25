@@ -77,3 +77,48 @@ export * from './types.js'
 export { createTokenizer, createParser } from './parser.js'
 export type { Token, Tokenizer } from './parser.js'
 export { Parser } from './parser.js'
+export {
+  MouseProtocolConfig,
+  DEFAULT_MOUSE_CONFIG,
+  MouseButton,
+  MouseModifier,
+  MouseEvent,
+  MouseMode,
+  enableMouse,
+  disableMouse,
+  enableSGRMouse,
+  disableSGRMouse,
+  enableKittyMouse,
+  disableKittyMouse,
+  enableMouseMotion,
+  disableMouseMotion,
+  parseSGRMouseEvent,
+  formatMouseEventForTerminal,
+  supportsSGRMouse,
+  supportsKittyMouse,
+  getMouseProtocolSequence,
+  createMouseProtocolSequences,
+} from './mouse.js'
+export {
+  TerminalCapability,
+  TerminalInfo,
+  CapabilityQuery,
+  DEFAULT_TERMINAL_INFO,
+  detectTerminalCapabilities,
+  getFallbackStrategy,
+  formatCapabilityReport,
+  isTerminalCapable,
+  detectTerminalFromEnv,
+} from './capability-detect.js'
+export {
+  getStringWidth,
+  getCharWidth,
+  truncateString,
+  padString,
+  measureTextLines,
+  wrapText,
+  normalizeStringForDisplay,
+  getDisplayWidth,
+  UNICODE_VERSION,
+  UNICODE_TABLE_VERSION,
+} from './unicode-width.js'

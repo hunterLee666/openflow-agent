@@ -1,49 +1,76 @@
+import { z } from "zod";
 import type { CapabilityPlugin, CapabilityContext, ToolDefinition } from "../types/index.js";
 import { CapabilityType } from "../types/index.js";
 import { SwarmMode, type SwarmAgent } from "../agents/swarm-mode.js";
 import { CoordinatorMode, type WorkerAgent } from "../agents/coordinator-mode.js";
 import { ModeSelector, type AgentMode } from "../agents/mode-selector.js";
 import type { SubAgentTask, SubAgentContext, SubAgentResult } from "../agents/sub-agent-system.js";
+import { createReadOnlyTool } from "./tool-factory.js";
 
-export interface AgentToolManifest {
-  name: string;
-  version: string;
-  description: string;
-  systemPrompt: string;
-  allowedTools: string[];
-  triggers: string[];
-  maxSteps?: number;
-  temperature?: number;
-  mode?: "auto" | "single" | "swarm" | "coordinator";
-  workers?: Array<{
-    id: string;
-    name: string;
-    description: string;
-    systemPrompt: string;
-    allowedTools: string[];
-    handoffs?: string[];
-  }>;
-}
+export const AgentToolManifestSchema = z.object({
+  name: z.string(),
+  version: z.string(),
+  description: z.string(),
+  systemPrompt: z.string(),
+  allowedTools: z.array(z.string()),
+  triggers: z.array(z.string()),
+  maxSteps: z.number().int().positive().optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  mode: z.enum(["auto", "single", "swarm", "coordinator"]).optional(),
+  workers: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      description: z.string(),
+      systemPrompt: z.string(),
+      allowedTools: z.array(z.string()),
+      handoffs: z.array(z.string()).optional(),
+    })
+  ).optional(),
+});
+
+export type AgentToolManifest = z.infer<typeof AgentToolManifestSchema>;
+
+const SingleAgentInputSchema = z.object({
+  goal: z.string().min(1, "goal 不能为空"),
+});
+
+const SwarmAgentInputSchema = z.object({
+  goal: z.string().min(1, "goal 不能为空"),
+  context: z.string().optional(),
+});
+
+const CoordinatorAgentInputSchema = z.object({
+  goal: z.string().min(1, "goal 不能为空"),
+  context: z.string().optional(),
+});
+
+const AutoAgentInputSchema = z.object({
+  goal: z.string().min(1, "goal 不能为空"),
+  context: z.string().optional(),
+  forceMode: z.enum(["single", "swarm", "coordinator"]).optional(),
+});
+
+const AgentOutputSchema = z.object({
+  output: z.string(),
+  metadata: z.unknown().optional(),
+  duration: z.number().optional(),
+  mode: z.string().optional(),
+});
 
 function createSingleAgentTool(
   manifest: AgentToolManifest,
   ctx: CapabilityContext
 ): ToolDefinition {
-  return {
+  return createReadOnlyTool({
     name: `agent_${manifest.name}`,
     description: `Run agent: ${manifest.description}`,
-    inputSchema: {
-      type: "object",
-      properties: {
-        goal: { type: "string", description: "Task goal" },
-      },
-    },
-    isReadOnly: true,
-    handler: async (input: unknown) => {
-      const typed = input as { goal: string };
+    inputSchema: SingleAgentInputSchema,
+    outputSchema: AgentOutputSchema,
+    handler: async (input) => {
       const messages = [
         { role: "system", content: manifest.systemPrompt },
-        { role: "user", content: typed.goal },
+        { role: "user", content: input.goal },
       ];
 
       const response = await ctx.llm.chat(messages, {
@@ -51,9 +78,10 @@ function createSingleAgentTool(
         temperature: manifest.temperature,
       });
 
-      return response;
+      const typedResponse = response as { content: string };
+      return { output: typedResponse.content, mode: "single" };
     },
-  };
+  });
 }
 
 function createSwarmAgentTool(
@@ -87,20 +115,12 @@ function createSwarmAgentTool(
     return (tool as ToolDefinition).handler(args, {});
   });
 
-  return {
+  return createReadOnlyTool({
     name: `agent_${manifest.name}`,
     description: `Run agent swarm: ${manifest.description}`,
-    inputSchema: {
-      type: "object",
-      properties: {
-        goal: { type: "string", description: "Task goal" },
-        context: { type: "string", description: "Additional context" },
-      },
-    },
-    isReadOnly: true,
-    handler: async (input: unknown) => {
-      const typed = input as { goal: string; context?: string };
-
+    inputSchema: SwarmAgentInputSchema,
+    outputSchema: AgentOutputSchema,
+    handler: async (input) => {
       if (!manifest.workers || manifest.workers.length === 0) {
         throw new Error("Swarm mode requires workers to be defined");
       }
@@ -117,8 +137,8 @@ function createSwarmAgentTool(
       const task: SubAgentTask = {
         id: `swarm_${manifest.name}_${Date.now()}`,
         type: "swarm",
-        description: typed.goal,
-        prompt: typed.context ? `${typed.goal}\n\nContext: ${typed.context}` : typed.goal,
+        description: input.goal,
+        prompt: input.context ? `${input.goal}\n\nContext: ${input.context}` : input.goal,
         systemPrompt: manifest.systemPrompt,
         allowedTools: manifest.allowedTools,
         timeout: 120000,
@@ -143,7 +163,7 @@ function createSwarmAgentTool(
         mode: "swarm",
       };
     },
-  };
+  });
 }
 
 function createCoordinatorAgentTool(
@@ -206,20 +226,12 @@ function createCoordinatorAgentTool(
     };
   });
 
-  return {
+  return createReadOnlyTool({
     name: `agent_${manifest.name}`,
     description: `Run agent coordinator: ${manifest.description}`,
-    inputSchema: {
-      type: "object",
-      properties: {
-        goal: { type: "string", description: "Task goal" },
-        context: { type: "string", description: "Additional context" },
-      },
-    },
-    isReadOnly: true,
-    handler: async (input: unknown) => {
-      const typed = input as { goal: string; context?: string };
-
+    inputSchema: CoordinatorAgentInputSchema,
+    outputSchema: AgentOutputSchema,
+    handler: async (input) => {
       if (!manifest.workers || manifest.workers.length === 0) {
         throw new Error("Coordinator mode requires workers to be defined");
       }
@@ -235,8 +247,8 @@ function createCoordinatorAgentTool(
       const task: SubAgentTask = {
         id: `coord_${manifest.name}_${Date.now()}`,
         type: "coordinator",
-        description: typed.goal,
-        prompt: typed.context ? `${typed.goal}\n\nContext: ${typed.context}` : typed.goal,
+        description: input.goal,
+        prompt: input.context ? `${input.goal}\n\nContext: ${input.context}` : input.goal,
         systemPrompt: manifest.systemPrompt,
         allowedTools: manifest.allowedTools,
         timeout: 120000,
@@ -261,7 +273,7 @@ function createCoordinatorAgentTool(
         mode: "coordinator",
       };
     },
-  };
+  });
 }
 
 export function createAgentTool(manifest: AgentToolManifest): CapabilityPlugin {
@@ -289,30 +301,17 @@ export function createAgentTool(manifest: AgentToolManifest): CapabilityPlugin {
       } else {
         const modeSelector = new ModeSelector();
 
-        agentTool = {
+        agentTool = createReadOnlyTool({
           name: `agent_${manifest.name}`,
           description: `Run agent (auto mode): ${manifest.description}`,
-          inputSchema: {
-            type: "object",
-            properties: {
-              goal: { type: "string", description: "Task goal" },
-              context: { type: "string", description: "Additional context" },
-              forceMode: {
-                type: "string",
-                enum: ["single", "swarm", "coordinator"],
-                description: "Force specific mode instead of auto-detection",
-              },
-            },
-          },
-          isReadOnly: true,
-          handler: async (input: unknown) => {
-            const typed = input as { goal: string; context?: string; forceMode?: AgentMode };
-
+          inputSchema: AutoAgentInputSchema,
+          outputSchema: AgentOutputSchema,
+          handler: async (input) => {
             const task: SubAgentTask = {
               id: `auto_${manifest.name}_${Date.now()}`,
               type: "auto",
-              description: typed.goal,
-              prompt: typed.context ? `${typed.goal}\n\nContext: ${typed.context}` : typed.goal,
+              description: input.goal,
+              prompt: input.context ? `${input.goal}\n\nContext: ${input.context}` : input.goal,
               systemPrompt: manifest.systemPrompt,
               allowedTools: manifest.allowedTools,
               timeout: 120000,
@@ -320,7 +319,7 @@ export function createAgentTool(manifest: AgentToolManifest): CapabilityPlugin {
             };
 
             const analysis = modeSelector.analyzeTask(task);
-            const selectedMode = typed.forceMode || analysis.recommendedMode;
+            const selectedMode = input.forceMode || analysis.recommendedMode;
 
             if (selectedMode === "single") {
               const tool = createSingleAgentTool(manifest, ctx);
@@ -341,7 +340,7 @@ export function createAgentTool(manifest: AgentToolManifest): CapabilityPlugin {
               return tool.handler(input, {});
             }
           },
-        };
+        });
       }
 
       ctx.tools.register(agentTool);

@@ -6,6 +6,8 @@ import type {
 } from "../../backend/types/index.js";
 import type { Message } from "./components/Message.js";
 import type { AppState } from "./app.js";
+import { streamWords, renderWithFrameControl, type StreamingConfig, type StreamingRendererOptions } from "./render/streaming-renderer.js";
+import { getStringWidth, truncateString } from "./termio/unicode-width.js";
 
 export function queryMessageToUIMessage(
   msg: QueryMessage,
@@ -27,6 +29,35 @@ export function queryMessageToUIMessage(
     timestamp: Date.now(),
     isStreaming,
   };
+}
+
+export async function* streamQueryResponse(
+  source: AsyncIterable<string> | ReadableStream<string>,
+  config: {
+    streaming?: Partial<StreamingConfig>;
+    renderer?: Partial<StreamingRendererOptions>;
+    maxDisplayWidth?: number;
+  } = {}
+): AsyncGenerator<{ text: string; width: number; isComplete: boolean }, void, unknown> {
+  const renderer = renderWithFrameControl(
+    streamWords(source, config.streaming || {}),
+    config.renderer || {}
+  )
+
+  let accumulatedText = ''
+
+  for await (const chunk of renderer) {
+    accumulatedText += chunk.text
+
+    const displayWidth = getStringWidth(accumulatedText)
+    const maxWidth = config.maxDisplayWidth || 120
+
+    yield {
+      text: displayWidth > maxWidth ? truncateString(accumulatedText, maxWidth) : accumulatedText,
+      width: Math.min(displayWidth, maxWidth),
+      isComplete: chunk.isComplete,
+    }
+  }
 }
 
 export function streamEventToUIMessage(event: StreamEvent): Partial<Message> | null {

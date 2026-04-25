@@ -13,6 +13,28 @@ import type {
   LLMError,
 } from "./types.js";
 import { DEFAULT_RETRY_CONFIG } from "./types.js";
+import { getCompactionHeaders } from "../compaction/compaction-headers.js";
+import { CircuitBreaker, CircuitBreakerError } from "../utils/circuit-breaker.js";
+import { TranscriptStore, createErrorEvent, createAssistantMessageEvent } from "../utils/transcript.js";
+import { retryWithBackoff, DEFAULT_BACKOFF_CONFIG } from "../utils/retry-with-backoff.js";
+import { DegradationLadder } from "../utils/degradation-ladder.js";
+
+export interface LLMClientExtendedConfig {
+  providerConfig: ProviderConfig;
+  provider?: string;
+  baseUrl?: string;
+  model?: string;
+  maxTokens?: number;
+  temperature?: number;
+  timeout?: number;
+  retryConfig?: Partial<RetryConfig>;
+  compactionHeaders?: Record<string, string>;
+  apiKey?: string;
+  enableCircuitBreaker?: boolean;
+  enableTranscript?: boolean;
+  enableDegradation?: boolean;
+  sessionId?: string;
+}
 
 export class LLMClient {
   private anthropicClient: Anthropic | null = null;
@@ -24,8 +46,13 @@ export class LLMClient {
   private temperature: number;
   private timeout: number;
   private retryConfig: RetryConfig;
+  private compactionHeaders: Record<string, string> = {};
+  private circuitBreaker: CircuitBreaker;
+  private transcriptStore: TranscriptStore | null = null;
+  private degradationLadder: DegradationLadder;
+  private sessionId: string;
 
-  constructor(config: LLMClientConfig & { providerConfig: ProviderConfig }) {
+  constructor(config: LLMClientExtendedConfig) {
     this.provider = config.provider || config.providerConfig.name;
     this.config = config.providerConfig;
     this.model = config.model || this.config.defaultModel;
@@ -33,6 +60,29 @@ export class LLMClient {
     this.temperature = config.temperature ?? 0.7;
     this.timeout = config.timeout || 60000;
     this.retryConfig = { ...DEFAULT_RETRY_CONFIG, ...config.retryConfig };
+    this.compactionHeaders = config.compactionHeaders || getCompactionHeaders(this.model);
+    this.sessionId = config.sessionId || `session_${Date.now()}`;
+
+    this.circuitBreaker = new CircuitBreaker(`llm_${this.provider}`, {
+      failureThreshold: 3,
+      successThreshold: 2,
+      timeoutMs: 60000,
+    });
+
+    if (config.enableTranscript !== false) {
+      this.transcriptStore = new TranscriptStore(10000);
+    }
+
+    this.degradationLadder = new DegradationLadder({
+      autoRecovery: true,
+      recoveryCheckIntervalMs: 30000,
+      onDegradation: (level) => {
+        console.warn(`[Degradation] System degraded to level ${level}`);
+      },
+      onRecovery: (level) => {
+        console.info(`[Degradation] System recovered to level ${level}`);
+      },
+    });
 
     const baseUrl = config.baseUrl || this.config.baseUrl;
 
@@ -41,13 +91,14 @@ export class LLMClient {
         apiKey: config.apiKey,
         baseURL: baseUrl,
         timeout: this.timeout,
+        defaultHeaders: this.compactionHeaders,
       });
     } else {
       this.openaiClient = new OpenAI({
         apiKey: config.apiKey,
         baseURL: baseUrl,
         timeout: this.timeout,
-        defaultHeaders: this.getDefaultHeaders(),
+        defaultHeaders: { ...this.getDefaultHeaders(), ...this.compactionHeaders },
       });
     }
   }
@@ -70,34 +121,64 @@ export class LLMClient {
     tools?: LLMToolDefinition[],
     callbacks?: StreamCallbacks
   ): Promise<CompletionResult> {
-    let lastError: Error | null = null;
-
-    for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
-      try {
-        if (attempt > 0) {
-          const delay = Math.min(
-            this.retryConfig.initialDelayMs * Math.pow(this.retryConfig.backoffMultiplier, attempt - 1),
-            this.retryConfig.maxDelayMs
-          );
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-
-        if (this.provider === "anthropic") {
-          return await this.anthropicComplete(messages, tools, callbacks);
-        } else {
-          return await this.openaiCompatibleComplete(messages, tools, callbacks);
-        }
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-        const llmError = this.classifyError(lastError);
-        if (!llmError.retryable || attempt === this.retryConfig.maxRetries) {
-          callbacks?.onError?.(lastError);
-          throw lastError;
-        }
-      }
+    if (!this.degradationLadder.isFeatureEnabled("tool_execution")) {
+      throw new Error("LLM service degraded: tool execution disabled");
     }
 
-    throw lastError || new Error("Unknown error during completion");
+    try {
+      const result = await this.circuitBreaker.execute(async () => {
+        return await retryWithBackoff(
+          async () => {
+            if (this.provider === "anthropic") {
+              return await this.anthropicComplete(messages, tools, callbacks);
+            } else {
+              return await this.openaiCompatibleComplete(messages, tools, callbacks);
+            }
+          },
+          {
+            maxRetries: this.retryConfig.maxRetries,
+            baseDelayMs: this.retryConfig.initialDelayMs,
+            maxDelayMs: this.retryConfig.maxDelayMs,
+            jitterFactor: 0.5,
+            backoffMultiplier: this.retryConfig.backoffMultiplier,
+            retryableErrors: ["rate limit", "network", "connection", "timeout"],
+            onRetry: (attempt, error, delay) => {
+              console.warn(`[LLM Retry] Attempt ${attempt}, delay ${delay}ms, error: ${error.message}`);
+            },
+          }
+        );
+      });
+
+      if (!result.success) {
+        throw result.error || new Error("Completion failed after retries");
+      }
+
+      const completionResult = result.value!;
+
+      if (this.transcriptStore && completionResult.content) {
+        this.transcriptStore.append(
+          createAssistantMessageEvent(this.sessionId, completionResult.content, {
+            model: this.model,
+            provider: this.provider,
+            tokens: completionResult.usage?.totalTokens,
+          })
+        );
+      }
+
+      return completionResult;
+    } catch (error) {
+      if (error instanceof CircuitBreakerError) {
+        this.degradationLadder.degrade("circuit_breaker_open");
+      }
+
+      if (this.transcriptStore) {
+        this.transcriptStore.append(
+          createErrorEvent(this.sessionId, error instanceof Error ? error : new Error(String(error)))
+        );
+      }
+
+      throw error;
+    }
   }
 
   private async anthropicComplete(
@@ -398,6 +479,35 @@ export class LLMClient {
   updateModel(model: string): void {
     this.model = model;
   }
+
+  getCircuitBreakerStats() {
+    return this.circuitBreaker.getStats();
+  }
+
+  getCircuitBreakerState() {
+    return this.circuitBreaker.getState();
+  }
+
+  resetCircuitBreaker() {
+    this.circuitBreaker.reset();
+  }
+
+  getTranscriptStore(): TranscriptStore | null {
+    return this.transcriptStore;
+  }
+
+  getDegradationStatus() {
+    return this.degradationLadder.getStatus();
+  }
+
+  resetDegradation() {
+    this.degradationLadder.reset();
+  }
+
+  shutdown(): void {
+    this.circuitBreaker.shutdown();
+    this.degradationLadder.shutdown();
+  }
 }
 
 export function createLLMClient(config: {
@@ -409,6 +519,7 @@ export function createLLMClient(config: {
   maxTokens?: number;
   temperature?: number;
   timeout?: number;
+  sessionId?: string;
 }): LLMClient {
   return new LLMClient({
     apiKey: config.apiKey,
@@ -419,5 +530,6 @@ export function createLLMClient(config: {
     maxTokens: config.maxTokens,
     temperature: config.temperature,
     timeout: config.timeout,
+    sessionId: config.sessionId,
   });
 }

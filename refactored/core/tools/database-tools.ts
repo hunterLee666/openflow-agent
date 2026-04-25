@@ -1,9 +1,29 @@
+import { z } from "zod";
 import type { ToolDefinition } from "../types/index.js";
+import { defineTool, createReadOnlyTool, createWriteTool } from "./tool-factory.js";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { readFile } from "node:fs/promises";
 
 const execAsync = promisify(exec);
+
+const DatabaseQueryInputSchema = z.object({
+  query: z.string().min(1, "query 不能为空"),
+});
+
+const DatabaseSchemaInputSchema = z.object({});
+
+const DatabaseMigrateInputSchema = z.object({
+  direction: z.enum(["up", "down"]).optional(),
+  steps: z.number().int().positive().optional(),
+});
+
+const DatabaseSeedInputSchema = z.object({});
+
+const DatabaseOutputSchema = z.object({
+  message: z.string(),
+  success: z.boolean().optional(),
+});
 
 export interface DatabaseConfig {
   type?: "postgres" | "mysql" | "sqlite" | "mongodb";
@@ -60,164 +80,148 @@ export function createDatabaseTools(config: DatabaseConfig = {}): ToolDefinition
         command = getMongoCommand(query);
         break;
       default:
-        return `Error: Unsupported database type: ${dbType}`;
+        throw new Error(`Unsupported database type: ${dbType}`);
     }
 
     try {
       const { stdout } = await execAsync(command, { timeout: 30000 });
       return stdout || "Query executed successfully (no output)";
     } catch (error) {
-      return `Query failed: ${(error as Error).message}`;
+      throw new Error(`Query failed: ${(error as Error).message}`);
     }
   };
 
-  return [
-    {
-      name: "DatabaseQuery",
-      description: "Execute a SQL query against the configured database",
-      inputSchema: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "SQL query to execute" },
-        },
-        required: ["query"],
-      },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const { query } = input as { query: string };
+  const databaseQueryTool = createReadOnlyTool({
+    name: "DatabaseQuery",
+    description: "Execute a SQL query against the configured database",
+    inputSchema: DatabaseQueryInputSchema,
+    outputSchema: DatabaseOutputSchema,
+    resourceKeys: ["query"],
+    handler: async (input) => {
+      if (!connectionString && !config.host && !config.database) {
+        throw new Error("Database connection is not configured. Set DATABASE_URL or provide database config.");
+      }
 
-        if (!connectionString && !config.host && !config.database) {
-          return "Error: Database connection is not configured. Set DATABASE_URL or provide database config.";
-        }
-
-        return executeQuery(query);
-      },
+      const result = await executeQuery(input.query);
+      return { message: result };
     },
-    {
-      name: "DatabaseSchema",
-      description: "Get the database schema information",
-      inputSchema: {
-        type: "object",
-        properties: {},
-        required: [],
-      },
-      isReadOnly: true,
-      handler: async () => {
-        if (!connectionString && !config.host && !config.database) {
-          return "Error: Database connection is not configured.";
-        }
+  });
 
-        let query: string;
+  const databaseSchemaTool = createReadOnlyTool({
+    name: "DatabaseSchema",
+    description: "Get the database schema information",
+    inputSchema: DatabaseSchemaInputSchema,
+    outputSchema: DatabaseOutputSchema,
+    handler: async () => {
+      if (!connectionString && !config.host && !config.database) {
+        throw new Error("Database connection is not configured.");
+      }
 
-        switch (dbType) {
-          case "postgres":
-            query = `
-              SELECT table_name, column_name, data_type, is_nullable
-              FROM information_schema.columns
-              WHERE table_schema = 'public'
-              ORDER BY table_name, ordinal_position;
-            `;
-            break;
-          case "mysql":
-            query = `
-              SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE
-              FROM INFORMATION_SCHEMA.COLUMNS
-              WHERE TABLE_SCHEMA = DATABASE()
-              ORDER BY TABLE_NAME, ORDINAL_POSITION;
-            `;
-            break;
-          case "sqlite":
-            query = `.tables`;
-            break;
-          case "mongodb":
-            return "MongoDB schema inspection not supported via CLI. Use DatabaseQuery instead.";
-          default:
-            return `Error: Unsupported database type: ${dbType}`;
-        }
+      let query: string;
 
-        return executeQuery(query);
-      },
+      switch (dbType) {
+        case "postgres":
+          query = `
+            SELECT table_name, column_name, data_type, is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+            ORDER BY table_name, ordinal_position;
+          `;
+          break;
+        case "mysql":
+          query = `
+            SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            ORDER BY TABLE_NAME, ORDINAL_POSITION;
+          `;
+          break;
+        case "sqlite":
+          query = `.tables`;
+          break;
+        case "mongodb":
+          return { message: "MongoDB schema inspection not supported via CLI. Use DatabaseQuery instead." };
+        default:
+          throw new Error(`Unsupported database type: ${dbType}`);
+      }
+
+      const result = await executeQuery(query);
+      return { message: result };
     },
-    {
-      name: "DatabaseMigrate",
-      description: "Run database migrations",
-      inputSchema: {
-        type: "object",
-        properties: {
-          direction: { type: "string", description: "Migration direction: up or down", enum: ["up", "down"] },
-          steps: { type: "number", description: "Number of migrations to run (default: all)" },
-        },
-        required: [],
-      },
-      isReadOnly: false,
-      handler: async (input: unknown) => {
-        const { direction = "up", steps } = input as { direction?: string; steps?: number };
+  });
 
-        const packageJson = JSON.parse(await readFile("package.json", "utf-8").catch(() => "{}"));
-        const deps = { ...(packageJson.dependencies || {}), ...(packageJson.devDependencies || {}) };
+  const databaseMigrateTool = createWriteTool({
+    name: "DatabaseMigrate",
+    description: "Run database migrations",
+    inputSchema: DatabaseMigrateInputSchema,
+    outputSchema: DatabaseOutputSchema,
+    handler: async (input) => {
+      const direction = input.direction || "up";
+      const steps = input.steps;
 
-        let command: string;
+      const packageJson = JSON.parse(await readFile("package.json", "utf-8").catch(() => "{}"));
+      const deps = { ...(packageJson.dependencies || {}), ...(packageJson.devDependencies || {}) };
 
-        if (deps["knex"]) {
-          command = `npx knex migrate:${direction === "up" ? "latest" : "rollback"}`;
-          if (steps) {
-            command += ` --steps ${steps}`;
-          }
-        } else if (deps["sequelize"]) {
-          command = `npx sequelize-cli db:migrate${direction === "down" ? ":undo" : ""}`;
-          if (steps && direction === "down") {
-            command += ` --steps ${steps}`;
-          }
-        } else if (deps["prisma"]) {
-          command = direction === "up" ? "npx prisma migrate deploy" : "npx prisma migrate reset --force";
-        } else if (deps["typeorm"]) {
-          command = `npx typeorm migration:${direction === "up" ? "run" : "revert"}`;
-        } else {
-          return "Error: No supported migration tool found. Install knex, sequelize, prisma, or typeorm.";
+      let command: string;
+
+      if (deps["knex"]) {
+        command = `npx knex migrate:${direction === "up" ? "latest" : "rollback"}`;
+        if (steps) {
+          command += ` --steps ${steps}`;
         }
-
-        try {
-          const { stdout } = await execAsync(command, { timeout: 60000 });
-          return `Migration completed:\n${stdout}`;
-        } catch (error) {
-          return `Migration failed: ${(error as Error).message}`;
+      } else if (deps["sequelize"]) {
+        command = `npx sequelize-cli db:migrate${direction === "down" ? ":undo" : ""}`;
+        if (steps && direction === "down") {
+          command += ` --steps ${steps}`;
         }
-      },
+      } else if (deps["prisma"]) {
+        command = direction === "up" ? "npx prisma migrate deploy" : "npx prisma migrate reset --force";
+      } else if (deps["typeorm"]) {
+        command = `npx typeorm migration:${direction === "up" ? "run" : "revert"}`;
+      } else {
+        throw new Error("No supported migration tool found. Install knex, sequelize, prisma, or typeorm.");
+      }
+
+      try {
+        const { stdout } = await execAsync(command, { timeout: 60000 });
+        return { message: `Migration completed:\n${stdout}`, success: true };
+      } catch (error) {
+        throw new Error(`Migration failed: ${(error as Error).message}`);
+      }
     },
-    {
-      name: "DatabaseSeed",
-      description: "Run database seeders to populate with test data",
-      inputSchema: {
-        type: "object",
-        properties: {},
-        required: [],
-      },
-      isReadOnly: false,
-      handler: async () => {
-        const packageJson = JSON.parse(await readFile("package.json", "utf-8").catch(() => "{}"));
-        const deps = { ...(packageJson.dependencies || {}), ...(packageJson.devDependencies || {}) };
+  });
 
-        let command: string;
+  const databaseSeedTool = createWriteTool({
+    name: "DatabaseSeed",
+    description: "Run database seeders to populate with test data",
+    inputSchema: DatabaseSeedInputSchema,
+    outputSchema: DatabaseOutputSchema,
+    handler: async () => {
+      const packageJson = JSON.parse(await readFile("package.json", "utf-8").catch(() => "{}"));
+      const deps = { ...(packageJson.dependencies || {}), ...(packageJson.devDependencies || {}) };
 
-        if (deps["knex"]) {
-          command = "npx knex seed:run";
-        } else if (deps["sequelize"]) {
-          command = "npx sequelize-cli db:seed:all";
-        } else if (deps["prisma"]) {
-          command = "npx prisma db seed";
-        } else if (deps["typeorm"]) {
-          command = "npx typeorm seed:run";
-        } else {
-          return "Error: No supported seeder tool found. Install knex, sequelize, prisma, or typeorm.";
-        }
+      let command: string;
 
-        try {
-          const { stdout } = await execAsync(command, { timeout: 60000 });
-          return `Seeding completed:\n${stdout}`;
-        } catch (error) {
-          return `Seeding failed: ${(error as Error).message}`;
-        }
-      },
+      if (deps["knex"]) {
+        command = "npx knex seed:run";
+      } else if (deps["sequelize"]) {
+        command = "npx sequelize-cli db:seed:all";
+      } else if (deps["prisma"]) {
+        command = "npx prisma db seed";
+      } else if (deps["typeorm"]) {
+        command = "npx typeorm seed:run";
+      } else {
+        throw new Error("No supported seeder tool found. Install knex, sequelize, prisma, or typeorm.");
+      }
+
+      try {
+        const { stdout } = await execAsync(command, { timeout: 60000 });
+        return { message: `Seeding completed:\n${stdout}`, success: true };
+      } catch (error) {
+        throw new Error(`Seeding failed: ${(error as Error).message}`);
+      }
     },
-  ];
+  });
+
+  return [databaseQueryTool, databaseSchemaTool, databaseMigrateTool, databaseSeedTool];
 }

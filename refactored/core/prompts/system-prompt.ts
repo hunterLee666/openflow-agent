@@ -16,6 +16,12 @@ export interface PromptContext {
   turn: number;
   sessionId?: string;
   mcpInstructions?: string[];
+  enableLazyToolLoading?: boolean;
+  claudeMdStack?: string;
+  memoryInjections?: string;
+  memoryWarnings?: string[];
+  tokenBudget?: number;
+  disabledModelInvocations?: Set<string>;
 }
 
 export interface PromptCache {
@@ -30,6 +36,17 @@ export interface SystemPromptBuilder {
 }
 
 export class DefaultSystemPromptBuilder implements SystemPromptBuilder {
+  private toolManualRegistry?: any;
+  private cacheMonitor?: any;
+
+  setToolManualRegistry(registry: any): void {
+    this.toolManualRegistry = registry;
+  }
+
+  setCacheMonitor(monitor: any): void {
+    this.cacheMonitor = monitor;
+  }
+
   async build(ctx: PromptContext, cache?: PromptCache): Promise<string> {
     const { prefix, dynamic } = await this.buildCacheable(ctx, cache);
     const boundary = "\n\n=== DYNAMIC POLICY BELOW ===\n\n";
@@ -119,13 +136,23 @@ Error handling:
       .map((t) => `- ${t.name}: ${t.description} (${t.isReadOnly ? "read-only" : "read-write"})`)
       .join("\n");
 
-    layers.push({
-      name: "tool_discipline",
-      stability: "static",
-      cacheable: true,
-      priority: 4,
-      content: `Available tools:\n${toolDescriptions}\n\nTool usage rules:\n- Use read-only tools before read-write tools\n- Batch independent read operations\n- Never use rm -rf / or similar dangerous commands\n- Respect permission modes`,
-    });
+    if (ctx.enableLazyToolLoading && this.toolManualRegistry) {
+      layers.push({
+        name: "tool_discipline",
+        stability: "static",
+        cacheable: true,
+        priority: 4,
+        content: `Available tools (summary):\n${toolDescriptions}\n\nTool usage rules:\n- Use read-only tools before read-write tools\n- Batch independent read operations\n- Never use rm -rf / or similar dangerous commands\n- Respect permission modes\n\nFor detailed tool manuals, use the ToolSearch tool to retrieve documentation on demand.`,
+      });
+    } else {
+      layers.push({
+        name: "tool_discipline",
+        stability: "static",
+        cacheable: true,
+        priority: 4,
+        content: `Available tools:\n${toolDescriptions}\n\nTool usage rules:\n- Use read-only tools before read-write tools\n- Batch independent read operations\n- Never use rm -rf / or similar dangerous commands\n- Respect permission modes`,
+      });
+    }
 
     layers.push({
       name: "safety",
@@ -159,7 +186,23 @@ Error handling:
       content: `Current turn: ${ctx.turn}\nSession: ${ctx.sessionId || "new"}\nWorking directory: ${ctx.cwd}`,
     });
 
-    if (ctx.memory) {
+    if (ctx.claudeMdStack) {
+      layers.push({
+        name: "project_memory",
+        stability: "dynamic",
+        priority: 10.5,
+        content: ctx.claudeMdStack,
+      });
+    }
+
+    if (ctx.memoryInjections) {
+      layers.push({
+        name: "memory_injections",
+        stability: "dynamic",
+        priority: 11,
+        content: ctx.memoryInjections,
+      });
+    } else if (ctx.memory) {
       try {
         const memoryContext = await ctx.memory.inject("current task", { cwd: ctx.cwd });
         if (memoryContext) {
@@ -175,6 +218,15 @@ Error handling:
       }
     }
 
+    if (ctx.memoryWarnings && ctx.memoryWarnings.length > 0) {
+      layers.push({
+        name: "memory_warnings",
+        stability: "dynamic",
+        priority: 11.5,
+        content: `⚠️ Memory Warnings:\n${ctx.memoryWarnings.map((w) => `- ${w}`).join("\n")}`,
+      });
+    }
+
     layers.push({
       name: "environment",
       stability: "dynamic",
@@ -186,11 +238,30 @@ Error handling:
       const mcpContent = ctx.mcpInstructions
         .map((inst, i) => `## MCP Server ${i + 1}\n${inst}`)
         .join("\n\n");
+
+      let truncated = mcpContent;
+      if (ctx.tokenBudget) {
+        const estimatedTokens = this.estimateTokens(mcpContent);
+        if (estimatedTokens > ctx.tokenBudget * 0.15) {
+          const maxChars = Math.floor((ctx.tokenBudget * 0.15) / estimatedTokens * mcpContent.length);
+          truncated = mcpContent.slice(0, maxChars) + "\n\n... (truncated to fit token budget)";
+        }
+      }
+
       layers.push({
         name: "mcp_instructions",
         stability: "dynamic",
         priority: 14,
-        content: `### MCP Server Instructions\n${mcpContent}`,
+        content: `### MCP Server Instructions\n${truncated}`,
+      });
+    }
+
+    if (ctx.disabledModelInvocations && ctx.disabledModelInvocations.size > 0) {
+      layers.push({
+        name: "disabled_invocations",
+        stability: "dynamic",
+        priority: 15,
+        content: `### Disabled Model Invocations\nThe following tools/commands must NOT be called automatically by the model:\n${Array.from(ctx.disabledModelInvocations).map((t) => `- ${t}`).join("\n")}`,
       });
     }
 
@@ -201,7 +272,29 @@ Error handling:
       content: `Context management: Be concise. Avoid redundant explanations. Prefer code over prose when possible.`,
     });
 
+    if (this.cacheMonitor) {
+      for (const layer of layers) {
+        this.cacheMonitor.trackLayerUpdate(layer.name, layer.content);
+      }
+
+      const report = this.cacheMonitor.getHealthReport();
+      if (report.recommendations.length > 0 && report.recommendations[0].includes("CRITICAL") || report.recommendations[0].includes("WARNING")) {
+        console.warn("Prompt cache health warning:", report.recommendations);
+      }
+    }
+
     return layers;
+  }
+
+  private estimateTokens(text: string): number {
+    let tokens = 0;
+    const words = text.split(/\s+/);
+    for (const word of words) {
+      if (word.length <= 3) tokens += 1;
+      else if (word.length <= 6) tokens += 1.5;
+      else tokens += Math.ceil(word.length / 4);
+    }
+    return Math.ceil(tokens);
   }
 }
 

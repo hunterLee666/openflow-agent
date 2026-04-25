@@ -1,5 +1,6 @@
 import type { SubAgentMessage, SubAgentTask, SubAgentResult, SubAgentContext } from "./sub-agent-system.js";
 import type { ToolDefinition } from "../types/index.js";
+import { AntiRecursionGuard } from "./anti-recursion.js";
 
 export interface WorkerAgent {
   id: string;
@@ -27,17 +28,19 @@ export interface TaskDecomposition {
 
 export class CoordinatorMode {
   private config: CoordinatorConfig;
+  private antiRecursionGuard: AntiRecursionGuard;
   private llmProvider: ((messages: SubAgentMessage[], tools: ToolDefinition[]) => Promise<{ content: string; toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }> }>) | null = null;
   private toolExecutor: ((toolName: string, args: Record<string, unknown>) => Promise<unknown>) | null = null;
   private executeSubAgent: ((task: SubAgentTask, context: SubAgentContext) => Promise<SubAgentResult>) | null = null;
 
-  constructor(config?: Partial<CoordinatorConfig>) {
+  constructor(config?: Partial<CoordinatorConfig>, antiRecursionGuard?: AntiRecursionGuard) {
     this.config = {
       maxDelegationDepth: config?.maxDelegationDepth || 3,
       enableValidation: config?.enableValidation ?? true,
       aggregationStrategy: config?.aggregationStrategy || "concat",
       maxWorkers: config?.maxWorkers || 5,
     };
+    this.antiRecursionGuard = antiRecursionGuard || new AntiRecursionGuard({ maxDepth: this.config.maxDelegationDepth });
   }
 
   setLlmProvider(provider: (messages: SubAgentMessage[], tools: ToolDefinition[]) => Promise<{ content: string; toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }> }>): void {
@@ -166,18 +169,30 @@ Rules:
       workerMap.set(worker.id, worker);
     }
 
-    const executeSubtask = async (subtask: typeof decomposition.subtasks[0]): Promise<SubAgentResult> => {
+    const executeSubtask = async (subtask: typeof decomposition.subtasks[0], depth: number = 1): Promise<SubAgentResult> => {
       for (const depId of subtask.dependencies) {
         if (!completedIds.has(depId)) {
           const depSubtask = decomposition.subtasks.find((s) => s.id === depId);
           if (depSubtask) {
-            await executeSubtask(depSubtask);
+            await executeSubtask(depSubtask, depth);
           }
         }
       }
 
       if (!this.executeSubAgent) {
         throw new Error("Sub-agent executor not configured");
+      }
+
+      if (depth >= this.config.maxDelegationDepth) {
+        return {
+          taskId: subtask.id,
+          output: `Blocked: max delegation depth (${this.config.maxDelegationDepth}) reached`,
+          duration: 0,
+          status: "error",
+          turns: 0,
+          toolCalls: 0,
+          error: `Anti-recursion: depth ${depth} exceeds max ${this.config.maxDelegationDepth}`,
+        };
       }
 
       const worker = workerMap.get(subtask.assignedWorkerId);
@@ -187,7 +202,7 @@ Rules:
 
       const subAgentTask: SubAgentTask = {
         id: subtask.id,
-        type: "coordinated",
+        type: worker?.id || "worker",
         description: subtask.description,
         prompt: subtask.description,
         systemPrompt: workerPrompt,
@@ -196,7 +211,16 @@ Rules:
         maxTurns: 15,
       };
 
-      const result = await this.executeSubAgent(subAgentTask, parentContext);
+      const childContext: SubAgentContext = {
+        ...parentContext,
+        sessionId: `coordinator_${subtask.id}`,
+        depth,
+        agentType: worker?.id || "worker",
+      };
+
+      this.antiRecursionGuard.registerAgent(childContext.sessionId, parentContext.sessionId, depth);
+
+      const result = await this.executeSubAgent(subAgentTask, childContext);
       completedIds.add(subtask.id);
 
       return result;
@@ -210,7 +234,7 @@ Rules:
     );
 
     const independentResults = await Promise.allSettled(
-      independentSubtasks.map((s) => executeSubtask(s))
+      independentSubtasks.map((s) => executeSubtask(s, 1))
     );
 
     for (const result of independentResults) {
@@ -221,7 +245,7 @@ Rules:
 
     for (const subtask of dependentSubtasks) {
       try {
-        const result = await executeSubtask(subtask);
+        const result = await executeSubtask(subtask, 1);
         results.push(result);
       } catch (error) {
         results.push({

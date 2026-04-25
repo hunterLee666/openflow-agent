@@ -2,6 +2,11 @@ import type { CapabilityContext, CapabilitySource, ToolDefinition } from "./type
 import { PluginManager } from "./plugins/index.js";
 import { EnhancedMemoryCore, createEnhancedMemoryCore } from "./memory/enhanced-memory-core.js";
 import type { EnhancedMemoryCore as EnhancedMemoryCoreType } from "./memory/enhanced-memory-core.js";
+import { ClaudeMdLoader, createClaudeMdLoader } from "./memory/claude-md-loader.js";
+import { DualModelRetriever, createDualModelRetriever } from "./memory/dual-model-retriever.js";
+import { AutoMemoryExtractor, createAutoMemoryExtractor } from "./memory/auto-memory-extractor.js";
+import { KairosDreaming, createKairosDreaming } from "./memory/kairos-dreaming.js";
+import type { MemoryCard } from "./memory/dual-model-retriever.js";
 import { GEPASelfEvolution } from "./evolution/index.js";
 import { SubAgentSystem } from "./agents/index.js";
 import { UnifiedEngine } from "./runtime/unified-engine.js";
@@ -24,6 +29,7 @@ import { buildTier3SummaryPrompt, formatTier3Summary, TokenBudgetInjector, creat
 import type { Tier3Summary, ContextSegment } from "./compaction/index.js";
 import { DefaultSystemPromptBuilder } from "./prompts/system-prompt.js";
 import type { PromptContext, PromptCache } from "./prompts/system-prompt.js";
+import { PromptCacheMonitor } from "./prompts/cache-monitor.js";
 import { createLogger, createMetricsCollector, createHealthChecker } from "./telemetry/index.js";
 import type { Logger, MetricsCollector, HealthChecker } from "./telemetry/index.js";
 import { TokenRefreshScheduler } from "./token/token-refresh.js";
@@ -33,13 +39,20 @@ import { createPluginCommands } from "./commands/plugin-commands.js";
 import { createAgentCommands } from "./commands/agent-commands.js";
 import { createDevCommands } from "./commands/development-commands.js";
 import { createLoopCommand } from "./commands/loop-command.js";
+import { createCompactCommand } from "./commands/compact-command.js";
 import { createIMCommands, loadIMConfigFromFile } from "./commands/im-commands.js";
+import { createAllTools } from "./tools/index.js";
+import type { ToolDefinition } from "./types/index.js";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { CronScheduler } from "./scheduler/cron-scheduler.js";
 import { MessagingGateway, createMessagingGateway } from "./messaging/index.js";
 import type { GatewayConfig, PlatformMessage, PlatformType } from "./messaging/index.js";
+import { PermissionSystem } from "./permissions/index.js";
+import type { PermissionSystemConfig } from "./permissions/index.js";
+import { StartupPrefetcher, createPrefetchTask } from "./startup/index.js";
+import type { PrefetchReport } from "./startup/index.js";
 
 export interface OpenFlowConfig {
   workspaceRoot: string;
@@ -47,6 +60,7 @@ export interface OpenFlowConfig {
   pluginSources: CapabilitySource[];
   nudgeInterval?: number;
   maxSubAgentConcurrency?: number;
+  sessionId?: string;
   llmConfig?: LLMClientConfig;
   sessionConfig?: SessionConfig;
   transportConfig?: TransportConfig;
@@ -108,6 +122,7 @@ export class OpenFlowCore {
   private governancePipeline: FourteenStepGovernancePipeline;
   private hookSystem: HookSystem;
   private systemPromptBuilder: DefaultSystemPromptBuilder;
+  private cacheMonitor: PromptCacheMonitor;
   private tokenBudgetInjector: TokenBudgetInjector;
   private logger: Logger;
   private metricsCollector: MetricsCollector;
@@ -116,6 +131,13 @@ export class OpenFlowCore {
   private commandRegistry: CommandRegistry;
   private cronScheduler: CronScheduler;
   private messagingGateway: MessagingGateway | null = null;
+  private permissionSystem: PermissionSystem | null = null;
+  private claudeMdLoader: ClaudeMdLoader;
+  private dualModelRetriever: DualModelRetriever;
+  private autoMemoryExtractor: AutoMemoryExtractor;
+  private kairosDreaming: KairosDreaming;
+  private prefetcher: StartupPrefetcher;
+  private lastPrefetchReport: PrefetchReport | null = null;
 
   constructor(context: CapabilityContext, config: OpenFlowConfig) {
     if (!config.messagingConfig) {
@@ -167,10 +189,49 @@ export class OpenFlowCore {
 
     this.systemPromptBuilder = new DefaultSystemPromptBuilder();
 
+    this.cacheMonitor = new PromptCacheMonitor(
+      {
+        windowMs: 300_000,
+        warningThreshold: 5,
+        criticalThreshold: 15,
+      },
+      (report, event) => {
+        this.logger.warn("Prompt cache health alert", {
+          layerName: event.layerName,
+          reason: event.reason,
+          severity: event.severity,
+          recommendations: report.recommendations,
+        });
+      }
+    );
+
+    this.systemPromptBuilder.setCacheMonitor(this.cacheMonitor);
+
+    this.claudeMdLoader = createClaudeMdLoader();
+    this.dualModelRetriever = createDualModelRetriever({
+      maxInject: 5,
+      precisionThreshold: 0.78,
+    });
+    this.autoMemoryExtractor = createAutoMemoryExtractor({
+      memoryDir: `${config.memoryDir}/auto`,
+      enableAutoWrite: true,
+    });
+    this.kairosDreaming = createKairosDreaming({
+      memoryDir: `${config.memoryDir}/dreams`,
+      enableNightDream: true,
+      enableIdleDream: true,
+    });
+
     this.tokenBudgetInjector = createTokenBudgetInjector({
       maxTokens: config.tokenBudgetConfig?.maxTokens,
       reservedTokens: config.tokenBudgetConfig?.reservedTokens,
       enableCompression: config.tokenBudgetConfig?.enableCompression,
+    });
+
+    this.prefetcher = new StartupPrefetcher({
+      defaultTimeoutMs: 5000,
+      concurrencyLimit: 8,
+      logTiming: true,
     });
 
     this.logger = createLogger({
@@ -192,6 +253,7 @@ export class OpenFlowCore {
     this.cronScheduler = new CronScheduler();
 
     if (config.llmConfig?.apiKey) {
+      const sessionId = config.sessionId || `session_${Date.now()}`;
       this.llmClient = createLLMClient({
         apiKey: config.llmConfig.apiKey,
         providerConfig: {},
@@ -201,6 +263,7 @@ export class OpenFlowCore {
         maxTokens: config.llmConfig.maxTokens,
         temperature: config.llmConfig.temperature,
         timeout: config.llmConfig.timeout,
+        sessionId,
       });
     }
 
@@ -214,31 +277,64 @@ export class OpenFlowCore {
   }
 
   async initialize(): Promise<void> {
-    await this.memoryCore.initialize();
-    await this.cronScheduler.initialize();
+    const ac = new AbortController();
 
-    if (this.config.llmConfig?.apiKey) {
-      const llmClient = createLLMClient({
-        apiKey: this.config.llmConfig.apiKey,
-        providerConfig: {},
-        provider: this.config.llmConfig.provider,
-        baseUrl: this.config.llmConfig.baseUrl,
-        model: this.config.llmConfig.model,
-        maxTokens: this.config.llmConfig.maxTokens,
-        temperature: this.config.llmConfig.temperature,
-        timeout: this.config.llmConfig.timeout,
-      });
-      this.memoryCore.setLLMClient(llmClient);
+    const tasks = [
+      createPrefetchTask("memory_core", async () => {
+        await this.memoryCore.initialize();
+      }, { critical: true, timeoutMs: 10000 }),
+
+      createPrefetchTask("cron_scheduler", async () => {
+        await this.cronScheduler.initialize();
+      }, { critical: false, timeoutMs: 5000 }),
+
+      createPrefetchTask("layered_config", async () => {
+        await this.layeredConfigLoader.loadAll();
+      }, { critical: true, timeoutMs: 5000 }),
+
+      createPrefetchTask("unified_engine", async () => {
+        await this.unifiedEngine.initialize();
+      }, { critical: true, timeoutMs: 10000, dependsOn: ["layered_config"] }),
+
+      createPrefetchTask("auto_memory", async () => {
+        await this.autoMemoryExtractor.initialize();
+      }, { critical: false, timeoutMs: 5000 }),
+
+      createPrefetchTask("kairos_dreaming", async () => {
+        await this.kairosDreaming.initialize();
+      }, { critical: false, timeoutMs: 5000 }),
+
+      createPrefetchTask("llm_client", async () => {
+        if (this.config.llmConfig?.apiKey) {
+          const llmClient = createLLMClient({
+            apiKey: this.config.llmConfig.apiKey,
+            providerConfig: {},
+            provider: this.config.llmConfig.provider,
+            baseUrl: this.config.llmConfig.baseUrl,
+            model: this.config.llmConfig.model,
+            maxTokens: this.config.llmConfig.maxTokens,
+            temperature: this.config.llmConfig.temperature,
+            timeout: this.config.llmConfig.timeout,
+          });
+          this.memoryCore.setLLMClient(llmClient);
+        }
+      }, { critical: false, timeoutMs: 5000 }),
+
+      createPrefetchTask("plugins", async () => {
+        if (this.config.pluginSources.length > 0) {
+          const basePath = this.config.workspaceRoot;
+          await this.pluginManager.loadFromDirectory(basePath);
+        }
+      }, { critical: false, timeoutMs: 15000 }),
+    ];
+
+    const report = await this.prefetcher.run(tasks, ac.signal);
+    this.lastPrefetchReport = report;
+
+    if (!report.allCriticalPassed) {
+      const failed = report.results.filter((r) => r.status === "rejected");
+      throw new Error(`Critical startup tasks failed: ${failed.map((r) => `${r.name}: ${r.error?.message}`).join(", ")}`);
     }
-
-    if (this.config.pluginSources.length > 0) {
-      const basePath = this.config.workspaceRoot;
-      await this.pluginManager.loadFromDirectory(basePath);
-    }
-
-    await this.layeredConfigLoader.loadAll();
-
-    await this.unifiedEngine.initialize();
 
     if (this.config.messagingConfig) {
       this.messagingGateway = createMessagingGateway(this.config.messagingConfig);
@@ -250,6 +346,26 @@ export class OpenFlowCore {
     }
 
     this.memoryCore.startNudgeCycle();
+
+    this.kairosDreaming.startIdleWatcher((result) => {
+      this.logger.info("KAIROS dreaming completed", {
+        distilled: result.distilled,
+        reason: result.reason,
+      });
+    });
+    await this.kairosDreaming.checkNightDream((result) => {
+      this.logger.info("KAIROS night dreaming completed", {
+        distilled: result.distilled,
+      });
+    });
+
+    const settings = await this.layeredConfigLoader.getSettings();
+    this.permissionSystem = PermissionSystem.fromSettings(
+      settings,
+      this.config.workspaceRoot,
+      undefined
+    );
+    await this.permissionSystem.initialize();
 
     this.registerCommands();
   }
@@ -410,6 +526,17 @@ export class OpenFlowCore {
       aliases: ["cron", "schedule"],
     });
 
+    this.commandRegistry.register({
+      name: "compact",
+      description: "手动压缩上下文，可选焦点提示（如 /compact --focus \"重构用户认证模块\"）",
+      handler: async (args: string) => {
+        const sessionId = this.sessionManager.getActiveSessionId?.() || "default";
+        const compactCmd = createCompactCommand(this.sessionManager, sessionId);
+        return compactCmd.handler(args);
+      },
+      aliases: ["compress", "summarize"],
+    });
+
     createIMCommands(this.commandRegistry);
 
     this.commandRegistry.register({
@@ -453,6 +580,10 @@ export class OpenFlowCore {
       await this.messagingGateway.stop();
     }
 
+    if (this.llmClient) {
+      this.llmClient.shutdown();
+    }
+
     // 清理新增模块
     this.tokenRefreshScheduler.cancelAll();
     this.logger.info("OpenFlowCore shutdown complete");
@@ -474,6 +605,10 @@ export class OpenFlowCore {
 
   getMessagingGateway(): MessagingGateway | null {
     return this.messagingGateway;
+  }
+
+  getPrefetchReport(): PrefetchReport | null {
+    return this.lastPrefetchReport;
   }
 
   getMemoryCore(): EnhancedMemoryCoreType {
@@ -506,6 +641,10 @@ export class OpenFlowCore {
 
   getLLMClient(): LLMClient | null {
     return this.llmClient;
+  }
+
+  getTools(): ToolDefinition[] {
+    return createAllTools(this.config.workspaceRoot, this.commandRegistry, this.cronScheduler);
   }
 
   async chat(
@@ -545,6 +684,36 @@ export class OpenFlowCore {
     return this.llmClient ? this.llmClient.getModel() : null;
   }
 
+  getLLMCircuitBreakerStats() {
+    if (!this.llmClient) return null;
+    return this.llmClient.getCircuitBreakerStats();
+  }
+
+  getLLMCircuitBreakerState() {
+    if (!this.llmClient) return null;
+    return this.llmClient.getCircuitBreakerState();
+  }
+
+  resetLLMCircuitBreaker() {
+    if (!this.llmClient) return;
+    this.llmClient.resetCircuitBreaker();
+  }
+
+  getLLMTranscriptStore() {
+    if (!this.llmClient) return null;
+    return this.llmClient.getTranscriptStore();
+  }
+
+  getLLMDegradationStatus() {
+    if (!this.llmClient) return null;
+    return this.llmClient.getDegradationStatus();
+  }
+
+  resetLLMDegradation() {
+    if (!this.llmClient) return;
+    this.llmClient.resetDegradation();
+  }
+
   // 新增模块的getter方法
   getGovernancePipeline(): FourteenStepGovernancePipeline {
     return this.governancePipeline;
@@ -556,6 +725,10 @@ export class OpenFlowCore {
 
   getSystemPromptBuilder(): DefaultSystemPromptBuilder {
     return this.systemPromptBuilder;
+  }
+
+  getCacheMonitor(): PromptCacheMonitor {
+    return this.cacheMonitor;
   }
 
   getTokenBudgetInjector(): TokenBudgetInjector {
@@ -584,12 +757,77 @@ export class OpenFlowCore {
       name: s.id,
       description: s.type,
     }));
+
+    const claudeMdResult = await this.claudeMdLoader.loadStack(this.config.workspaceRoot);
+    const memoryWarnings = [...claudeMdResult.warnings];
+
     const ctx: PromptContext = {
       config: {},
       tools,
       cwd: this.config.workspaceRoot,
       turn: 0,
       sessionId,
+      claudeMdStack: claudeMdResult.mergedContent,
+      memoryWarnings,
+    };
+    const cache: PromptCache = new Map();
+    return this.systemPromptBuilder.build(ctx, cache);
+  }
+
+  async buildSystemPromptWithMemory(
+    sessionId: string,
+    userQuery: string
+  ): Promise<string> {
+    const tools = this.subAgentSystem.getAllStatuses().map((s: any) => ({
+      name: s.id,
+      description: s.type,
+    }));
+
+    const claudeMdResult = await this.claudeMdLoader.loadStack(this.config.workspaceRoot);
+    const memoryWarnings = [...claudeMdResult.warnings];
+
+    const autoObservations = await this.autoMemoryExtractor.getObservations(this.config.workspaceRoot);
+    const candidates: MemoryCard[] = autoObservations.map((obs) => ({
+      id: obs.id,
+      title: `${obs.type}: ${obs.content.slice(0, 40)}`,
+      description: obs.content,
+      scope: obs.scope,
+      createdAt: new Date(obs.firstObserved).toISOString(),
+      confidence: obs.confidence,
+    }));
+
+    const distilledCards = this.kairosDreaming.getDistilledCards();
+    const allCandidates = [...candidates, ...distilledCards.map((card) => ({
+      id: card.id,
+      title: card.title,
+      description: card.description,
+      scope: this.config.workspaceRoot,
+      createdAt: new Date(card.createdAt).toISOString(),
+      confidence: card.confidence,
+    }))];
+
+    const retrievalResult = await this.dualModelRetriever.retrieve(
+      allCandidates,
+      userQuery,
+      async (card, query) => {
+        const titleMatch = card.title.toLowerCase().includes(query.toLowerCase()) ? 0.4 : 0;
+        const descMatch = card.description.toLowerCase().includes(query.toLowerCase()) ? 0.3 : 0;
+        const tagMatch = card.tags?.some((t) => query.toLowerCase().includes(t.toLowerCase())) ? 0.2 : 0;
+        return titleMatch + descMatch + tagMatch + (card.confidence * 0.1);
+      }
+    );
+
+    const memoryInjections = this.dualModelRetriever.formatInjections(retrievalResult.cards);
+
+    const ctx: PromptContext = {
+      config: {},
+      tools,
+      cwd: this.config.workspaceRoot,
+      turn: 0,
+      sessionId,
+      claudeMdStack: claudeMdResult.mergedContent,
+      memoryInjections,
+      memoryWarnings,
     };
     const cache: PromptCache = new Map();
     return this.systemPromptBuilder.build(ctx, cache);
@@ -698,24 +936,28 @@ export class OpenFlowCore {
       throw new Error("LLM client not initialized");
     }
 
+    const allTools = this.getTools();
+
     const toolRegistry: QueryToolRegistry = {
       list: () => {
-        const tools: ToolDefinition[] = [];
-        return tools.map((t: ToolDefinition) => ({
+        return allTools.map((t: ToolDefinition) => ({
           name: t.name,
           description: t.description,
           inputSchema: t.inputSchema as Record<string, unknown>,
+          isConcurrencySafe: t.isConcurrencySafe ?? false,
+          resourceKeys: t.resourceKeys,
           handler: t.handler as (input: Record<string, unknown>) => Promise<unknown>,
         }));
       },
       get: (name: string) => {
-        const tools: ToolDefinition[] = [];
-        const tool = tools.find((t: ToolDefinition) => t.name === name);
+        const tool = allTools.find((t: ToolDefinition) => t.name === name);
         if (!tool) return undefined;
         return {
           name: tool.name,
           description: tool.description,
           inputSchema: tool.inputSchema as Record<string, unknown>,
+          isConcurrencySafe: tool.isConcurrencySafe ?? false,
+          resourceKeys: tool.resourceKeys,
           handler: tool.handler as (input: Record<string, unknown>) => Promise<unknown>,
         };
       },
@@ -742,9 +984,30 @@ export class OpenFlowCore {
       abortSignal: this.abortController.signal,
       onStreamEvent: onEvent,
       memoryCore: this.memoryCore,
+      permissionSystem: this.permissionSystem,
+      cacheMonitor: this.cacheMonitor,
     };
 
-    const gen = query(input, ctx);
+    const systemPrompt = input.systemPrompt || await this.buildSystemPromptWithMemory(
+      input.threadId || "default",
+      input.message
+    );
+
+    await this.autoMemoryExtractor.observe(
+      input.message,
+      {
+        scope: this.config.workspaceRoot,
+        turnCount: 0,
+        previousMessages: [],
+      }
+    );
+
+    const queryInput: QueryInput = {
+      ...input,
+      systemPrompt,
+    };
+
+    const gen = query(queryInput, ctx);
     let result: QueryResult | undefined;
 
     while (true) {

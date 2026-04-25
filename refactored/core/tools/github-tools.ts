@@ -1,8 +1,59 @@
+import { z } from "zod";
 import type { ToolDefinition } from "../types/index.js";
+import { createReadOnlyTool, createWriteTool } from "./tool-factory.js";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
+
+const GitHubListPRsInputSchema = z.object({
+  owner: z.string().optional(),
+  repo: z.string().optional(),
+  state: z.enum(["open", "closed", "all"]).optional(),
+});
+
+const GitHubGetPRInputSchema = z.object({
+  owner: z.string().optional(),
+  repo: z.string().optional(),
+  prNumber: z.number().int().positive("prNumber 必须是正整数"),
+});
+
+const GitHubListIssuesInputSchema = z.object({
+  owner: z.string().optional(),
+  repo: z.string().optional(),
+  state: z.enum(["open", "closed", "all"]).optional(),
+  labels: z.string().optional(),
+});
+
+const GitHubCreateIssueInputSchema = z.object({
+  owner: z.string().optional(),
+  repo: z.string().optional(),
+  title: z.string().min(1, "title 不能为空"),
+  body: z.string().optional(),
+  labels: z.array(z.string()).optional(),
+});
+
+const GitHubCommentOnPRInputSchema = z.object({
+  owner: z.string().optional(),
+  repo: z.string().optional(),
+  prNumber: z.number().int().positive("prNumber 必须是正整数"),
+  body: z.string().min(1, "body 不能为空"),
+});
+
+const GitHubGetPRFilesInputSchema = z.object({
+  owner: z.string().optional(),
+  repo: z.string().optional(),
+  prNumber: z.number().int().positive("prNumber 必须是正整数"),
+});
+
+const GitHubSearchCodeInputSchema = z.object({
+  query: z.string().min(1, "query 不能为空"),
+});
+
+const GitHubOutputSchema = z.object({
+  message: z.string(),
+  data: z.unknown().optional(),
+});
 
 export interface GitHubConfig {
   token?: string;
@@ -23,317 +74,249 @@ export function createGitHubTools(config: GitHubConfig = {}): ToolDefinition[] {
 
   const headers = token ? `-H "Authorization: token ${token}" -H "Accept: application/vnd.github.v3+json"` : "";
 
-  return [
-    {
-      name: "GitHubListPRs",
-      description: "List pull requests in the repository",
-      inputSchema: {
-        type: "object",
-        properties: {
-          owner: { type: "string", description: "Repository owner (defaults to config)" },
-          repo: { type: "string", description: "Repository name (defaults to config)" },
-          state: { type: "string", description: "PR state: open, closed, all (default: open)", enum: ["open", "closed", "all"] },
-        },
-        required: [],
-      },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const { owner: prOwner = owner, repo: prRepo = repo, state = "open" } = input as Record<string, string>;
+  const gitHubListPRsTool = createReadOnlyTool({
+    name: "GitHubListPRs",
+    description: "List pull requests in the repository",
+    inputSchema: GitHubListPRsInputSchema,
+    outputSchema: GitHubOutputSchema,
+    resourceKeys: ["owner", "repo"],
+    handler: async (input) => {
+      const prOwner = input.owner || owner;
+      const prRepo = input.repo || repo;
+      const state = input.state || "open";
 
-        if (!prOwner || !prRepo) {
-          return "Error: owner and repo are required. Provide them in config or input.";
-        }
+      if (!prOwner || !prRepo) {
+        throw new Error("owner and repo are required. Provide them in config or input.");
+      }
 
-        try {
-          const command = `curl -s ${headers} "${mergedConfig.baseUrl}/repos/${prOwner}/${prRepo}/pulls?state=${state}"`;
-          const { stdout } = await execAsync(command);
-          const prs = JSON.parse(stdout);
+      const command = `curl -s ${headers} "${mergedConfig.baseUrl}/repos/${prOwner}/${prRepo}/pulls?state=${state}"`;
+      const { stdout } = await execAsync(command);
+      const prs = JSON.parse(stdout);
 
-          if (prs.length === 0) {
-            return `No ${state} pull requests found in ${prOwner}/${prRepo}`;
-          }
+      if (prs.length === 0) {
+        return { message: `No ${state} pull requests found in ${prOwner}/${prRepo}` };
+      }
 
-          const lines = [`# Pull Requests in ${prOwner}/${prRepo} (${state})`, ""];
-          for (const pr of prs.slice(0, 20)) {
-            lines.push(`- #${pr.number}: ${pr.title}`);
-            lines.push(`  - Author: ${pr.user?.login || "unknown"}`);
-            lines.push(`  - Created: ${new Date(pr.created_at).toLocaleDateString()}`);
-            lines.push(`  - URL: ${pr.html_url}`);
-            lines.push("");
-          }
+      const lines = [`# Pull Requests in ${prOwner}/${prRepo} (${state})`, ""];
+      for (const pr of prs.slice(0, 20)) {
+        lines.push(`- #${pr.number}: ${pr.title}`);
+        lines.push(`  - Author: ${pr.user?.login || "unknown"}`);
+        lines.push(`  - Created: ${new Date(pr.created_at).toLocaleDateString()}`);
+        lines.push(`  - URL: ${pr.html_url}`);
+        lines.push("");
+      }
 
-          return lines.join("\n");
-        } catch (error) {
-          return `Failed to list PRs: ${(error as Error).message}`;
-        }
-      },
+      return { message: lines.join("\n") };
     },
-    {
-      name: "GitHubGetPR",
-      description: "Get details of a specific pull request",
-      inputSchema: {
-        type: "object",
-        properties: {
-          owner: { type: "string", description: "Repository owner" },
-          repo: { type: "string", description: "Repository name" },
-          prNumber: { type: "number", description: "Pull request number" },
-        },
-        required: ["prNumber"],
-      },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const { owner: prOwner = owner, repo: prRepo = repo, prNumber } = input as Record<string, unknown> & { prNumber: number };
+  });
 
-        if (!prOwner || !prRepo) {
-          return "Error: owner and repo are required.";
-        }
+  const gitHubGetPRTool = createReadOnlyTool({
+    name: "GitHubGetPR",
+    description: "Get details of a specific pull request",
+    inputSchema: GitHubGetPRInputSchema,
+    outputSchema: GitHubOutputSchema,
+    resourceKeys: ["owner", "repo", "prNumber"],
+    handler: async (input) => {
+      const prOwner = input.owner || owner;
+      const prRepo = input.repo || repo;
 
-        try {
-          const command = `curl -s ${headers} "${mergedConfig.baseUrl}/repos/${prOwner}/${prRepo}/pulls/${prNumber}"`;
-          const { stdout } = await execAsync(command);
-          const pr = JSON.parse(stdout);
+      if (!prOwner || !prRepo) {
+        throw new Error("owner and repo are required.");
+      }
 
-          if (pr.message) {
-            return `Error: ${pr.message}`;
-          }
+      const command = `curl -s ${headers} "${mergedConfig.baseUrl}/repos/${prOwner}/${prRepo}/pulls/${input.prNumber}"`;
+      const { stdout } = await execAsync(command);
+      const pr = JSON.parse(stdout);
 
-          const lines = [
-            `# PR #${pr.number}: ${pr.title}`,
-            "",
-            `**Author:** ${pr.user?.login || "unknown"}`,
-            `**State:** ${pr.state}`,
-            `**Created:** ${new Date(pr.created_at).toLocaleDateString()}`,
-            `**Updated:** ${new Date(pr.updated_at).toLocaleDateString()}`,
-            "",
-            "## Description",
-            pr.body || "No description provided.",
-            "",
-            `**URL:** ${pr.html_url}`,
-          ];
+      if (pr.message) {
+        throw new Error(pr.message);
+      }
 
-          return lines.join("\n");
-        } catch (error) {
-          return `Failed to get PR details: ${(error as Error).message}`;
-        }
-      },
+      const lines = [
+        `# PR #${pr.number}: ${pr.title}`,
+        "",
+        `**Author:** ${pr.user?.login || "unknown"}`,
+        `**State:** ${pr.state}`,
+        `**Created:** ${new Date(pr.created_at).toLocaleDateString()}`,
+        `**Updated:** ${new Date(pr.updated_at).toLocaleDateString()}`,
+        "",
+        "## Description",
+        pr.body || "No description provided.",
+        "",
+        `**URL:** ${pr.html_url}`,
+      ];
+
+      return { message: lines.join("\n") };
     },
-    {
-      name: "GitHubListIssues",
-      description: "List issues in the repository",
-      inputSchema: {
-        type: "object",
-        properties: {
-          owner: { type: "string", description: "Repository owner" },
-          repo: { type: "string", description: "Repository name" },
-          state: { type: "string", description: "Issue state: open, closed, all", enum: ["open", "closed", "all"] },
-          labels: { type: "string", description: "Comma-separated labels to filter by" },
-        },
-        required: [],
-      },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const { owner: issueOwner = owner, repo: issueRepo = repo, state = "open", labels } = input as Record<string, string>;
+  });
 
-        if (!issueOwner || !issueRepo) {
-          return "Error: owner and repo are required.";
-        }
+  const gitHubListIssuesTool = createReadOnlyTool({
+    name: "GitHubListIssues",
+    description: "List issues in the repository",
+    inputSchema: GitHubListIssuesInputSchema,
+    outputSchema: GitHubOutputSchema,
+    resourceKeys: ["owner", "repo"],
+    handler: async (input) => {
+      const issueOwner = input.owner || owner;
+      const issueRepo = input.repo || repo;
+      const state = input.state || "open";
 
-        try {
-          let url = `${mergedConfig.baseUrl}/repos/${issueOwner}/${issueRepo}/issues?state=${state}`;
-          if (labels) {
-            url += `&labels=${labels}`;
-          }
+      if (!issueOwner || !issueRepo) {
+        throw new Error("owner and repo are required.");
+      }
 
-          const command = `curl -s ${headers} "${url}"`;
-          const { stdout } = await execAsync(command);
-          const issues = JSON.parse(stdout);
+      let url = `${mergedConfig.baseUrl}/repos/${issueOwner}/${issueRepo}/issues?state=${state}`;
+      if (input.labels) {
+        url += `&labels=${input.labels}`;
+      }
 
-          if (issues.length === 0) {
-            return `No ${state} issues found in ${issueOwner}/${issueRepo}`;
-          }
+      const command = `curl -s ${headers} "${url}"`;
+      const { stdout } = await execAsync(command);
+      const issues = JSON.parse(stdout);
 
-          const lines = [`# Issues in ${issueOwner}/${issueRepo} (${state})`, ""];
-          for (const issue of issues.slice(0, 20)) {
-            lines.push(`- #${issue.number}: ${issue.title}`);
-            lines.push(`  - Author: ${issue.user?.login || "unknown"}`);
-            lines.push(`  - Labels: ${(issue.labels || []).map((l: any) => l.name || l).join(", ")}`);
-            lines.push(`  - URL: ${issue.html_url}`);
-            lines.push("");
-          }
+      if (issues.length === 0) {
+        return { message: `No ${state} issues found in ${issueOwner}/${issueRepo}` };
+      }
 
-          return lines.join("\n");
-        } catch (error) {
-          return `Failed to list issues: ${(error as Error).message}`;
-        }
-      },
+      const lines = [`# Issues in ${issueOwner}/${issueRepo} (${state})`, ""];
+      for (const issue of issues.slice(0, 20)) {
+        lines.push(`- #${issue.number}: ${issue.title}`);
+        lines.push(`  - Author: ${issue.user?.login || "unknown"}`);
+        lines.push(`  - Labels: ${(issue.labels || []).map((l: any) => l.name || l).join(", ")}`);
+        lines.push(`  - URL: ${issue.html_url}`);
+        lines.push("");
+      }
+
+      return { message: lines.join("\n") };
     },
-    {
-      name: "GitHubCreateIssue",
-      description: "Create a new issue in the repository",
-      inputSchema: {
-        type: "object",
-        properties: {
-          owner: { type: "string", description: "Repository owner" },
-          repo: { type: "string", description: "Repository name" },
-          title: { type: "string", description: "Issue title" },
-          body: { type: "string", description: "Issue body/description" },
-          labels: { type: "array", items: { type: "string" }, description: "Labels to apply" },
-        },
-        required: ["title"],
-      },
-      isReadOnly: false,
-      handler: async (input: unknown) => {
-        const { owner: issueOwner = owner, repo: issueRepo = repo, title, body = "", labels = [] } = input as Record<string, unknown> & { title: string; body?: string; labels?: string[] };
+  });
 
-        if (!issueOwner || !issueRepo) {
-          return "Error: owner and repo are required.";
-        }
+  const gitHubCreateIssueTool = createWriteTool({
+    name: "GitHubCreateIssue",
+    description: "Create a new issue in the repository",
+    inputSchema: GitHubCreateIssueInputSchema,
+    outputSchema: GitHubOutputSchema,
+    resourceKeys: ["owner", "repo"],
+    handler: async (input) => {
+      const issueOwner = input.owner || owner;
+      const issueRepo = input.repo || repo;
 
-        if (!token) {
-          return "Error: GITHUB_TOKEN environment variable is required.";
-        }
+      if (!issueOwner || !issueRepo) {
+        throw new Error("owner and repo are required.");
+      }
 
-        try {
-          const bodyData = { title, body, labels };
-          const command = `curl -s -X POST ${headers} -H "Content-Type: application/json" -d '${JSON.stringify(bodyData)}' "${mergedConfig.baseUrl}/repos/${issueOwner}/${issueRepo}/issues"`;
-          const { stdout } = await execAsync(command);
-          const issue = JSON.parse(stdout);
+      if (!token) {
+        throw new Error("GITHUB_TOKEN environment variable is required.");
+      }
 
-          if (issue.message) {
-            return `Error: ${issue.message}`;
-          }
+      const bodyData = { title: input.title, body: input.body || "", labels: input.labels || [] };
+      const command = `curl -s -X POST ${headers} -H "Content-Type: application/json" -d '${JSON.stringify(bodyData)}' "${mergedConfig.baseUrl}/repos/${issueOwner}/${issueRepo}/issues"`;
+      const { stdout } = await execAsync(command);
+      const issue = JSON.parse(stdout);
 
-          return `Created issue #${issue.number}: ${issue.title}\nURL: ${issue.html_url}`;
-        } catch (error) {
-          return `Failed to create issue: ${(error as Error).message}`;
-        }
-      },
+      if (issue.message) {
+        throw new Error(issue.message);
+      }
+
+      return { message: `Created issue #${issue.number}: ${issue.title}\nURL: ${issue.html_url}` };
     },
-    {
-      name: "GitHubCommentOnPR",
-      description: "Add a comment to a pull request",
-      inputSchema: {
-        type: "object",
-        properties: {
-          owner: { type: "string", description: "Repository owner" },
-          repo: { type: "string", description: "Repository name" },
-          prNumber: { type: "number", description: "Pull request number" },
-          body: { type: "string", description: "Comment body" },
-        },
-        required: ["prNumber", "body"],
-      },
-      isReadOnly: false,
-      handler: async (input: unknown) => {
-        const { owner: commentOwner = owner, repo: commentRepo = repo, prNumber, body } = input as Record<string, unknown> & { prNumber: number; body: string };
+  });
 
-        if (!commentOwner || !commentRepo) {
-          return "Error: owner and repo are required.";
-        }
+  const gitHubCommentOnPRTool = createWriteTool({
+    name: "GitHubCommentOnPR",
+    description: "Add a comment to a pull request",
+    inputSchema: GitHubCommentOnPRInputSchema,
+    outputSchema: GitHubOutputSchema,
+    resourceKeys: ["owner", "repo", "prNumber"],
+    handler: async (input) => {
+      const commentOwner = input.owner || owner;
+      const commentRepo = input.repo || repo;
 
-        if (!token) {
-          return "Error: GITHUB_TOKEN environment variable is required.";
-        }
+      if (!commentOwner || !commentRepo) {
+        throw new Error("owner and repo are required.");
+      }
 
-        try {
-          const bodyData = { body };
-          const command = `curl -s -X POST ${headers} -H "Content-Type: application/json" -d '${JSON.stringify(bodyData)}' "${mergedConfig.baseUrl}/repos/${commentOwner}/${commentRepo}/issues/${prNumber}/comments"`;
-          const { stdout } = await execAsync(command);
-          const comment = JSON.parse(stdout);
+      if (!token) {
+        throw new Error("GITHUB_TOKEN environment variable is required.");
+      }
 
-          if (comment.message) {
-            return `Error: ${comment.message}`;
-          }
+      const bodyData = { body: input.body };
+      const command = `curl -s -X POST ${headers} -H "Content-Type: application/json" -d '${JSON.stringify(bodyData)}' "${mergedConfig.baseUrl}/repos/${commentOwner}/${commentRepo}/issues/${input.prNumber}/comments"`;
+      const { stdout } = await execAsync(command);
+      const comment = JSON.parse(stdout);
 
-          return `Comment added to PR #${prNumber}\nURL: ${comment.html_url}`;
-        } catch (error) {
-          return `Failed to comment on PR: ${(error as Error).message}`;
-        }
-      },
+      if (comment.message) {
+        throw new Error(comment.message);
+      }
+
+      return { message: `Comment added to PR #${input.prNumber}\nURL: ${comment.html_url}` };
     },
-    {
-      name: "GitHubGetPRFiles",
-      description: "Get the list of files changed in a pull request",
-      inputSchema: {
-        type: "object",
-        properties: {
-          owner: { type: "string", description: "Repository owner" },
-          repo: { type: "string", description: "Repository name" },
-          prNumber: { type: "number", description: "Pull request number" },
-        },
-        required: ["prNumber"],
-      },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const { filesOwner = owner, filesRepo = repo, prNumber } = input as Record<string, unknown> & { prNumber: number };
+  });
 
-        if (!filesOwner || !filesRepo) {
-          return "Error: owner and repo are required.";
-        }
+  const gitHubGetPRFilesTool = createReadOnlyTool({
+    name: "GitHubGetPRFiles",
+    description: "Get the list of files changed in a pull request",
+    inputSchema: GitHubGetPRFilesInputSchema,
+    outputSchema: GitHubOutputSchema,
+    resourceKeys: ["owner", "repo", "prNumber"],
+    handler: async (input) => {
+      const filesOwner = input.owner || owner;
+      const filesRepo = input.repo || repo;
 
-        try {
-          const command = `curl -s ${headers} "${mergedConfig.baseUrl}/repos/${filesOwner}/${filesRepo}/pulls/${prNumber}/files"`;
-          const { stdout } = await execAsync(command);
-          const files = JSON.parse(stdout);
+      if (!filesOwner || !filesRepo) {
+        throw new Error("owner and repo are required.");
+      }
 
-          if (files.message) {
-            return `Error: ${files.message}`;
-          }
+      const command = `curl -s ${headers} "${mergedConfig.baseUrl}/repos/${filesOwner}/${filesRepo}/pulls/${input.prNumber}/files"`;
+      const { stdout } = await execAsync(command);
+      const files = JSON.parse(stdout);
 
-          const lines = [`# Files changed in PR #${prNumber}`, ""];
-          for (const file of files) {
-            lines.push(`- ${file.filename}`);
-            lines.push(`  - Status: ${file.status}`);
-            lines.push(`  - Additions: ${file.additions}, Deletions: ${file.deletions}`);
-            lines.push("");
-          }
+      if (files.message) {
+        throw new Error(files.message);
+      }
 
-          return lines.join("\n");
-        } catch (error) {
-          return `Failed to get PR files: ${(error as Error).message}`;
-        }
-      },
+      const lines = [`# Files changed in PR #${input.prNumber}`, ""];
+      for (const file of files) {
+        lines.push(`- ${file.filename}`);
+        lines.push(`  - Status: ${file.status}`);
+        lines.push(`  - Additions: ${file.additions}, Deletions: ${file.deletions}`);
+        lines.push("");
+      }
+
+      return { message: lines.join("\n") };
     },
-    {
-      name: "GitHubSearchCode",
-      description: "Search for code across repositories",
-      inputSchema: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Search query (e.g., 'function_name repo:owner/repo')" },
-        },
-        required: ["query"],
-      },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const { query } = input as { query: string };
+  });
 
-        if (!token) {
-          return "Error: GITHUB_TOKEN environment variable is required.";
-        }
+  const gitHubSearchCodeTool = createReadOnlyTool({
+    name: "GitHubSearchCode",
+    description: "Search for code across repositories",
+    inputSchema: GitHubSearchCodeInputSchema,
+    outputSchema: GitHubOutputSchema,
+    handler: async (input) => {
+      if (!token) {
+        throw new Error("GITHUB_TOKEN environment variable is required.");
+      }
 
-        try {
-          const encodedQuery = encodeURIComponent(query);
-          const command = `curl -s ${headers} "${mergedConfig.baseUrl}/search/code?q=${encodedQuery}"`;
-          const { stdout } = await execAsync(command);
-          const result = JSON.parse(stdout);
+      const encodedQuery = encodeURIComponent(input.query);
+      const command = `curl -s ${headers} "${mergedConfig.baseUrl}/search/code?q=${encodedQuery}"`;
+      const { stdout } = await execAsync(command);
+      const result = JSON.parse(stdout);
 
-          if (result.message) {
-            return `Error: ${result.message}`;
-          }
+      if (result.message) {
+        throw new Error(result.message);
+      }
 
-          const lines = [`# Search Results for: ${query}`, "", `Total: ${result.total_count} results`, ""];
-          for (const item of (result.items || []).slice(0, 20)) {
-            lines.push(`- ${item.path}`);
-            lines.push(`  - Repository: ${item.repository.full_name}`);
-            lines.push(`  - URL: ${item.html_url}`);
-            lines.push("");
-          }
+      const lines = [`# Search Results for: ${input.query}`, "", `Total: ${result.total_count} results`, ""];
+      for (const item of (result.items || []).slice(0, 20)) {
+        lines.push(`- ${item.path}`);
+        lines.push(`  - Repository: ${item.repository.full_name}`);
+        lines.push(`  - URL: ${item.html_url}`);
+        lines.push("");
+      }
 
-          return lines.join("\n");
-        } catch (error) {
-          return `Failed to search code: ${(error as Error).message}`;
-        }
-      },
+      return { message: lines.join("\n") };
     },
-  ];
+  });
+
+  return [gitHubListPRsTool, gitHubGetPRTool, gitHubListIssuesTool, gitHubCreateIssueTool, gitHubCommentOnPRTool, gitHubGetPRFilesTool, gitHubSearchCodeTool];
 }

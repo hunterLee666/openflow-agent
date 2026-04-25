@@ -1,4 +1,5 @@
 export { LLMClient, createLLMClient } from "./client.js";
+export type { LLMClientExtendedConfig } from "./client.js";
 export { LLMConfigManager } from "./config-manager.js";
 export type { LLMConfig, LLMConfigFile } from "./config-manager.js";
 export {

@@ -94,6 +94,93 @@ export type { Token, Tokenizer } from "./termio/parser.js"
 export { Parser } from "./termio/parser.js"
 export type { Color as TermioColor, Grapheme, TextStyle, Cell, Action, CursorAction, NamedColor } from "./termio/types.js"
 
+export {
+  MouseProtocolConfig,
+  DEFAULT_MOUSE_CONFIG,
+  MouseButton,
+  MouseModifier,
+  MouseEvent,
+  MouseMode,
+  enableMouse,
+  disableMouse,
+  enableSGRMouse,
+  disableSGRMouse,
+  enableKittyMouse,
+  disableKittyMouse,
+  enableMouseMotion,
+  disableMouseMotion,
+  parseSGRMouseEvent,
+  formatMouseEventForTerminal,
+  supportsSGRMouse,
+  supportsKittyMouse,
+  getMouseProtocolSequence,
+  createMouseProtocolSequences,
+} from "./termio/mouse.js"
+
+export {
+  TerminalCapability,
+  TerminalInfo,
+  CapabilityQuery,
+  DEFAULT_TERMINAL_INFO,
+  detectTerminalCapabilities,
+  getFallbackStrategy,
+  formatCapabilityReport,
+  isTerminalCapable,
+  detectTerminalFromEnv,
+} from "./termio/capability-detect.js"
+
+export {
+  getStringWidth,
+  getCharWidth,
+  truncateString,
+  padString,
+  measureTextLines,
+  wrapText,
+  normalizeStringForDisplay,
+  getDisplayWidth,
+  UNICODE_VERSION,
+  UNICODE_TABLE_VERSION,
+} from "./termio/unicode-width.js"
+
+export {
+  VimMode,
+  VimCursor,
+  VimKeybinding,
+  VimState,
+  VimConfig,
+  DEFAULT_VIM_CONFIG,
+  NORMAL_MODE_BINDINGS,
+  VISUAL_MODE_BINDINGS,
+  INSERT_MODE_BINDINGS,
+  COMMAND_MODE_BINDINGS,
+  EX_COMMANDS,
+  createInitialState,
+  formatModeIndicator,
+  formatKeySequence,
+  VimStateMachine,
+  createVimStateMachine,
+  VimAction,
+  VimActionResult,
+} from "./vim/index.js"
+
+export {
+  StreamingConfig,
+  DEFAULT_STREAMING_CONFIG,
+  StreamingChunk,
+  StreamingSource,
+  StreamingState,
+  createStreamingState,
+  splitIntoWords,
+  streamWords,
+  streamWithControlledFrequency,
+  streamWordByWord,
+  streamBySentence,
+  calculateStreamingMetrics,
+  StreamingRendererOptions,
+  DEFAULT_RENDERER_OPTIONS,
+  renderWithFrameControl,
+} from "./render/streaming-renderer.js"
+
 export * from "./animation.js";
 
 export * from "./types.js";

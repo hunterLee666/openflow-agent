@@ -12,6 +12,7 @@ export interface PluginManifest {
   engines?: {
     openflow?: string;
   };
+  disableModelInvocationFor?: string[];
 }
 
 export type PluginComponentType = "command" | "agent" | "skill" | "hook" | "mcp" | "workflow";

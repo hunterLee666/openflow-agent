@@ -55,12 +55,14 @@ export interface ToolRegistry {
   call(name: string, input: unknown): Promise<unknown>;
 }
 
-export interface ToolDefinition {
+export interface ToolDefinition<I = unknown, O = unknown> {
   name: string;
   description: string;
-  inputSchema: unknown;
-  handler: (input: unknown, ctx: unknown) => Promise<unknown>;
+  inputSchema: I;
+  handler: (input: unknown, ctx: unknown) => Promise<O>;
   isReadOnly?: boolean;
+  isConcurrencySafe?: boolean;
+  resourceKeys?: string[];
 }
 
 export interface MemoryCore {

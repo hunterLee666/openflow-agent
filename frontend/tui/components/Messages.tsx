@@ -1,13 +1,19 @@
-import React, { type ReactNode, useCallback, useRef, useState } from 'react'
+import React, { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box } from './Box.js'
 import { MessageComponent, type Message } from './Message.js'
 import { ScrollBox, type ScrollBoxRef } from './ScrollBox.js'
+import { VirtualList, type VirtualListItem } from './VirtualList.js'
+
+const VIRTUAL_SCROLL_THRESHOLD = 50
+const DEFAULT_MESSAGE_HEIGHT = 4
+const VISIBLE_HEIGHT = 20
 
 export interface MessagesProps {
   messages: Message[]
   maxWidth?: number
   showTimestamps?: boolean
   scrollToBottom?: boolean
+  enableVirtualScroll?: boolean
 }
 
 export function Messages({
@@ -15,15 +21,19 @@ export function Messages({
   maxWidth = 100,
   showTimestamps = true,
   scrollToBottom = true,
+  enableVirtualScroll = true,
 }: MessagesProps): ReactNode {
   const scrollBoxRef = useRef<ScrollBoxRef | null>(null)
   const containerRef = useRef<HTMLElement | null>(null)
+  const [autoScroll, setAutoScroll] = useState(scrollToBottom)
 
-  React.useEffect(() => {
-    if (scrollToBottom && scrollBoxRef.current) {
+  useEffect(() => {
+    if (autoScroll && scrollBoxRef.current) {
       scrollBoxRef.current.scrollToBottom()
     }
-  }, [messages, scrollToBottom])
+  }, [messages.length, autoScroll])
+
+  const shouldUseVirtualScroll = enableVirtualScroll && messages.length > VIRTUAL_SCROLL_THRESHOLD
 
   if (messages.length === 0) {
     return (
@@ -45,12 +55,44 @@ export function Messages({
     )
   }
 
+  if (shouldUseVirtualScroll) {
+    const virtualItems: VirtualListItem<Message>[] = messages.map((msg, index) => ({
+      key: msg.id || `msg-${index}`,
+      data: msg,
+      size: DEFAULT_MESSAGE_HEIGHT,
+    }))
+
+    return (
+      <Box flexDirection="column" flexGrow={1} overflowY="auto">
+        <VirtualList
+          items={virtualItems}
+          renderItem={(msg, index) => (
+            <MessageComponent
+              key={msg.id || index}
+              message={msg}
+              showTimestamp={showTimestamps}
+              maxWidth={maxWidth}
+            />
+          )}
+          estimatedItemSize={DEFAULT_MESSAGE_HEIGHT}
+          overscan={5}
+          height={VISIBLE_HEIGHT}
+          autoScrollToBottom={autoScroll}
+          onScroll={(scrollTop, scrollHeight, clientHeight) => {
+            const isNearBottom = scrollHeight - scrollTop - clientHeight < 10
+            setAutoScroll(isNearBottom)
+          }}
+        />
+      </Box>
+    )
+  }
+
   return (
     <ScrollBox
       ref={scrollBoxRef}
       flexGrow={1}
       overflowY="auto"
-      autoScrollToBottom={scrollToBottom}
+      autoScrollToBottom={autoScroll}
     >
       <Box flexDirection="column" padding={1} flexGrow={1} ref={containerRef as React.RefObject<HTMLDivElement>}>
         {messages.map((message, index) => (

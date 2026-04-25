@@ -1,10 +1,55 @@
+import { z } from "zod";
 import type { ToolDefinition } from "../types/index.js";
+import { defineTool, createReadOnlyTool, createWriteTool } from "./tool-factory.js";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, writeFile, readFile, stat, unlink, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 const execAsync = promisify(exec);
+
+const BrowserNavigateInputSchema = z.object({
+  url: z.string().url("url 必须是有效的 URL"),
+});
+
+const BrowserScreenshotInputSchema = z.object({
+  url: z.string().url().optional(),
+  fullPage: z.boolean().optional(),
+});
+
+const BrowserClickInputSchema = z.object({
+  url: z.string().url("url 必须是有效的 URL"),
+  selector: z.string().min(1, "selector 不能为空"),
+});
+
+const BrowserFillInputSchema = z.object({
+  url: z.string().url("url 必须是有效的 URL"),
+  selector: z.string().min(1, "selector 不能为空"),
+  value: z.string(),
+});
+
+const BrowserEvaluateInputSchema = z.object({
+  url: z.string().url("url 必须是有效的 URL"),
+  script: z.string().min(1, "script 不能为空"),
+});
+
+const BrowserGetContentInputSchema = z.object({
+  url: z.string().url("url 必须是有效的 URL"),
+});
+
+const BrowserStateOutputSchema = z.object({
+  url: z.string(),
+  title: z.string().optional(),
+  screenshotPath: z.string().optional(),
+  error: z.string().optional(),
+  message: z.string(),
+});
+
+const BrowserActionResultSchema = z.object({
+  message: z.string(),
+  success: z.boolean(),
+  details: z.record(z.unknown()).optional(),
+});
 
 export interface BrowserConfig {
   headless?: boolean;
@@ -55,263 +100,216 @@ export function createBrowserTools(config: BrowserConfig = {}): ToolDefinition[]
   const mergedConfig = { ...DEFAULT_CONFIG, ...config };
   let currentState: BrowserState | null = null;
 
-  return [
-    {
-      name: "BrowserNavigate",
-      description: "Navigate to a URL in the browser",
-      inputSchema: {
-        type: "object",
-        properties: {
-          url: { type: "string", description: "URL to navigate to" },
-        },
-        required: ["url"],
-      },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const { url } = input as { url: string };
+  const browserNavigateTool = defineTool({
+    name: "BrowserNavigate",
+    description: "Navigate to a URL in the browser",
+    inputSchema: BrowserNavigateInputSchema,
+    outputSchema: BrowserStateOutputSchema,
+    isReadOnly: true,
+    isConcurrencySafe: false,
+    resourceKeys: ["url"],
+    handler: async (input) => {
+      await mkdir(mergedConfig.screenshotDir, { recursive: true });
 
-        try {
-          await mkdir(mergedConfig.screenshotDir, { recursive: true });
+      const screenshotPath = join(mergedConfig.screenshotDir, `screenshot-${Date.now()}.png`);
 
-          const screenshotPath = join(mergedConfig.screenshotDir, `screenshot-${Date.now()}.png`);
+      const command = `npx playwright screenshot --viewport-size="${mergedConfig.viewport.width},${mergedConfig.viewport.height}" ${mergedConfig.headless ? "--full-page" : ""} "${input.url}" "${screenshotPath}"`;
 
-          const command = `npx playwright screenshot --viewport-size="${mergedConfig.viewport.width},${mergedConfig.viewport.height}" ${mergedConfig.headless ? "--full-page" : ""} "${url}" "${screenshotPath}"`;
+      await execAsync(command, { timeout: mergedConfig.timeout });
 
-          await execAsync(command, { timeout: mergedConfig.timeout });
+      await cleanupOldScreenshots(mergedConfig.screenshotDir, mergedConfig.maxScreenshots);
 
-          await cleanupOldScreenshots(mergedConfig.screenshotDir, mergedConfig.maxScreenshots);
+      currentState = {
+        url: input.url,
+        screenshotPath,
+      };
 
-          currentState = {
-            url,
-            screenshotPath,
-          };
-
-          return `Navigated to ${url}\nScreenshot saved to: ${screenshotPath}`;
-        } catch (error) {
-          currentState = {
-            url,
-            error: (error as Error).message,
-          };
-          return `Failed to navigate to ${url}: ${(error as Error).message}`;
-        }
-      },
+      return {
+        url: input.url,
+        screenshotPath,
+        message: `Navigated to ${input.url}\nScreenshot saved to: ${screenshotPath}`,
+      };
     },
-    {
-      name: "BrowserScreenshot",
-      description: "Take a screenshot of the current page or a specific URL",
-      inputSchema: {
-        type: "object",
-        properties: {
-          url: { type: "string", description: "URL to screenshot (optional, uses current page if not provided)" },
-          fullPage: { type: "boolean", description: "Capture full page (default: true)" },
-        },
-        required: [],
-      },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const { url, fullPage = true } = input as { url?: string; fullPage?: boolean };
-        const targetUrl = url || currentState?.url;
+  });
 
-        if (!targetUrl) {
-          return "No URL provided and no current page. Use BrowserNavigate first.";
-        }
+  const browserScreenshotTool = defineTool({
+    name: "BrowserScreenshot",
+    description: "Take a screenshot of the current page or a specific URL",
+    inputSchema: BrowserScreenshotInputSchema,
+    outputSchema: BrowserStateOutputSchema,
+    isReadOnly: true,
+    isConcurrencySafe: true,
+    resourceKeys: ["url"],
+    handler: async (input) => {
+      const targetUrl = input.url || currentState?.url;
 
-        try {
-          await mkdir(mergedConfig.screenshotDir, { recursive: true });
+      if (!targetUrl) {
+        throw new Error("No URL provided and no current page. Use BrowserNavigate first.");
+      }
 
-          const screenshotPath = join(mergedConfig.screenshotDir, `screenshot-${Date.now()}.png`);
+      await mkdir(mergedConfig.screenshotDir, { recursive: true });
 
-          const command = `npx playwright screenshot ${fullPage ? "--full-page" : ""} --viewport-size="${mergedConfig.viewport.width},${mergedConfig.viewport.height}" "${targetUrl}" "${screenshotPath}"`;
+      const screenshotPath = join(mergedConfig.screenshotDir, `screenshot-${Date.now()}.png`);
 
-          await execAsync(command, { timeout: mergedConfig.timeout });
+      const command = `npx playwright screenshot ${input.fullPage !== false ? "--full-page" : ""} --viewport-size="${mergedConfig.viewport.width},${mergedConfig.viewport.height}" "${targetUrl}" "${screenshotPath}"`;
 
-          await cleanupOldScreenshots(mergedConfig.screenshotDir, mergedConfig.maxScreenshots);
+      await execAsync(command, { timeout: mergedConfig.timeout });
 
-          if (currentState) {
-            currentState.screenshotPath = screenshotPath;
-          }
+      await cleanupOldScreenshots(mergedConfig.screenshotDir, mergedConfig.maxScreenshots);
 
-          return `Screenshot saved to: ${screenshotPath}`;
-        } catch (error) {
-          return `Failed to take screenshot: ${(error as Error).message}`;
-        }
-      },
+      if (currentState) {
+        currentState.screenshotPath = screenshotPath;
+      }
+
+      return {
+        url: targetUrl,
+        screenshotPath,
+        message: `Screenshot saved to: ${screenshotPath}`,
+      };
     },
-    {
-      name: "BrowserClick",
-      description: "Click an element on the page by selector",
-      inputSchema: {
-        type: "object",
-        properties: {
-          url: { type: "string", description: "URL of the page" },
-          selector: { type: "string", description: "CSS selector of element to click" },
-        },
-        required: ["url", "selector"],
-      },
-      isReadOnly: false,
-      handler: async (input: unknown) => {
-        const { url, selector } = input as { url: string; selector: string };
+  });
 
-        try {
-          const script = `
-            const { chromium } = require('playwright');
-            (async () => {
-              const browser = await chromium.launch({ headless: ${mergedConfig.headless} });
-              const page = await browser.newPage({ viewport: ${JSON.stringify(mergedConfig.viewport)} });
-              await page.goto('${url}');
-              await page.click('${selector}');
-              await page.waitForTimeout(1000);
-              await browser.close();
-            })();
-          `;
+  const browserClickTool = createWriteTool({
+    name: "BrowserClick",
+    description: "Click an element on the page by selector",
+    inputSchema: BrowserClickInputSchema,
+    outputSchema: BrowserActionResultSchema,
+    resourceKeys: ["url"],
+    handler: async (input) => {
+      const script = `
+        const { chromium } = require('playwright');
+        (async () => {
+          const browser = await chromium.launch({ headless: ${mergedConfig.headless} });
+          const page = await browser.newPage({ viewport: ${JSON.stringify(mergedConfig.viewport)} });
+          await page.goto('${input.url}');
+          await page.click('${input.selector}');
+          await page.waitForTimeout(1000);
+          await browser.close();
+        })();
+      `;
 
-          const scriptPath = join(process.env.HOME || process.cwd(), ".openflow", "temp-browser-script.js");
-          await mkdir(join(process.env.HOME || process.cwd(), ".openflow"), { recursive: true });
-          await writeFile(scriptPath, script);
+      const scriptPath = join(process.env.HOME || process.cwd(), ".openflow", "temp-browser-script.js");
+      await mkdir(join(process.env.HOME || process.cwd(), ".openflow"), { recursive: true });
+      await writeFile(scriptPath, script);
 
-          try {
-            await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
-          } finally {
-            await cleanupTempScript(scriptPath);
-          }
-
-          return `Clicked element '${selector}' on ${url}`;
-        } catch (error) {
-          return `Failed to click element: ${(error as Error).message}`;
-        }
-      },
+      try {
+        await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
+        return {
+          message: `Clicked element '${input.selector}' on ${input.url}`,
+          success: true,
+        };
+      } finally {
+        await cleanupTempScript(scriptPath);
+      }
     },
-    {
-      name: "BrowserFill",
-      description: "Fill a form field on the page",
-      inputSchema: {
-        type: "object",
-        properties: {
-          url: { type: "string", description: "URL of the page" },
-          selector: { type: "string", description: "CSS selector of input field" },
-          value: { type: "string", description: "Value to fill" },
-        },
-        required: ["url", "selector", "value"],
-      },
-      isReadOnly: false,
-      handler: async (input: unknown) => {
-        const { url, selector, value } = input as { url: string; selector: string; value: string };
+  });
 
-        try {
-          const script = `
-            const { chromium } = require('playwright');
-            (async () => {
-              const browser = await chromium.launch({ headless: ${mergedConfig.headless} });
-              const page = await browser.newPage({ viewport: ${JSON.stringify(mergedConfig.viewport)} });
-              await page.goto('${url}');
-              await page.fill('${selector}', '${value.replace(/'/g, "\\'")}');
-              await browser.close();
-            })();
-          `;
+  const browserFillTool = createWriteTool({
+    name: "BrowserFill",
+    description: "Fill a form field on the page",
+    inputSchema: BrowserFillInputSchema,
+    outputSchema: BrowserActionResultSchema,
+    resourceKeys: ["url"],
+    handler: async (input) => {
+      const script = `
+        const { chromium } = require('playwright');
+        (async () => {
+          const browser = await chromium.launch({ headless: ${mergedConfig.headless} });
+          const page = await browser.newPage({ viewport: ${JSON.stringify(mergedConfig.viewport)} });
+          await page.goto('${input.url}');
+          await page.fill('${input.selector}', '${input.value.replace(/'/g, "\\'")}');
+          await browser.close();
+        })();
+      `;
 
-          const scriptPath = join(process.env.HOME || process.cwd(), ".openflow", "temp-browser-script.js");
-          await mkdir(join(process.env.HOME || process.cwd(), ".openflow"), { recursive: true });
-          await writeFile(scriptPath, script);
+      const scriptPath = join(process.env.HOME || process.cwd(), ".openflow", "temp-browser-script.js");
+      await mkdir(join(process.env.HOME || process.cwd(), ".openflow"), { recursive: true });
+      await writeFile(scriptPath, script);
 
-          try {
-            await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
-          } finally {
-            await cleanupTempScript(scriptPath);
-          }
-
-          return `Filled '${selector}' with value on ${url}`;
-        } catch (error) {
-          return `Failed to fill field: ${(error as Error).message}`;
-        }
-      },
+      try {
+        await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
+        return {
+          message: `Filled '${input.selector}' with value on ${input.url}`,
+          success: true,
+        };
+      } finally {
+        await cleanupTempScript(scriptPath);
+      }
     },
-    {
-      name: "BrowserEvaluate",
-      description: "Execute JavaScript in the browser and return the result",
-      inputSchema: {
-        type: "object",
-        properties: {
-          url: { type: "string", description: "URL of the page" },
-          script: { type: "string", description: "JavaScript code to execute" },
-        },
-        required: ["url", "script"],
-      },
-      isReadOnly: false,
-      handler: async (input: unknown) => {
-        const { url, script } = input as { url: string; script: string };
+  });
 
-        try {
-          const tempScript = `
-            const { chromium } = require('playwright');
-            (async () => {
-              const browser = await chromium.launch({ headless: ${mergedConfig.headless} });
-              const page = await browser.newPage({ viewport: ${JSON.stringify(mergedConfig.viewport)} });
-              await page.goto('${url}');
-              const result = await page.evaluate(() => ${script});
-              console.log(JSON.stringify(result));
-              await browser.close();
-            })();
-          `;
+  const browserEvaluateTool = createWriteTool({
+    name: "BrowserEvaluate",
+    description: "Execute JavaScript in the browser and return the result",
+    inputSchema: BrowserEvaluateInputSchema,
+    outputSchema: BrowserActionResultSchema,
+    resourceKeys: ["url"],
+    handler: async (input) => {
+      const tempScript = `
+        const { chromium } = require('playwright');
+        (async () => {
+          const browser = await chromium.launch({ headless: ${mergedConfig.headless} });
+          const page = await browser.newPage({ viewport: ${JSON.stringify(mergedConfig.viewport)} });
+          await page.goto('${input.url}');
+          const result = await page.evaluate(() => ${input.script});
+          console.log(JSON.stringify(result));
+          await browser.close();
+        })();
+      `;
 
-          const scriptPath = join(process.env.HOME || process.cwd(), ".openflow", "temp-browser-script.js");
-          await mkdir(join(process.env.HOME || process.cwd(), ".openflow"), { recursive: true });
-          await writeFile(scriptPath, tempScript);
+      const scriptPath = join(process.env.HOME || process.cwd(), ".openflow", "temp-browser-script.js");
+      await mkdir(join(process.env.HOME || process.cwd(), ".openflow"), { recursive: true });
+      await writeFile(scriptPath, tempScript);
 
-          try {
-            const { stdout } = await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
-            return `Script executed successfully.\nResult: ${stdout}`;
-          } finally {
-            await cleanupTempScript(scriptPath);
-          }
-        } catch (error) {
-          return `Failed to execute script: ${(error as Error).message}`;
-        }
-      },
+      try {
+        const { stdout } = await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
+        return {
+          message: `Script executed successfully.\nResult: ${stdout}`,
+          success: true,
+        };
+      } finally {
+        await cleanupTempScript(scriptPath);
+      }
     },
-    {
-      name: "BrowserGetContent",
-      description: "Get the text content of the current page",
-      inputSchema: {
-        type: "object",
-        properties: {
-          url: { type: "string", description: "URL of the page" },
-        },
-        required: ["url"],
-      },
-      isReadOnly: true,
-      handler: async (input: unknown) => {
-        const { url } = input as { url: string };
+  });
 
-        try {
-          const script = `
-            const { chromium } = require('playwright');
-            (async () => {
-              const browser = await chromium.launch({ headless: ${mergedConfig.headless} });
-              const page = await browser.newPage({ viewport: ${JSON.stringify(mergedConfig.viewport)} });
-              await page.goto('${url}');
-              const content = await page.innerText('body');
-              console.log(content);
-              await browser.close();
-            })();
-          `;
+  const browserGetContentTool = createReadOnlyTool({
+    name: "BrowserGetContent",
+    description: "Get the text content of the current page",
+    inputSchema: BrowserGetContentInputSchema,
+    outputSchema: BrowserStateOutputSchema,
+    resourceKeys: ["url"],
+    handler: async (input) => {
+      const script = `
+        const { chromium } = require('playwright');
+        (async () => {
+          const browser = await chromium.launch({ headless: ${mergedConfig.headless} });
+          const page = await browser.newPage({ viewport: ${JSON.stringify(mergedConfig.viewport)} });
+          await page.goto('${input.url}');
+          const content = await page.innerText('body');
+          console.log(content);
+          await browser.close();
+        })();
+      `;
 
-          const scriptPath = join(process.env.HOME || process.cwd(), ".openflow", "temp-browser-script.js");
-          await mkdir(join(process.env.HOME || process.cwd(), ".openflow"), { recursive: true });
-          await writeFile(scriptPath, script);
+      const scriptPath = join(process.env.HOME || process.cwd(), ".openflow", "temp-browser-script.js");
+      await mkdir(join(process.env.HOME || process.cwd(), ".openflow"), { recursive: true });
+      await writeFile(scriptPath, script);
 
-          try {
-            const { stdout } = await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
+      try {
+        const { stdout } = await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
 
-            currentState = { url };
+        currentState = { url: input.url };
 
-            return `Page content from ${url}:\n\n${stdout.slice(0, 5000)}${stdout.length > 5000 ? "\n...(truncated)" : ""}`;
-          } finally {
-            await cleanupTempScript(scriptPath);
-          }
-        } catch (error) {
-          return `Failed to get page content: ${(error as Error).message}`;
-        }
-      },
+        return {
+          url: input.url,
+          message: `Page content from ${input.url}:\n\n${stdout.slice(0, 5000)}${stdout.length > 5000 ? "\n...(truncated)" : ""}`,
+        };
+      } finally {
+        await cleanupTempScript(scriptPath);
+      }
     },
-  ];
+  });
+
+  return [browserNavigateTool, browserScreenshotTool, browserClickTool, browserFillTool, browserEvaluateTool, browserGetContentTool];
 }

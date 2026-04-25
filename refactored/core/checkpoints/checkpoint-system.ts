@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir, readdir, stat, unlink } from "node:fs/promises";
 import { join, resolve, dirname, basename } from "node:path";
 import { createHash } from "node:crypto";
+import { generateCheckpointId, CheckpointType } from "../state/checkpoint-id.js";
 
 export interface FileSnapshot {
   filePath: string;
@@ -60,7 +61,7 @@ export class CheckpointSystem {
     label?: string,
     metadata?: Record<string, unknown>
   ): Promise<Checkpoint> {
-    const id = `cp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const id = generateCheckpointId(CheckpointType.FILE);
     const snapshots: FileSnapshot[] = [];
 
     for (const filePath of filePaths) {

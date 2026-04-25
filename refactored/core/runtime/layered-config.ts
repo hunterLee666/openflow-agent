@@ -21,7 +21,16 @@ export interface OpenFlowSettings {
     allow?: string[];
     deny?: string[];
     additionalDirectories?: string[];
-    defaultMode?: "default" | "auto-accept" | "plan";
+    defaultMode?: "default" | "acceptEdits" | "plan" | "auto" | "dontAsk" | "bypassPermissions";
+    sandbox?: boolean;
+    rules?: Array<{
+      name: string;
+      action: "deny" | "ask" | "allow";
+      tool?: string;
+      pattern?: string;
+      pathRegex?: string;
+      note?: string;
+    }>;
   };
   hooks?: Record<string, Array<{ matcher: string; command: string; timeout?: number }>>;
   env?: Record<string, string>;
@@ -41,7 +50,7 @@ export interface AgentDefinition {
   tools?: string[];
   model?: string;
   skills?: string[];
-  permissionMode?: "default" | "accept-edits" | "bypass-permissions" | "plan";
+  permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "auto" | "dontAsk";
   source?: string;
 }
 

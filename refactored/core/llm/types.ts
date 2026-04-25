@@ -81,7 +81,41 @@ export interface LLMClientConfig {
   temperature?: number;
   timeout?: number;
   retryConfig?: Partial<RetryConfig>;
+  compactionHeaders?: Record<string, string>;
 }
+
+export interface CompactionProfile {
+  id: string;
+  name: string;
+  description: string;
+  headers: Record<string, string>;
+  supportedModels: string[];
+  enabled: boolean;
+}
+
+export const COMPACTION_PROFILES: Record<string, CompactionProfile> = {
+  "anthropic-compress": {
+    id: "anthropic-compress",
+    name: "Anthropic Compression",
+    description: "Anthropic 官方压缩头，支持 Opus 4.6 / Sonnet 4.6",
+    headers: {
+      "anthropic-beta": "prompt-caching-2024-07-31",
+      "x-compression": "anthropic-compress",
+    },
+    supportedModels: ["claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4-5", "claude-sonnet-4-5"],
+    enabled: true,
+  },
+  "openai-compress": {
+    id: "openai-compress",
+    name: "OpenAI Compression",
+    description: "OpenAI 上下文压缩支持",
+    headers: {
+      "x-openai-compress": "true",
+    },
+    supportedModels: ["gpt-4o", "gpt-4-turbo"],
+    enabled: false,
+  },
+};
 
 export interface ProviderConfig {
   name: string;

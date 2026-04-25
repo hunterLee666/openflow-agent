@@ -1,5 +1,15 @@
 import { EventEmitter } from "node:events";
 import type { ToolDefinition } from "../types/index.js";
+import { ExploreAgent } from "./explore-agent.js";
+import { PlanAgent } from "./plan-agent.js";
+import { VerificationAgent, VerificationVerdict } from "./verification-agent.js";
+import { AntiRecursionGuard } from "./anti-recursion.js";
+import { ForkPrefixOptimizer } from "./fork-prefix.js";
+import { MessageRouter } from "./message-router.js";
+import { WorkerConsciousnessInjector } from "./worker-consciousness.js";
+import { BUILTIN_AGENT_TYPES, TOOL_GROUPS, resolveAllowedTools, buildSystemPromptForType } from "./agent-types.js";
+export { BUILTIN_AGENT_TYPES, TOOL_GROUPS } from "./agent-types.js";
+export type { AgentTypeDefinition, WorkerAgent, SwarmAgent } from "./agent-types.js";
 
 export interface SubAgentContext {
   sessionId: string;
@@ -8,6 +18,8 @@ export interface SubAgentContext {
   conversationHistory: SubAgentMessage[];
   availableTools: ToolDefinition[];
   metadata: Record<string, unknown>;
+  depth?: number;
+  agentType?: string;
 }
 
 export interface SubAgentMessage {
@@ -33,6 +45,7 @@ export interface SubAgentTask {
   systemPrompt?: string;
   timeout?: number;
   maxTurns?: number;
+  mode?: "single" | "swarm" | "coordinator";
 }
 
 export interface SubAgentResult {
@@ -51,6 +64,10 @@ export interface SubAgentConfig {
   defaultTimeout: number;
   defaultMaxTurns: number;
   isolationLevel: "full" | "tools" | "context";
+  enableAntiRecursion: boolean;
+  enableForkPrefix: boolean;
+  enableWorkerConsciousness: boolean;
+  enableStructuredRouting: boolean;
 }
 
 export interface SubAgentStatus {
@@ -68,6 +85,13 @@ export class SubAgentSystem extends EventEmitter {
   private config: SubAgentConfig;
   private toolExecutor: ((toolName: string, args: Record<string, unknown>) => Promise<unknown>) | null = null;
   private llmProvider: ((messages: SubAgentMessage[], tools: ToolDefinition[]) => Promise<{ content: string; toolCalls?: SubAgentToolCall[] }>) | null = null;
+  private antiRecursionGuard: AntiRecursionGuard;
+  private forkPrefixOptimizer: ForkPrefixOptimizer;
+  private messageRouter: MessageRouter;
+  private workerConsciousness: WorkerConsciousnessInjector;
+  private exploreAgent: ExploreAgent;
+  private planAgent: PlanAgent;
+  private verificationAgent: VerificationAgent;
 
   constructor(config?: Partial<SubAgentConfig>) {
     super();
@@ -76,7 +100,19 @@ export class SubAgentSystem extends EventEmitter {
       defaultTimeout: config?.defaultTimeout || 120000,
       defaultMaxTurns: config?.defaultMaxTurns || 25,
       isolationLevel: config?.isolationLevel || "full",
+      enableAntiRecursion: config?.enableAntiRecursion !== false,
+      enableForkPrefix: config?.enableForkPrefix !== false,
+      enableWorkerConsciousness: config?.enableWorkerConsciousness !== false,
+      enableStructuredRouting: config?.enableStructuredRouting !== false,
     };
+
+    this.antiRecursionGuard = new AntiRecursionGuard();
+    this.forkPrefixOptimizer = new ForkPrefixOptimizer();
+    this.messageRouter = new MessageRouter();
+    this.workerConsciousness = new WorkerConsciousnessInjector();
+    this.exploreAgent = new ExploreAgent();
+    this.planAgent = new PlanAgent();
+    this.verificationAgent = new VerificationAgent();
   }
 
   setToolExecutor(executor: (toolName: string, args: Record<string, unknown>) => Promise<unknown>): void {
@@ -87,7 +123,7 @@ export class SubAgentSystem extends EventEmitter {
     this.llmProvider = provider;
   }
 
-  createAgentContext(sessionId: string, parentSessionId: string, projectDir: string, tools: ToolDefinition[]): SubAgentContext {
+  createAgentContext(sessionId: string, parentSessionId: string, projectDir: string, tools: ToolDefinition[], depth: number = 0, agentType: string = "general-purpose"): SubAgentContext {
     const context: SubAgentContext = {
       sessionId,
       parentSessionId,
@@ -98,7 +134,13 @@ export class SubAgentSystem extends EventEmitter {
         createdAt: Date.now(),
         parentSessionId,
       },
+      depth,
+      agentType,
     };
+
+    if (this.config.enableAntiRecursion) {
+      this.antiRecursionGuard.registerAgent(sessionId, parentSessionId, depth);
+    }
 
     this.agents.set(sessionId, context);
     return context;
@@ -107,10 +149,41 @@ export class SubAgentSystem extends EventEmitter {
   async execute(task: SubAgentTask, parentContext: SubAgentContext): Promise<SubAgentResult> {
     const startTime = Date.now();
     const agentId = `subagent_${task.id}_${Date.now()}`;
+    const depth = (parentContext.depth || 0) + 1;
+    const agentType = task.type || "general-purpose";
+    const mode = task.mode || this.inferMode(task, depth);
+
+    if (this.config.enableAntiRecursion) {
+      const typeDef = BUILTIN_AGENT_TYPES[agentType];
+      if (typeDef?.canSpawnSubagents === false && depth > 1) {
+        return {
+          taskId: task.id,
+          output: `Blocked: agent type "${agentType}" cannot spawn subagents`,
+          duration: Date.now() - startTime,
+          status: "error",
+          turns: 0,
+          toolCalls: 0,
+          error: `Agent type "${agentType}" does not support subagent spawning`,
+        };
+      }
+
+      const check = this.antiRecursionGuard.canSpawnSubagent(parentContext.sessionId || "", task);
+      if (!check.allowed) {
+        return {
+          taskId: task.id,
+          output: `Blocked by anti-recursion: ${check.reason}`,
+          duration: Date.now() - startTime,
+          status: "error",
+          turns: 0,
+          toolCalls: 0,
+          error: check.reason,
+        };
+      }
+    }
 
     const status: SubAgentStatus = {
       id: agentId,
-      type: task.type,
+      type: agentType,
       status: "running",
       startedAt: Date.now(),
       progress: "Initializing",
@@ -119,15 +192,27 @@ export class SubAgentSystem extends EventEmitter {
     this.statuses.set(agentId, status);
     this.emit("agent:start", { agentId, task });
 
-    const agentContext = this.createAgentContext(
-      agentId,
-      parentContext.sessionId,
-      parentContext.projectDir,
-      parentContext.availableTools
-    );
-
     try {
-      const result = await this.runAgent(task, agentContext, status);
+      let result: SubAgentResult;
+
+      switch (mode) {
+        case "single":
+          result = await this.executeSingleMode(task, parentContext, status, depth, agentType);
+          break;
+        case "swarm":
+          result = await this.executeSwarmMode(task, parentContext, status, depth, agentType);
+          break;
+        case "coordinator":
+          result = await this.executeCoordinatorMode(task, parentContext, status, depth, agentType);
+          break;
+        default:
+          result = await this.executeSingleMode(task, parentContext, status, depth, agentType);
+      }
+
+      if (this.config.enableStructuredRouting) {
+        const structured = this.messageRouter.parseStructuredResponse(result.output);
+        result.output = this.messageRouter.formatForParent(structured);
+      }
 
       status.status = "completed";
       status.completedAt = Date.now();
@@ -185,6 +270,353 @@ export class SubAgentSystem extends EventEmitter {
     return results;
   }
 
+  private async executeSingleMode(
+    task: SubAgentTask,
+    parentContext: SubAgentContext,
+    status: SubAgentStatus,
+    depth: number,
+    agentType: string
+  ): Promise<SubAgentResult> {
+    const agentContext = this.createAgentContext(
+      `subagent_${task.id}_${Date.now()}`,
+      parentContext.sessionId,
+      parentContext.projectDir,
+      parentContext.availableTools,
+      depth,
+      agentType
+    );
+
+    return this.runAgent(task, agentContext, status);
+  }
+
+  private async executeSwarmMode(
+    task: SubAgentTask,
+    parentContext: SubAgentContext,
+    status: SubAgentStatus,
+    depth: number,
+    agentType: string
+  ): Promise<SubAgentResult> {
+    const agentContext = this.createAgentContext(
+      `swarm_${task.id}_${Date.now()}`,
+      parentContext.sessionId,
+      parentContext.projectDir,
+      parentContext.availableTools,
+      depth,
+      agentType
+    );
+
+    agentContext.conversationHistory.push({
+      role: "system",
+      content: this.buildSystemPromptForAgentType(agentType, task),
+    });
+
+    agentContext.conversationHistory.push({
+      role: "user",
+      content: task.prompt,
+    });
+
+    const allowedTools = this.resolveAllowedTools(task, parentContext.availableTools);
+
+    if (!this.llmProvider) {
+      throw new Error("LLM provider not configured");
+    }
+
+    const startTime = Date.now();
+    const maxIterations = 5;
+    let iteration = 0;
+    let finalOutput = "";
+
+    while (iteration < maxIterations) {
+      iteration++;
+      status.progress = `Swarm iteration ${iteration}/${maxIterations}`;
+
+      const response = await this.llmProvider(agentContext.conversationHistory, allowedTools);
+
+      agentContext.conversationHistory.push({
+        role: "assistant",
+        content: response.content,
+        toolCalls: response.toolCalls,
+      });
+
+      if (response.toolCalls && response.toolCalls.length > 0) {
+        const handoffCall = response.toolCalls.find((tc) => tc.name.startsWith("handoff_to_"));
+
+        if (handoffCall) {
+          const targetAgentId = handoffCall.name.replace("handoff_to_", "");
+          const targetTypeDef = BUILTIN_AGENT_TYPES[targetAgentId];
+
+          if (targetTypeDef) {
+            agentContext.agentType = targetAgentId;
+            agentContext.conversationHistory[0] = {
+              role: "system",
+              content: this.buildSystemPromptForAgentType(targetAgentId, task),
+            };
+          }
+
+          for (const toolCall of response.toolCalls) {
+            if (this.toolExecutor) {
+              try {
+                const result = await this.toolExecutor(toolCall.name, toolCall.arguments);
+                agentContext.conversationHistory.push({
+                  role: "tool",
+                  content: JSON.stringify(result),
+                  toolCallId: toolCall.id,
+                });
+              } catch (error) {
+                agentContext.conversationHistory.push({
+                  role: "tool",
+                  content: `Error: ${(error as Error).message}`,
+                  toolCallId: toolCall.id,
+                });
+              }
+            }
+          }
+        } else {
+          for (const toolCall of response.toolCalls) {
+            if (this.toolExecutor) {
+              try {
+                const result = await this.toolExecutor(toolCall.name, toolCall.arguments);
+                agentContext.conversationHistory.push({
+                  role: "tool",
+                  content: JSON.stringify(result),
+                  toolCallId: toolCall.id,
+                });
+              } catch (error) {
+                agentContext.conversationHistory.push({
+                  role: "tool",
+                  content: `Error: ${(error as Error).message}`,
+                  toolCallId: toolCall.id,
+                });
+              }
+            }
+          }
+        }
+      } else {
+        finalOutput = response.content;
+        break;
+      }
+    }
+
+    return {
+      taskId: task.id,
+      output: finalOutput || agentContext.conversationHistory[agentContext.conversationHistory.length - 1]?.content || "",
+      duration: Date.now() - startTime,
+      status: "success",
+      turns: iteration,
+      toolCalls: agentContext.conversationHistory.filter((m) => m.toolCalls && m.toolCalls.length > 0).length,
+      metadata: {
+        mode: "swarm",
+        iterations: iteration,
+        agentType,
+        depth,
+      },
+    };
+  }
+
+  private async executeCoordinatorMode(
+    task: SubAgentTask,
+    parentContext: SubAgentContext,
+    status: SubAgentStatus,
+    depth: number,
+    agentType: string
+  ): Promise<SubAgentResult> {
+    const startTime = Date.now();
+
+    if (!this.llmProvider) {
+      throw new Error("LLM provider not configured");
+    }
+
+    const decomposition = await this.decomposeTask(task, parentContext);
+
+    const results = await this.executeSubtasks(decomposition, parentContext, depth);
+
+    const aggregatedOutput = this.aggregateResults(results, task);
+
+    return {
+      taskId: task.id,
+      output: aggregatedOutput,
+      duration: Date.now() - startTime,
+      status: "success",
+      turns: decomposition.subtasks.length,
+      toolCalls: results.reduce((sum, r) => sum + r.toolCalls, 0),
+      metadata: {
+        mode: "coordinator",
+        subtasksCount: decomposition.subtasks.length,
+        workersUsed: new Set(decomposition.subtasks.map((s) => s.assignedWorkerType)).size,
+        aggregationStrategy: "concat",
+        depth,
+      },
+    };
+  }
+
+  private async decomposeTask(
+    task: SubAgentTask,
+    parentContext: SubAgentContext
+  ): Promise<{ subtasks: Array<{ id: string; description: string; assignedWorkerType: string; dependencies: string[] }> }> {
+    if (!this.llmProvider) {
+      throw new Error("LLM provider not configured");
+    }
+
+    const availableTypes = Object.entries(BUILTIN_AGENT_TYPES)
+      .filter(([_, def]) => def.canSpawnSubagents !== false)
+      .map(([id, def]) => `- ${id}: ${def.description}`)
+      .join("\n");
+
+    const systemPrompt = `You are a task coordinator. Decompose complex tasks into subtasks and assign them to appropriate agent types.
+
+Available agent types:
+${availableTypes}
+
+Rules:
+1. Break down the task into logical subtasks
+2. Assign each subtask to the most suitable agent type
+3. Identify dependencies between subtasks
+4. Return the decomposition in JSON format`;
+
+    const messages: SubAgentMessage[] = [
+      { role: "system", content: systemPrompt },
+      {
+        role: "user",
+        content: `Task: ${task.description}\n\nDetails: ${task.prompt}\n\nPlease decompose this task and return JSON with this structure:
+{
+  "subtasks": [
+    {
+      "id": "subtask_1",
+      "description": "What needs to be done",
+      "assignedWorkerType": "agent_type_id",
+      "dependencies": []
+    }
+  ]
+}`,
+      },
+    ];
+
+    const response = await this.llmProvider(messages, []);
+
+    try {
+      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch (error) {
+      console.warn("Failed to parse task decomposition, using fallback:", error);
+    }
+
+    return {
+      subtasks: [
+        {
+          id: "subtask_1",
+          description: task.description,
+          assignedWorkerType: task.type || "general-purpose",
+          dependencies: [],
+        },
+      ],
+    };
+  }
+
+  private async executeSubtasks(
+    decomposition: { subtasks: Array<{ id: string; description: string; assignedWorkerType: string; dependencies: string[] }> },
+    parentContext: SubAgentContext,
+    depth: number
+  ): Promise<SubAgentResult[]> {
+    const results: SubAgentResult[] = [];
+    const completedIds = new Set<string>();
+
+    const executeSubtask = async (subtask: typeof decomposition.subtasks[0], currentDepth: number): Promise<SubAgentResult> => {
+      for (const depId of subtask.dependencies) {
+        if (!completedIds.has(depId)) {
+          const depSubtask = decomposition.subtasks.find((s) => s.id === depId);
+          if (depSubtask) {
+            await executeSubtask(depSubtask, currentDepth);
+          }
+        }
+      }
+
+      if (currentDepth >= this.antiRecursionGuard.getMaxDepth()) {
+        return {
+          taskId: subtask.id,
+          output: `Blocked: max delegation depth (${this.antiRecursionGuard.getMaxDepth()}) reached`,
+          duration: 0,
+          status: "error",
+          turns: 0,
+          toolCalls: 0,
+          error: `Anti-recursion: depth ${currentDepth} exceeds max ${this.antiRecursionGuard.getMaxDepth()}`,
+        };
+      }
+
+      const subAgentTask: SubAgentTask = {
+        id: subtask.id,
+        type: subtask.assignedWorkerType,
+        description: subtask.description,
+        prompt: subtask.description,
+        timeout: 60000,
+        maxTurns: 15,
+      };
+
+      const childContext: SubAgentContext = {
+        ...parentContext,
+        sessionId: `coordinator_${subtask.id}`,
+        depth: currentDepth,
+        agentType: subtask.assignedWorkerType,
+      };
+
+      const result = await this.executeSingleMode(subAgentTask, childContext, {
+        id: `coordinator_${subtask.id}`,
+        type: subtask.assignedWorkerType,
+        status: "running",
+        startedAt: Date.now(),
+        progress: "Executing subtask",
+      }, currentDepth, subtask.assignedWorkerType);
+
+      completedIds.add(subtask.id);
+      return result;
+    };
+
+    const independentSubtasks = decomposition.subtasks.filter((s) => s.dependencies.length === 0);
+    const dependentSubtasks = decomposition.subtasks.filter((s) => s.dependencies.length > 0);
+
+    const independentResults = await Promise.allSettled(
+      independentSubtasks.map((s) => executeSubtask(s, depth))
+    );
+
+    for (const result of independentResults) {
+      if (result.status === "fulfilled") {
+        results.push(result.value);
+      }
+    }
+
+    for (const subtask of dependentSubtasks) {
+      try {
+        const result = await executeSubtask(subtask, depth);
+        results.push(result);
+      } catch (error) {
+        results.push({
+          taskId: subtask.id,
+          output: "",
+          duration: 0,
+          status: "error",
+          turns: 0,
+          toolCalls: 0,
+          error: (error as Error).message,
+        });
+      }
+    }
+
+    return results;
+  }
+
+  private aggregateResults(results: SubAgentResult[], task: SubAgentTask): string {
+    const parts: string[] = [];
+
+    for (const result of results) {
+      if (result.status === "success" && result.output) {
+        parts.push(`## ${result.taskId}\n\n${result.output}`);
+      }
+    }
+
+    return parts.join("\n\n---\n\n") || "No successful results.";
+  }
+
   private async runAgent(
     task: SubAgentTask,
     context: SubAgentContext,
@@ -196,7 +628,23 @@ export class SubAgentSystem extends EventEmitter {
 
     const allowedTools = this.resolveAllowedTools(task, context.availableTools);
 
-    const systemPrompt = task.systemPrompt || this.buildSystemPrompt(task);
+    let systemPrompt = task.systemPrompt || this.buildSystemPromptForAgentType(context.agentType || task.type, task);
+
+    if (this.config.enableForkPrefix) {
+      task.description = this.forkPrefixOptimizer.formatDescription(task.description);
+      task.prompt = this.forkPrefixOptimizer.formatPrompt(task.description, task.prompt);
+      this.forkPrefixOptimizer.trackPrefix(task.description);
+    }
+
+    const typeDef = BUILTIN_AGENT_TYPES[context.agentType];
+    if (this.config.enableWorkerConsciousness && typeDef?.canSpawnSubagents === false) {
+      systemPrompt = this.workerConsciousness.inject(systemPrompt);
+    }
+
+    if (this.config.enableAntiRecursion && context.depth !== undefined) {
+      const warning = this.antiRecursionGuard.formatAntiRecursionWarning(context.depth);
+      systemPrompt += `\n${warning}`;
+    }
 
     context.conversationHistory.push({
       role: "system",
@@ -262,9 +710,22 @@ export class SubAgentSystem extends EventEmitter {
         } else {
           const duration = Date.now() - startTime;
 
+          let output = response.content;
+          if (this.config.enableForkPrefix) {
+            output = this.forkPrefixOptimizer.formatCompletion(output);
+          }
+
+          const currentTypeDef = BUILTIN_AGENT_TYPES[context.agentType];
+          if (this.config.enableWorkerConsciousness && currentTypeDef?.canSpawnSubagents === false) {
+            const validation = this.workerConsciousness.validateResponse(output);
+            if (!validation.valid) {
+              output += `\n\nViolations: ${validation.violations.join("; ")}`;
+            }
+          }
+
           return {
             taskId: task.id,
-            output: response.content,
+            output,
             duration,
             status: "success",
             turns: turnCount,
@@ -272,6 +733,8 @@ export class SubAgentSystem extends EventEmitter {
             metadata: {
               sessionId: context.sessionId,
               conversationLength: context.conversationHistory.length,
+              depth: context.depth,
+              agentType: context.agentType,
             },
           };
         }
@@ -286,6 +749,8 @@ export class SubAgentSystem extends EventEmitter {
         toolCalls: toolCallCount,
         metadata: {
           maxTurnsReached: true,
+          depth: context.depth,
+          agentType: context.agentType,
         },
       };
     })();
@@ -306,31 +771,14 @@ export class SubAgentSystem extends EventEmitter {
   }
 
   private resolveAllowedTools(task: SubAgentTask, availableTools: ToolDefinition[]): ToolDefinition[] {
-    if (!task.allowedTools || task.allowedTools.length === 0) {
-      return availableTools;
-    }
-
-    const toolNames = new Set<string>();
-
-    for (const toolRef of task.allowedTools) {
-      if (toolRef.startsWith("group:")) {
-        const groupTools = TOOL_GROUPS[toolRef];
-        if (groupTools) {
-          for (const t of groupTools) {
-            toolNames.add(t);
-          }
-        }
-      } else {
-        toolNames.add(toolRef);
-      }
-    }
-
-    return availableTools.filter((t) => toolNames.has(t.name));
+    return resolveAllowedTools(task.type || "general-purpose", task.allowedTools, availableTools);
   }
 
-  private buildSystemPrompt(task: SubAgentTask): string {
+  private buildSystemPromptForAgentType(agentType: string, task: SubAgentTask): string {
+    const basePrompt = buildSystemPromptForType(agentType);
+
     const parts = [
-      `You are a specialized sub-agent of type "${task.type}".`,
+      basePrompt,
       "",
       `Task: ${task.description}`,
       "",
@@ -347,6 +795,26 @@ export class SubAgentSystem extends EventEmitter {
     }
 
     return parts.join("\n");
+  }
+
+  private inferMode(task: SubAgentTask, depth: number): "single" | "swarm" | "coordinator" {
+    if (task.mode) return task.mode;
+
+    const description = `${task.description} ${task.prompt}`.toLowerCase();
+
+    const hasMultipleSubtasks = /\band\b.*\band\b/i.test(description) || /\bstep\s*\d/i.test(description) || /\b\d+\.\s/.test(description);
+    const requiresParallelism = /\bparallel/i.test(description) || /\bconcurrent/i.test(description);
+    const hasDependencies = /\bdepend.*on\b/i.test(description) || /\brequires?\b/i.test(description);
+
+    if (requiresParallelism || (hasMultipleSubtasks && hasDependencies)) {
+      return "coordinator";
+    }
+
+    if (hasMultipleSubtasks && depth < 2) {
+      return "swarm";
+    }
+
+    return "single";
   }
 
   cancelAgent(agentId: string): boolean {
@@ -389,39 +857,32 @@ export class SubAgentSystem extends EventEmitter {
     }
     return count;
   }
+
+  getAntiRecursionGuard(): AntiRecursionGuard {
+    return this.antiRecursionGuard;
+  }
+
+  getForkPrefixOptimizer(): ForkPrefixOptimizer {
+    return this.forkPrefixOptimizer;
+  }
+
+  getMessageRouter(): MessageRouter {
+    return this.messageRouter;
+  }
+
+  getWorkerConsciousness(): WorkerConsciousnessInjector {
+    return this.workerConsciousness;
+  }
+
+  getExploreAgent(): ExploreAgent {
+    return this.exploreAgent;
+  }
+
+  getPlanAgent(): PlanAgent {
+    return this.planAgent;
+  }
+
+  getVerificationAgent(): VerificationAgent {
+    return this.verificationAgent;
+  }
 }
-
-export const BUILTIN_AGENT_TYPES: Record<string, { description: string; defaultTools?: string[] }> = {
-  "general-purpose": {
-    description: "General-purpose sub-agent for research, code search, and analysis",
-  },
-  "statusline-setup": {
-    description: "Configures the status line display format",
-    defaultTools: ["Read", "Write"],
-  },
-  "output-style-setup": {
-    description: "Configures the output style and formatting",
-    defaultTools: ["Read", "Write"],
-  },
-  "code-reviewer": {
-    description: "Reviews code for quality, security, and best practices",
-    defaultTools: ["Read", "Grep", "Glob"],
-  },
-  "test-runner": {
-    description: "Runs tests and reports results",
-    defaultTools: ["Bash", "Read", "Glob"],
-  },
-  "file-organizer": {
-    description: "Organizes and structures project files",
-    defaultTools: ["Read", "Write", "Edit", "LS", "Glob"],
-  },
-};
-
-export const TOOL_GROUPS: Record<string, string[]> = {
-  "group:fs": ["Read", "Write", "Edit", "MultiEdit", "NotebookEdit", "LS"],
-  "group:search": ["Glob", "Grep"],
-  "group:runtime": ["Bash", "BashOutput", "KillShell"],
-  "group:web": ["WebFetch", "WebSearch"],
-  "group:utility": ["TodoWrite", "ExitPlanMode", "SlashCommand", "Task"],
-  "group:git": ["git_status", "git_diff", "git_log", "git_branch"],
-};

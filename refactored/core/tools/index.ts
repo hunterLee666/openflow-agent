@@ -13,31 +13,41 @@ import { createCommunicationTools } from "./communication-tools.js";
 import { createDatabaseTools } from "./database-tools.js";
 import { createIDETools } from "./ide-tools.js";
 import { createCronTools } from "./cron-tools.js";
+import { createToolSearchTool } from "./tool-search-tool.js";
+import { ToolManualRegistry } from "./tool-manual-registry.js";
 import type { CommandRegistry } from "../commands/command-registry.js";
 import type { CronScheduler } from "../scheduler/cron-scheduler.js";
 
-export { createFileTools } from "./file-tools.js";
+export { createFileTools, type FileConfig } from "./file-tools.js";
 export { createGitTools } from "./git-tools.js";
-export { createSearchTools } from "./search-tools.js";
-export { createBashTools } from "./bash-tools.js";
-export { createAgentTool } from "./agent-tool.js";
-export { createWebTools } from "./web-tools.js";
-export { createUtilityTools } from "./utility-tools.js";
-export { createMultimediaTools } from "./multimedia-tools.js";
+export { createSearchTools, type GlobToolInput, type GrepToolInput } from "./search-tools.js";
+export { createBashTools, type BashToolInput, type BashOutputInput, type KillShellInput } from "./bash-tools.js";
+export { createAgentTool, type AgentToolManifest } from "./agent-tool.js";
+export { createWebTools, type WebFetchInput, type WebSearchInput } from "./web-tools.js";
+export { createUtilityTools, type TodoItem, type TodoWriteInput, type ExitPlanModeInput, type SlashCommandInput, type TaskInput, getTodoState, resetTodoState } from "./utility-tools.js";
+export { createMultimediaTools, type MediaAnalysisResult } from "./multimedia-tools.js";
 export { createBrowserTools, type BrowserConfig, type BrowserState } from "./browser-tools.js";
 export { createGitHubTools, type GitHubConfig } from "./github-tools.js";
 export { createCommunicationTools, type CommunicationConfig } from "./communication-tools.js";
 export { createDatabaseTools, type DatabaseConfig } from "./database-tools.js";
 export { createIDETools, type IDEConfig } from "./ide-tools.js";
 export { createCronTools } from "./cron-tools.js";
-
-export type { AgentToolManifest } from "./agent-tool.js";
-export type { GlobToolInput, GrepToolInput } from "./search-tools.js";
-export type { BashToolInput, BashOutputInput, KillShellInput } from "./bash-tools.js";
-export type { WebFetchInput, WebSearchInput } from "./web-tools.js";
-export type { TodoItem, TodoWriteInput, ExitPlanModeInput, SlashCommandInput, TaskInput } from "./utility-tools.js";
-export type { MediaAnalysisResult } from "./multimedia-tools.js";
-export { getTodoState, resetTodoState } from "./utility-tools.js";
+export { createToolSearchTool, type ToolSearchToolConfig } from "./tool-search-tool.js";
+export { ToolManualRegistry, type ToolManualEntry, type ToolManualIndex } from "./tool-manual-registry.js";
+export { defineTool, createReadOnlyTool, createWriteTool, type ToolConfig, type SafetyFlags } from "./tool-factory.js";
+export {
+  validateWithZod,
+  validateOutputWithZod,
+  formatValidationForModel,
+  createInputValidationError,
+  createOutputValidationError,
+  createValidationFailure,
+  createValidationSuccess,
+  type ToolValidationError,
+  type ValidationResult,
+  type ToolValidationContext,
+  type InputValidator,
+} from "./validation.js";
 
 export const BUILTIN_TOOL_NAMES = [
   "Read",
@@ -57,6 +67,7 @@ export const BUILTIN_TOOL_NAMES = [
   "ExitPlanMode",
   "SlashCommand",
   "Task",
+  "ToolSearch",
   "git_status",
   "git_diff",
   "git_log",
@@ -168,6 +179,9 @@ export function createAllTools(workspaceRoot: string, commandRegistry?: CommandR
   const ideTools = createIDETools({ workspaceRoot });
   const cronTools = cronScheduler ? createCronTools(cronScheduler) : [];
 
+  const manualRegistry = new ToolManualRegistry();
+  const toolSearchTool = createToolSearchTool({ manualRegistry });
+
   return [
     ...fileTools,
     ...searchTools,
@@ -182,5 +196,6 @@ export function createAllTools(workspaceRoot: string, commandRegistry?: CommandR
     ...databaseTools,
     ...ideTools,
     ...cronTools,
+    toolSearchTool,
   ];
 }
