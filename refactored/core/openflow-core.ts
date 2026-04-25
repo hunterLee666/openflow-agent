@@ -1,6 +1,7 @@
 import type { CapabilityContext, CapabilitySource, ToolDefinition } from "./types/index.js";
 import { PluginManager } from "./plugins/index.js";
-import { MemoryCore } from "./memory/memory-core.js";
+import { EnhancedMemoryCore, createEnhancedMemoryCore } from "./memory/enhanced-memory-core.js";
+import type { EnhancedMemoryCore as EnhancedMemoryCoreType } from "./memory/enhanced-memory-core.js";
 import { GEPASelfEvolution } from "./evolution/index.js";
 import { SubAgentSystem } from "./agents/index.js";
 import { UnifiedEngine } from "./runtime/unified-engine.js";
@@ -83,7 +84,7 @@ export interface OpenFlowConfig {
 
 export class OpenFlowCore {
   private pluginManager: PluginManager;
-  private memoryCore: MemoryCore;
+  private memoryCore: EnhancedMemoryCoreType;
   private gepa: GEPASelfEvolution;
   private subAgentSystem: SubAgentSystem;
   private unifiedEngine: UnifiedEngine;
@@ -118,8 +119,13 @@ export class OpenFlowCore {
         },
       },
     });
-    this.memoryCore = new MemoryCore(config.memoryDir, {
-      interval: config.nudgeInterval || 30,
+    this.memoryCore = createEnhancedMemoryCore({
+      memoryDir: config.memoryDir,
+      enableVectorSearch: true,
+      vectorBackend: "hnsw",
+      enableKnowledgeGraph: true,
+      enableConfidenceScoring: true,
+      enableConsolidationScheduler: true,
     });
     this.gepa = new GEPASelfEvolution(context, {
       skillDir: `${config.memoryDir}/skills`,
@@ -195,6 +201,20 @@ export class OpenFlowCore {
   async initialize(): Promise<void> {
     await this.memoryCore.initialize();
     await this.cronScheduler.initialize();
+
+    if (this.config.llmConfig?.apiKey) {
+      const llmClient = createLLMClient({
+        apiKey: this.config.llmConfig.apiKey,
+        providerConfig: {},
+        provider: this.config.llmConfig.provider,
+        baseUrl: this.config.llmConfig.baseUrl,
+        model: this.config.llmConfig.model,
+        maxTokens: this.config.llmConfig.maxTokens,
+        temperature: this.config.llmConfig.temperature,
+        timeout: this.config.llmConfig.timeout,
+      });
+      this.memoryCore.setLLMClient(llmClient);
+    }
 
     if (this.config.pluginSources.length > 0) {
       const basePath = this.config.workspaceRoot;
@@ -394,7 +414,7 @@ export class OpenFlowCore {
     return this.commandRegistry;
   }
 
-  getMemoryCore(): MemoryCore {
+  getMemoryCore(): EnhancedMemoryCoreType {
     return this.memoryCore;
   }
 
@@ -659,6 +679,7 @@ export class OpenFlowCore {
       config: queryConfig,
       abortSignal: this.abortController.signal,
       onStreamEvent: onEvent,
+      memoryCore: this.memoryCore,
     };
 
     const gen = query(input, ctx);

@@ -1,6 +1,6 @@
 import type { CapabilityContext, CapabilityPlugin } from "../types/index.js";
 import { CapabilityType, CapabilityStatus } from "../types/index.js";
-import type { SkillDocument } from "../memory/memory-core.js";
+import type { SkillDocument } from "../memory/enhanced-memory-core.js";
 import type { ProceduralMemory } from "../memory/procedural-memory.js";
 
 export interface GEPAConfig {

@@ -4,6 +4,8 @@ import type { SessionManager } from "../session/session.js";
 import { compactMessages, shouldCompact, estimateTokenCount, tier1MicroCompaction, COMPACT_TOKEN_BUDGET, estimateCost, buildTier3SummaryPrompt, formatTier3Summary, type Tier3Summary } from "../compaction/index.js";
 import { FourteenStepGovernancePipeline, type GovernanceContext, type GovernanceHooks } from "../governance/index.js";
 import { HookSystem, type HookContext, type HookResult, type HookEvent } from "../hooks/index.js";
+import type { EnhancedMemoryCore } from "../memory/enhanced-memory-core.js";
+import type { IntentRecognitionResult, SafetyLevel } from "../memory/intent-recognizer.js";
 
 export interface QueryInput {
   message: string;
@@ -71,6 +73,7 @@ export interface QueryContext {
   hooks?: GovernanceHooks;
   governancePipeline?: FourteenStepGovernancePipeline;
   hookSystem?: HookSystem;
+  memoryCore?: EnhancedMemoryCore;
 }
 
 export async function* query(
@@ -78,6 +81,23 @@ export async function* query(
   ctx: QueryContext,
 ): AsyncGenerator<StreamEvent, QueryResult, undefined> {
   const threadId = input.threadId || (await ctx.session.createSession());
+
+  let intentResult: IntentRecognitionResult | undefined;
+  if (ctx.memoryCore && input.message) {
+    intentResult = await ctx.memoryCore.recognizeIntent(input.message);
+
+    if (intentResult.safetyLevel === SafetyLevel.BLOCKED) {
+      yield { kind: "error", error: intentResult.clarificationQuestion || "此操作被安全策略阻止。" };
+      return {
+        threadId,
+        turn: 0,
+        content: "",
+        toolCalls: [],
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        stopReason: "blocked",
+      };
+    }
+  }
 
   const initialState: QueryState = {
     turn: 0,
@@ -98,7 +118,7 @@ export async function* query(
   }
 
   try {
-    const result = yield* queryLoop(initialState, ctx, input.tools, input.systemPrompt);
+    const result = yield* queryLoop(initialState, ctx, input.tools, input.systemPrompt, intentResult);
     await ctx.session.saveSession(threadId, initialState.messages);
     return result;
   } catch (error) {
@@ -112,6 +132,7 @@ async function* queryLoop(
   ctx: QueryContext,
   tools?: LLMToolDefinition[],
   systemPrompt?: string,
+  intentResult?: IntentRecognitionResult,
 ): AsyncGenerator<StreamEvent, QueryResult, undefined> {
   while (true) {
     if (ctx.abortSignal.aborted) {
@@ -190,6 +211,9 @@ async function* queryLoop(
 
     if (toolUses.length === 0) {
       const finalText = extractVisibleText(assistantMsg);
+      if (ctx.memoryCore) {
+        await ctx.memoryCore.recordAssistantResponse(finalText);
+      }
       return finalizeResult(state, "completed", undefined, finalText);
     }
 
