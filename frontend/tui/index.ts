@@ -72,10 +72,10 @@ export * from "./layout/engine.js";
 export { clearScreen as clearScreenFromScreen } from "./render/screen.js";
 export * from "./render/output.js";
 
-export { Cursor as FrameCursor } from "./render/frame.js";
+export type { Cursor as FrameCursor } from "./render/frame.js";
 export type { Frame, Patch, Diff, FrameEvent } from "./render/frame.js";
 export { diffFrames, createFrame } from "./render/frame.js";
-export { Color as ThemeColor } from "./theme/theme.js";
+export type { Color as ThemeColor } from "./theme/theme.js";
 
 export * from "./hooks/useInput.js";
 export * from "./hooks/useTerminalSize.js";
@@ -92,7 +92,7 @@ export { parseEsc, ESC_SEQUENCES, isEscSequence, isTwoCharEsc, type EscAction } 
 export { createTokenizer, createParser } from "./termio/parser.js"
 export type { Token, Tokenizer } from "./termio/parser.js"
 export { Parser } from "./termio/parser.js"
-export { Color as TermioColor, type Grapheme, type TextStyle, type Cell, type Action, type CursorAction, type NamedColor } from "./termio/types.js"
+export type { Color as TermioColor, Grapheme, TextStyle, Cell, Action, CursorAction, NamedColor } from "./termio/types.js"
 
 export * from "./animation.js";
 
