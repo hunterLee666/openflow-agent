@@ -6,6 +6,8 @@ export { DingTalkAdapter, createDingTalkAdapter } from "./dingtalk-adapter.js";
 export { FeishuAdapter, createFeishuAdapter } from "./feishu-adapter.js";
 export { WeComAdapter, createWeComAdapter } from "./wecom-adapter.js";
 export { WhatsAppAdapter, createWhatsAppAdapter } from "./whatsapp-adapter.js";
+export { LineAdapter, createLineAdapter } from "./line-adapter.js";
+export { WeChatAdapter, createWeChatAdapter } from "./wechat-adapter.js";
 export type {
   PlatformType,
   MessageType,

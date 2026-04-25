@@ -5,6 +5,8 @@ import { DingTalkAdapter, createDingTalkAdapter } from "./dingtalk-adapter.js";
 import { FeishuAdapter, createFeishuAdapter } from "./feishu-adapter.js";
 import { WeComAdapter, createWeComAdapter } from "./wecom-adapter.js";
 import { WhatsAppAdapter, createWhatsAppAdapter } from "./whatsapp-adapter.js";
+import { LineAdapter, createLineAdapter } from "./line-adapter.js";
+import { WeChatAdapter, createWeChatAdapter } from "./wechat-adapter.js";
 
 export class MessagingGateway {
   private config: GatewayConfig;
@@ -143,6 +145,10 @@ export class MessagingGateway {
         return createWeComAdapter(config);
       case "whatsapp":
         return createWhatsAppAdapter(config);
+      case "line":
+        return createLineAdapter(config);
+      case "wechat":
+        return createWeChatAdapter(config);
       default:
         throw new Error(`Unsupported platform: ${config.platform}`);
     }
