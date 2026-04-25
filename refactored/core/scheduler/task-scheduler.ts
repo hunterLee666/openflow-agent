@@ -38,7 +38,7 @@ export interface TaskSchedulerConfig {
 }
 
 const DEFAULT_CONFIG: TaskSchedulerConfig = {
-  dataDir: ".openflow/tasks",
+  dataDir: process.env.HOME ? `${process.env.HOME}/.openflow/tasks` : ".openflow/tasks",
   maxHistory: 100,
   maxConcurrent: 5,
 };

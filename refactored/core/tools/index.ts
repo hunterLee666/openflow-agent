@@ -12,7 +12,9 @@ import { createGitHubTools } from "./github-tools.js";
 import { createCommunicationTools } from "./communication-tools.js";
 import { createDatabaseTools } from "./database-tools.js";
 import { createIDETools } from "./ide-tools.js";
+import { createCronTools } from "./cron-tools.js";
 import type { CommandRegistry } from "../commands/command-registry.js";
+import type { CronScheduler } from "../scheduler/cron-scheduler.js";
 
 export { createFileTools } from "./file-tools.js";
 export { createGitTools } from "./git-tools.js";
@@ -27,6 +29,7 @@ export { createGitHubTools, type GitHubConfig } from "./github-tools.js";
 export { createCommunicationTools, type CommunicationConfig } from "./communication-tools.js";
 export { createDatabaseTools, type DatabaseConfig } from "./database-tools.js";
 export { createIDETools, type IDEConfig } from "./ide-tools.js";
+export { createCronTools } from "./cron-tools.js";
 
 export type { AgentToolManifest } from "./agent-tool.js";
 export type { GlobToolInput, GrepToolInput } from "./search-tools.js";
@@ -90,6 +93,16 @@ export const BUILTIN_TOOL_NAMES = [
   "TypeCheck",
   "GetDiagnostics",
   "RunTests",
+  "CronCreate",
+  "CronList",
+  "CronDelete",
+  "CronPause",
+  "CronResume",
+  "CronRunNow",
+  "CronStatus",
+  "CronHistory",
+  "CronEdit",
+  "CronStats",
 ];
 
 export const TOOL_GROUPS: Record<string, string[]> = {
@@ -105,6 +118,7 @@ export const TOOL_GROUPS: Record<string, string[]> = {
   "group:communication": ["SlackSend", "DiscordSend", "TelegramSend", "EmailSend"],
   "group:database": ["DatabaseQuery", "DatabaseSchema", "DatabaseMigrate", "DatabaseSeed"],
   "group:ide": ["LintCheck", "FormatCheck", "TypeCheck", "GetDiagnostics", "RunTests"],
+  "group:cron": ["CronCreate", "CronList", "CronDelete", "CronPause", "CronResume", "CronRunNow", "CronStatus", "CronHistory", "CronEdit", "CronStats"],
 };
 
 export const TOOL_PROFILES: Record<string, string[]> = {
@@ -139,7 +153,7 @@ export function resolveToolProfile(profile: string): string[] {
   return [...new Set(resolved)];
 }
 
-export function createAllTools(workspaceRoot: string, commandRegistry?: CommandRegistry): ToolDefinition[] {
+export function createAllTools(workspaceRoot: string, commandRegistry?: CommandRegistry, cronScheduler?: CronScheduler): ToolDefinition[] {
   const fileTools = createFileTools(workspaceRoot);
   const searchTools = createSearchTools(workspaceRoot);
   const bashTools = createBashTools();
@@ -152,6 +166,7 @@ export function createAllTools(workspaceRoot: string, commandRegistry?: CommandR
   const communicationTools = createCommunicationTools();
   const databaseTools = createDatabaseTools();
   const ideTools = createIDETools({ workspaceRoot });
+  const cronTools = cronScheduler ? createCronTools(cronScheduler) : [];
 
   return [
     ...fileTools,
@@ -166,5 +181,6 @@ export function createAllTools(workspaceRoot: string, commandRegistry?: CommandR
     ...communicationTools,
     ...databaseTools,
     ...ideTools,
+    ...cronTools,
   ];
 }

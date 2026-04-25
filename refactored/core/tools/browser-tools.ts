@@ -1,7 +1,7 @@
 import type { ToolDefinition } from "../types/index.js";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdir, writeFile, readFile, stat } from "node:fs/promises";
+import { mkdir, writeFile, readFile, stat, unlink, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 const execAsync = promisify(exec);
@@ -11,6 +11,7 @@ export interface BrowserConfig {
   viewport?: { width: number; height: number };
   timeout?: number;
   screenshotDir?: string;
+  maxScreenshots?: number;
 }
 
 export interface BrowserState {
@@ -24,8 +25,31 @@ const DEFAULT_CONFIG: Required<BrowserConfig> = {
   headless: true,
   viewport: { width: 1280, height: 720 },
   timeout: 30000,
-  screenshotDir: ".openflow/screenshots",
+  screenshotDir: process.env.HOME ? `${process.env.HOME}/.openflow/screenshots` : ".openflow/screenshots",
+  maxScreenshots: 10,
 };
+
+async function cleanupOldScreenshots(screenshotDir: string, maxScreenshots: number): Promise<void> {
+  try {
+    const files = await readdir(screenshotDir);
+    const screenshots = files.filter((f) => f.endsWith(".png")).sort();
+
+    if (screenshots.length > maxScreenshots) {
+      const toDelete = screenshots.slice(0, screenshots.length - maxScreenshots);
+      await Promise.all(toDelete.map((f) => unlink(join(screenshotDir, f))));
+    }
+  } catch {
+    // Ignore cleanup errors
+  }
+}
+
+async function cleanupTempScript(scriptPath: string): Promise<void> {
+  try {
+    await unlink(scriptPath);
+  } catch {
+    // Ignore cleanup errors
+  }
+}
 
 export function createBrowserTools(config: BrowserConfig = {}): ToolDefinition[] {
   const mergedConfig = { ...DEFAULT_CONFIG, ...config };
@@ -47,12 +71,15 @@ export function createBrowserTools(config: BrowserConfig = {}): ToolDefinition[]
         const { url } = input as { url: string };
 
         try {
-          const screenshotPath = join(process.cwd(), mergedConfig.screenshotDir, `screenshot-${Date.now()}.png`);
-          await mkdir(join(process.cwd(), mergedConfig.screenshotDir), { recursive: true });
+          await mkdir(mergedConfig.screenshotDir, { recursive: true });
+
+          const screenshotPath = join(mergedConfig.screenshotDir, `screenshot-${Date.now()}.png`);
 
           const command = `npx playwright screenshot --viewport-size="${mergedConfig.viewport.width},${mergedConfig.viewport.height}" ${mergedConfig.headless ? "--full-page" : ""} "${url}" "${screenshotPath}"`;
 
           await execAsync(command, { timeout: mergedConfig.timeout });
+
+          await cleanupOldScreenshots(mergedConfig.screenshotDir, mergedConfig.maxScreenshots);
 
           currentState = {
             url,
@@ -90,12 +117,15 @@ export function createBrowserTools(config: BrowserConfig = {}): ToolDefinition[]
         }
 
         try {
-          const screenshotPath = join(process.cwd(), mergedConfig.screenshotDir, `screenshot-${Date.now()}.png`);
-          await mkdir(join(process.cwd(), mergedConfig.screenshotDir), { recursive: true });
+          await mkdir(mergedConfig.screenshotDir, { recursive: true });
+
+          const screenshotPath = join(mergedConfig.screenshotDir, `screenshot-${Date.now()}.png`);
 
           const command = `npx playwright screenshot ${fullPage ? "--full-page" : ""} --viewport-size="${mergedConfig.viewport.width},${mergedConfig.viewport.height}" "${targetUrl}" "${screenshotPath}"`;
 
           await execAsync(command, { timeout: mergedConfig.timeout });
+
+          await cleanupOldScreenshots(mergedConfig.screenshotDir, mergedConfig.maxScreenshots);
 
           if (currentState) {
             currentState.screenshotPath = screenshotPath;
@@ -135,11 +165,15 @@ export function createBrowserTools(config: BrowserConfig = {}): ToolDefinition[]
             })();
           `;
 
-          const scriptPath = join(process.cwd(), ".openflow", "temp-browser-script.js");
-          await mkdir(join(process.cwd(), ".openflow"), { recursive: true });
+          const scriptPath = join(process.env.HOME || process.cwd(), ".openflow", "temp-browser-script.js");
+          await mkdir(join(process.env.HOME || process.cwd(), ".openflow"), { recursive: true });
           await writeFile(scriptPath, script);
 
-          await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
+          try {
+            await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
+          } finally {
+            await cleanupTempScript(scriptPath);
+          }
 
           return `Clicked element '${selector}' on ${url}`;
         } catch (error) {
@@ -175,11 +209,15 @@ export function createBrowserTools(config: BrowserConfig = {}): ToolDefinition[]
             })();
           `;
 
-          const scriptPath = join(process.cwd(), ".openflow", "temp-browser-script.js");
-          await mkdir(join(process.cwd(), ".openflow"), { recursive: true });
+          const scriptPath = join(process.env.HOME || process.cwd(), ".openflow", "temp-browser-script.js");
+          await mkdir(join(process.env.HOME || process.cwd(), ".openflow"), { recursive: true });
           await writeFile(scriptPath, script);
 
-          await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
+          try {
+            await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
+          } finally {
+            await cleanupTempScript(scriptPath);
+          }
 
           return `Filled '${selector}' with value on ${url}`;
         } catch (error) {
@@ -215,13 +253,16 @@ export function createBrowserTools(config: BrowserConfig = {}): ToolDefinition[]
             })();
           `;
 
-          const scriptPath = join(process.cwd(), ".openflow", "temp-browser-script.js");
-          await mkdir(join(process.cwd(), ".openflow"), { recursive: true });
+          const scriptPath = join(process.env.HOME || process.cwd(), ".openflow", "temp-browser-script.js");
+          await mkdir(join(process.env.HOME || process.cwd(), ".openflow"), { recursive: true });
           await writeFile(scriptPath, tempScript);
 
-          const { stdout } = await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
-
-          return `Script executed successfully.\nResult: ${stdout}`;
+          try {
+            const { stdout } = await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
+            return `Script executed successfully.\nResult: ${stdout}`;
+          } finally {
+            await cleanupTempScript(scriptPath);
+          }
         } catch (error) {
           return `Failed to execute script: ${(error as Error).message}`;
         }
@@ -254,15 +295,19 @@ export function createBrowserTools(config: BrowserConfig = {}): ToolDefinition[]
             })();
           `;
 
-          const scriptPath = join(process.cwd(), ".openflow", "temp-browser-script.js");
-          await mkdir(join(process.cwd(), ".openflow"), { recursive: true });
+          const scriptPath = join(process.env.HOME || process.cwd(), ".openflow", "temp-browser-script.js");
+          await mkdir(join(process.env.HOME || process.cwd(), ".openflow"), { recursive: true });
           await writeFile(scriptPath, script);
 
-          const { stdout } = await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
+          try {
+            const { stdout } = await execAsync(`node "${scriptPath}"`, { timeout: mergedConfig.timeout });
 
-          currentState = { url };
+            currentState = { url };
 
-          return `Page content from ${url}:\n\n${stdout.slice(0, 5000)}${stdout.length > 5000 ? "\n...(truncated)" : ""}`;
+            return `Page content from ${url}:\n\n${stdout.slice(0, 5000)}${stdout.length > 5000 ? "\n...(truncated)" : ""}`;
+          } finally {
+            await cleanupTempScript(scriptPath);
+          }
         } catch (error) {
           return `Failed to get page content: ${(error as Error).message}`;
         }

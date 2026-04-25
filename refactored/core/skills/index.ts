@@ -7,4 +7,7 @@ export const BUILTIN_SKILLS = [
   "test_generator",
   "refactor_assistant",
   "security_audit",
+  "api_documentation",
+  "migration_assistant",
+  "performance_profiler",
 ];

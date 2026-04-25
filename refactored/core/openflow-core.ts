@@ -31,6 +31,8 @@ import { CommandRegistry, createCommandRegistry } from "./commands/command-regis
 import { createPluginCommands } from "./commands/plugin-commands.js";
 import { createAgentCommands } from "./commands/agent-commands.js";
 import { createDevCommands } from "./commands/development-commands.js";
+import { createLoopCommand } from "./commands/loop-command.js";
+import { CronScheduler } from "./scheduler/cron-scheduler.js";
 
 export interface OpenFlowConfig {
   workspaceRoot: string;
@@ -104,6 +106,7 @@ export class OpenFlowCore {
   private healthChecker: HealthChecker;
   private tokenRefreshScheduler: TokenRefreshScheduler;
   private commandRegistry: CommandRegistry;
+  private cronScheduler: CronScheduler;
 
   constructor(context: CapabilityContext, config: OpenFlowConfig) {
     this.config = config;
@@ -165,6 +168,7 @@ export class OpenFlowCore {
     });
 
     this.commandRegistry = createCommandRegistry();
+    this.cronScheduler = new CronScheduler();
 
     if (config.llmConfig?.apiKey) {
       this.llmClient = createLLMClient({
@@ -190,6 +194,7 @@ export class OpenFlowCore {
 
   async initialize(): Promise<void> {
     await this.memoryCore.initialize();
+    await this.cronScheduler.initialize();
 
     if (this.config.pluginSources.length > 0) {
       const basePath = this.config.workspaceRoot;
@@ -353,6 +358,13 @@ export class OpenFlowCore {
       },
       aliases: ["development"],
     });
+
+    this.commandRegistry.register({
+      name: "loop",
+      description: "Create and manage scheduled cron jobs",
+      handler: createLoopCommand(this.cronScheduler).handler,
+      aliases: ["cron", "schedule"],
+    });
   }
 
   async shutdown(): Promise<void> {
@@ -361,6 +373,7 @@ export class OpenFlowCore {
     await this.pluginManager.shutdown();
     await this.visualizationRenderer.stopServer();
     await this.disconnectTransport();
+    await this.cronScheduler.shutdown();
 
     // 清理新增模块
     this.tokenRefreshScheduler.cancelAll();
@@ -371,6 +384,10 @@ export class OpenFlowCore {
 
   getPluginManager(): PluginManager {
     return this.pluginManager;
+  }
+
+  getCronScheduler(): CronScheduler {
+    return this.cronScheduler;
   }
 
   getCommandRegistry(): CommandRegistry {
