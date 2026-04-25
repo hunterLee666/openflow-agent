@@ -8,6 +8,39 @@ export interface IntentRecognitionResult {
   requiresClarification: boolean;
   clarificationQuestion?: string;
   metadata: IntentMetadata;
+  workflowPlan?: WorkflowPlan;
+  taskNorms?: TaskNorms;
+}
+
+export interface WorkflowPlan {
+  recommendedWorkflow: string;
+  recommendedTools: string[];
+  toolGapAnalysis: ToolGap[];
+  needsWebSearch: boolean;
+  webSearchQueries: string[];
+  steps: WorkflowStep[];
+  reasoning: string;
+}
+
+export interface ToolGap {
+  missingTool: string;
+  purpose: string;
+  alternative: string;
+  searchQuery: string;
+}
+
+export interface WorkflowStep {
+  order: number;
+  action: string;
+  tool: string;
+  description: string;
+}
+
+export interface TaskNorms {
+  mustDo: string[];
+  mustNotDo: string[];
+  bestPractices: string[];
+  isExploratory: boolean;
 }
 
 export enum IntentType {
@@ -140,6 +173,8 @@ export interface IntentRecognitionConfig {
   enableLLM: boolean;
   enableSafetyCheck: boolean;
   enableGoalTracking: boolean;
+  enableWorkflowPlanning: boolean;
+  enableEnvironmentContext: boolean;
   goalPersistenceWeight: number;
   maxGoalHistory: number;
   safetyThreshold: SafetyLevel;
@@ -150,6 +185,8 @@ const DEFAULT_CONFIG: IntentRecognitionConfig = {
   enableLLM: true,
   enableSafetyCheck: true,
   enableGoalTracking: true,
+  enableWorkflowPlanning: true,
+  enableEnvironmentContext: true,
   goalPersistenceWeight: 0.7,
   maxGoalHistory: 20,
   safetyThreshold: SafetyLevel.CAUTION,
@@ -161,9 +198,15 @@ export class IntentRecognizer {
   private llmClient: any;
   private goalTracker: any;
   private safetyChecker: any;
+  private environmentContext: string;
+  private availableTools: string[];
+  private availableSkills: string[];
 
   constructor(config?: Partial<IntentRecognitionConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.environmentContext = "";
+    this.availableTools = [];
+    this.availableSkills = [];
   }
 
   setLLMClient(client: any): void {
@@ -176,6 +219,18 @@ export class IntentRecognizer {
 
   setSafetyChecker(checker: any): void {
     this.safetyChecker = checker;
+  }
+
+  setEnvironmentContext(context: string): void {
+    this.environmentContext = context;
+  }
+
+  setAvailableTools(tools: string[]): void {
+    this.availableTools = tools;
+  }
+
+  setAvailableSkills(skills: string[]): void {
+    this.availableSkills = skills;
   }
 
   async recognizeIntent(
@@ -235,7 +290,26 @@ export class IntentRecognizer {
   }
 
   private buildSystemPrompt(): string {
-    return `你是一个意图识别专家，负责分析用户的真实意图。
+    const envSection = this.config.enableEnvironmentContext && this.environmentContext
+      ? `\n## 当前环境信息
+${this.environmentContext}
+
+请根据上述环境信息，选择最适合当前任务的工具和工作流。如果环境中已有工具无法满足需求，可以考虑推荐全网搜索解决方案。`
+      : "";
+
+    const toolsSection = this.availableTools.length > 0
+      ? `\n## 可用工具列表
+${this.availableTools.map((t, i) => `${i + 1}. ${t}`).join("\n")}
+
+请从上述工具中选择最适合完成当前任务的工具组合。`
+      : "";
+
+    const skillsSection = this.availableSkills.length > 0
+      ? `\n## 可用 Skills
+${this.availableSkills.map((s, i) => `${i + 1}. ${s}`).join("\n")}`
+      : "";
+
+    return `你是一个意图识别和任务规划专家，负责分析用户的真实意图，并制定最佳的工作流和工具使用方案。
 
 ## 任务
 分析用户输入，识别以下维度：
@@ -287,6 +361,37 @@ export class IntentRecognizer {
 - complex: 复杂，多步骤
 - multi_step: 多阶段任务
 
+### 7. 工作流规划 (workflowPlan)
+${this.config.enableWorkflowPlanning ? `根据用户意图和环境信息，推理出完成该任务的最佳工作流和工具：
+- recommendedWorkflow: 推荐的工作流名称（如 "开发-测试-部署流水线"、"代码审查流程" 等）
+- recommendedTools: 推荐的工具列表（从可用工具中选择）
+- toolGapAnalysis: 工具缺口分析 - 如果当前环境中的工具不能满足完成任务的目标，列出缺失的工具和搜索方案
+  - missingTool: 缺失的工具名称
+  - purpose: 该工具的用途
+  - alternative: 当前可用的替代方案
+  - searchQuery: 用于全网搜索该工具的搜索词
+- needsWebSearch: 是否需要全网搜索（当工具不足或需要查找最新解决方案时为 true）
+- webSearchQueries: 全网搜索的关键词列表
+- steps: 工作流步骤
+  - order: 步骤顺序
+  - action: 动作名称
+  - tool: 使用的工具
+  - description: 步骤描述
+- reasoning: 选择该工作流的推理过程` : "禁用"}
+
+### 8. 任务规范 (taskNorms)
+根据任务类型，推断出完成该任务的最佳规范和禁忌：
+- mustDo: 必须遵守的规范（如 "先读取文件再修改"、"写测试用例"、"遵循项目代码风格" 等）
+- mustNotDo: 绝对不能做的事情（如 "不要删除未备份的文件"、"不要硬编码密钥"、"不要跳过测试" 等）
+- bestPractices: 最佳实践建议
+- isExploratory: 是否是探索/研究/头脑风暴类任务（这类任务可以放宽规范限制）
+
+注意：
+- 对于开发、调试、重构、部署等执行类任务，mustDo 和 mustNotDo 必须严格遵守
+- 对于 exploration、conversation、task_planning 等探索/研究类任务，isExploratory 设为 true，规范可以适当放宽
+- mustNotDo 是安全底线，除非 isExploratory 为 true，否则绝对不能违反
+${envSection}${toolsSection}${skillsSection}
+
 ## 输出格式
 必须输出 JSON，格式如下：
 {
@@ -306,6 +411,21 @@ export class IntentRecognizer {
     "complexity": "复杂度",
     "language": "语言",
     "sentiment": "情感"
+  },
+  "workflowPlan": {
+    "recommendedWorkflow": "工作流名称",
+    "recommendedTools": ["工具1", "工具2"],
+    "toolGapAnalysis": [{"missingTool": "缺失工具", "purpose": "用途", "alternative": "替代方案", "searchQuery": "搜索词"}],
+    "needsWebSearch": false,
+    "webSearchQueries": ["搜索词1"],
+    "steps": [{"order": 1, "action": "动作", "tool": "工具", "description": "描述"}],
+    "reasoning": "推理过程"
+  },
+  "taskNorms": {
+    "mustDo": ["必须做的事"],
+    "mustNotDo": "绝对不能做的事",
+    "bestPractices": ["最佳实践"],
+    "isExploratory": false
   }
 }
 
@@ -314,7 +434,10 @@ export class IntentRecognizer {
 2. 安全等级必须保守评估
 3. 实体类型从 file/directory/function/class/variable/project/tool/person/concept/url 中选择
 4. 情感从 neutral/urgent/frustrated/exploratory/confirming 中选择
-5. 输出类型从 code/text/file/command/analysis/summary/list/none 中选择`;
+5. 输出类型从 code/text/file/command/analysis/summary/list/none 中选择
+6. 工作流规划必须结合当前环境信息，选择最合适的工具组合
+7. 如果工具不足，必须提供全网搜索方案
+8. 任务规范必须具体、可执行，不能是空泛的建议`;
   }
 
   private buildUserPrompt(userInput: string, context?: ConversationContext): string {
@@ -362,6 +485,8 @@ export class IntentRecognizer {
           safetyFlags: parsed.safetyFlags || [SafetyFlag.NONE],
           requiresClarification: parsed.requiresClarification || false,
           clarificationQuestion: parsed.clarificationQuestion,
+          workflowPlan: parsed.workflowPlan,
+          taskNorms: parsed.taskNorms,
           metadata: {
             entities: parsed.metadata?.entities || [],
             timeReferences: parsed.metadata?.timeReferences || [],

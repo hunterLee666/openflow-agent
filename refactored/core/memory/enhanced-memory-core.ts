@@ -16,6 +16,7 @@ import { ConsolidationScheduler, createConsolidationScheduler } from "./consolid
 import { IntentRecognizer, createIntentRecognizer } from "./intent-recognizer.js";
 import { GoalTracker, createGoalTracker } from "./goal-tracker.js";
 import { SafetyChecker, createSafetyChecker } from "./safety-checker.js";
+import { ExplorationEngine, createExplorationEngine } from "./exploration-engine.js";
 import type { ProceduralMemoryEntry, SkillExecutionRecord } from "./procedural-memory.js";
 import type { DialogueTurn } from "./semantic-compressor.js";
 import type { SearchResult } from "./triple-index.js";
@@ -117,14 +118,20 @@ export class EnhancedMemoryCore {
   private intentRecognizer: IntentRecognizer;
   private goalTracker: GoalTracker;
   private safetyChecker: SafetyChecker;
+  private explorationEngine: ExplorationEngine;
   private conversationContext: ConversationContext | null = null;
   private memoryDir: string;
   private nudgeInterval: ReturnType<typeof setInterval> | null = null;
   private sessionId: string;
+  private workspaceRoot: string;
+  private explorationEngineInitialized = false;
 
   constructor(config?: Partial<EnhancedMemoryConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.memoryDir = resolve(this.config.memoryDir);
+    this.workspaceRoot = this.memoryDir.includes(".openflow")
+      ? resolve(this.memoryDir, "../..")
+      : process.cwd();
 
     this.proceduralMemory = new ProceduralMemory(500);
     this.semanticCompressor = createSemanticCompressor();
@@ -143,6 +150,7 @@ export class EnhancedMemoryCore {
     this.intentRecognizer = createIntentRecognizer();
     this.goalTracker = createGoalTracker();
     this.safetyChecker = createSafetyChecker();
+    this.explorationEngine = createExplorationEngine(this.workspaceRoot);
 
     this.sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     this.conversationContext = {
@@ -216,6 +224,9 @@ export class EnhancedMemoryCore {
     if (this.consolidationScheduler) {
       this.consolidationScheduler.start();
     }
+
+    await this.explorationEngine.initialize();
+    this.explorationEngineInitialized = true;
 
     await this.load();
   }
@@ -477,6 +488,40 @@ export class EnhancedMemoryCore {
     this.queryPlanner.setIntentRecognizer(this.intentRecognizer);
   }
 
+  async loadEnvironmentContext(tools?: string[], skills?: string[]): Promise<void> {
+    if (this.explorationEngineInitialized) return;
+
+    await this.explorationEngine.initialize();
+    this.explorationEngineInitialized = true;
+
+    const result = this.explorationEngine.formatForIntentRecognition();
+
+    const toolList = tools || [];
+    const skillList = skills || [];
+
+    this.intentRecognizer.setEnvironmentContext(result.content);
+    this.intentRecognizer.setAvailableTools(toolList);
+    this.intentRecognizer.setAvailableSkills(skillList);
+  }
+
+  async loadExplorationContext(): Promise<string> {
+    if (!this.explorationEngineInitialized) {
+      await this.explorationEngine.initialize();
+      this.explorationEngineInitialized = true;
+    }
+
+    const result = this.explorationEngine.formatForIntentRecognition();
+    return result.content;
+  }
+
+  async startTaskExploration(task: string, goals: string[]): Promise<void> {
+    await this.explorationEngine.startTaskDrivenExploration(task, goals);
+  }
+
+  async consolidateTaskExperience(): Promise<void> {
+    await this.explorationEngine.consolidateExperience();
+  }
+
   async recognizeIntent(userInput: string): Promise<IntentRecognitionResult> {
     if (!this.conversationContext) {
       this.conversationContext = {
@@ -486,6 +531,10 @@ export class EnhancedMemoryCore {
         recentMessages: [],
         turnCount: 0,
       };
+    }
+
+    if (!this.explorationEngineInitialized) {
+      await this.loadEnvironmentContext();
     }
 
     const result = await this.intentRecognizer.recognizeIntent(userInput, this.conversationContext);

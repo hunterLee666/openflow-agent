@@ -77,3 +77,37 @@ export type { GoalTrackerConfig, GoalUpdateResult } from "./goal-tracker.js";
 
 export { SafetyChecker, createSafetyChecker } from "./safety-checker.js";
 export type { SafetyCheckResult, SafetyPolicy } from "./safety-checker.js";
+
+export { ExplorationEngine, createExplorationEngine } from "./exploration-engine.js";
+export type {
+  ExplorationContext,
+  BaselineContext,
+  TaskDrivenContext,
+  LayeredMemory,
+  BootstrapFile,
+  ExplorationEngineConfig,
+  IdentityInfo,
+  UserInfo,
+  WorkspaceBaseline,
+  RuntimeBaseline,
+  ToolRegistry,
+  SkillRegistry,
+  MemoryBaseline,
+  ExplorationStep,
+  Observation,
+} from "./exploration-engine.js";
+
+export { ExplorationSecurity, createExplorationSecurity } from "./exploration-security.js";
+export type {
+  SecurityPolicy,
+  SecurityViolation,
+  ValidationResult,
+} from "./exploration-security.js";
+
+export { ExplorationDesensitizer, createExplorationDesensitizer } from "./exploration-desensitizer.js";
+export type {
+  DesensitizationRule,
+  DesensitizationConfig,
+  DesensitizationStats,
+  DesensitizationResult,
+} from "./exploration-desensitizer.js";
