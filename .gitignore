@@ -1,0 +1,66 @@
+# Dependencies
+node_modules/
+
+# Package manager
+bun.lock
+yarn.lock
+package-lock.json
+pnpm-lock.yaml
+
+# Build output
+dist/
+build/
+out/
+
+# IDE
+.trae/
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test
+coverage/
+
+# Temporary files
+output.txt
+*.tmp
+*.temp
+
+# PDF and docs (if auto-generated)
+*.pdf
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+Thumbs.db
+
+# OpenFlow runtime
+.openflow/
+.openflow.local.md
+.openflow.local.json
+
+# Claude Code runtime
+.claude/
+.claude.local.md
+.claude.local.json
+
+# Memory files
+OPENFLOW.md
+CLAUDE.md
+OPENFLOW.local.md
+CLAUDE.local.md
+
+# Session data
+sessions/
+*.session.json
