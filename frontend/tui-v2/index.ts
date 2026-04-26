@@ -120,15 +120,49 @@ const client = new WebSocketClient(WS_URL, {
   onMessage: (msg: TransportMessage) => {
     if (msg.type === 'response' && msg.channel === 'chat') {
       const payload = msg.payload as any
-      messages = [...messages, {
-        id: msg.id,
-        role: payload.role || 'assistant',
-        content: payload.content || '',
-        timestamp: new Date()
-      }]
+      
+      // 检查是否是流式输出的中间消息
+      if (payload.isStreaming) {
+        // 更新最后一条助手消息
+        const lastMsg = messages[messages.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.isStreaming) {
+          messages = [
+            ...messages.slice(0, -1),
+            { ...lastMsg, content: payload.content }
+          ]
+        } else {
+          // 创建新的流式消息
+          messages = [...messages, {
+            id: msg.id,
+            role: 'assistant',
+            content: payload.content || '',
+            timestamp: new Date(),
+            isStreaming: true
+          }]
+        }
+      } else {
+        // 最终消息
+        const lastMsg = messages[messages.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.isStreaming) {
+          // 更新最后一条流式消息为最终消息
+          messages = [
+            ...messages.slice(0, -1),
+            { ...lastMsg, content: payload.content || '', isStreaming: false }
+          ]
+        } else {
+          messages = [...messages, {
+            id: msg.id,
+            role: payload.role || 'assistant',
+            content: payload.content || '',
+            timestamp: new Date(),
+            isStreaming: false
+          }]
+        }
+      }
+      
       tokenUsed = payload.tokenUsed || 0
       latency = payload.latency || 0
-      status = 'idle'
+      status = payload.isStreaming ? 'running' : 'idle'
       render()
     }
   }
