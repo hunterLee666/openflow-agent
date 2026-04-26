@@ -12,9 +12,9 @@ export interface AppLayoutProps {
 export function AppLayout({ children, sidebar, statusBar, titleBar }: AppLayoutProps): React.ReactElement {
   return React.createElement(Box, { flexDirection: 'column', height: '100%' },
     titleBar,
-    React.createElement(Box, { flexDirection: 'row', flexGrow: 1 },
+    React.createElement(Box, { flexDirection: 'row' },
       sidebar,
-      React.createElement(Box, { flexDirection: 'column', flexGrow: 1 },
+      React.createElement(Box, { flexDirection: 'column' },
         children
       )
     ),
@@ -30,9 +30,7 @@ export interface SidebarProps {
 export function Sidebar({ children, width = 35 }: SidebarProps): React.ReactElement {
   return React.createElement(Box, {
     flexDirection: 'column',
-    width: width,
-    borderStyle: 'single',
-    borderColor: 'BrightBlack'
+    width: width
   }, children)
 }
 
@@ -41,7 +39,7 @@ export interface ChatContainerProps {
 }
 
 export function ChatContainer({ children }: ChatContainerProps): React.ReactElement {
-  return React.createElement(Box, { flexDirection: 'column', flexGrow: 1 }, children)
+  return React.createElement(Box, { flexDirection: 'column' }, children)
 }
 
 export interface StatusBarLayoutProps {

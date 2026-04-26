@@ -18,16 +18,14 @@ export interface ChatAreaProps {
 }
 
 export function ChatArea({ messages, inputValue }: ChatAreaProps): React.ReactElement {
-  return React.createElement(Box, { flexDirection: 'column', flexGrow: 1 },
-    React.createElement(Box, { flexDirection: 'column', flexGrow: 1 },
+  return React.createElement(Box, { flexDirection: 'column' },
+    React.createElement(Box, { flexDirection: 'column' },
       ...messages.map((msg) =>
         React.createElement(Box, {
           key: msg.id,
           flexDirection: 'column',
           paddingX: 1,
-          paddingY: 0,
-          borderStyle: msg.role === 'user' ? 'rounded' : undefined,
-          borderColor: msg.role === 'user' ? 'BrightMagenta' : undefined
+          paddingY: 0
         },
           React.createElement(Text, {
             color: msg.role === 'user' ? 'BrightMagenta' : 'BrightCyan',

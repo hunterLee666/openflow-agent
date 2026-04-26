@@ -84,30 +84,31 @@ export function OpenFlowSidebar({
   
   return React.createElement(Box, { flexDirection: 'column', paddingX: 1 },
     React.createElement(Text, { color: 'BrightMagenta', bold: true, block: true }, '政颐制造 TUI'),
-    React.createElement(Text, { color: 'DimMagenta', dimColor: true }, 'v2.0 | 终端界面'),
-    React.createElement(Box, { height: 1 }),
+    React.createElement(Text, { color: 'BrightBlack', dim: true }, 'v2.0 | 终端界面'),
+    React.createElement(Text, { block: true }, ''),
     
-    React.createElement(Box, { flexDirection: 'column', borderStyle: 'round', borderColor: 'BrightMagenta', paddingX: 1, paddingY: 0 },
+    React.createElement(Box, { flexDirection: 'column', paddingX: 1, paddingY: 0 },
       React.createElement(Text, { color: 'BrightWhite', bold: true }, `🤖 ${model}`),
-      React.createElement(Text, { color: 'DimWhite', dimColor: true }, `📦 ${provider}`),
+      React.createElement(Text, { color: 'BrightBlack', dim: true }, `📦 ${provider}`),
       React.createElement(Text, { color: 'BrightGreen' }, `⚡ 延迟: ${latency}ms`),
-      React.createElement(Box, { flexDirection: 'row' },
+      React.createElement(Text, { block: true },
         React.createElement(Text, { color: 'BrightCyan' }, `💰 Token: ${tokenUsed}/${tokenTotal}`),
         React.createElement(Text, { color: 'BrightYellow' }, ` [${tokenPercent}%]`)
       ),
-      React.createElement(Box, { flexDirection: 'column', width: 20, borderStyle: 'round', borderColor: 'BrightCyan' },
-        React.createElement(Box, { width: Math.round(tokenPercent / 5), height: 1, backgroundColor: 'BrightCyan' })
-      )
+      React.createElement(Text, { color: 'BrightCyan' }, '█'.repeat(Math.round(tokenPercent / 5)))
     ),
-    React.createElement(Box, { height: 1 }),
+    React.createElement(Text, { block: true }, ''),
     
-    React.createElement(Box, { flexDirection: 'column', borderStyle: 'round', borderColor: selectedTab === 'model' ? 'BrightMagenta' : 'DimMagenta', paddingX: 1, paddingY: 0 },
-      React.createElement(Text, { color: selectedTab === 'model' ? 'BrightMagenta' : 'DimMagenta', bold: selectedTab === 'model' }, TABS.find(t => t.key === selectedTab)?.label || '未选中')
+    React.createElement(Box, { flexDirection: 'column', paddingX: 1, paddingY: 0 },
+      React.createElement(Text, { 
+        color: selectedTab === 'model' ? 'BrightMagenta' : 'BrightBlack', 
+        bold: selectedTab === 'model' 
+      }, TABS.find(t => t.key === selectedTab)?.label || '未选中')
     ),
     
-    React.createElement(Box, { height: 1 }),
+    React.createElement(Text, { block: true }, ''),
     
-    React.createElement(Box, { flexDirection: 'column', flexGrow: 1, overflow: 'hidden' },
+    React.createElement(Box, { flexDirection: 'column' },
       selectedTab === 'provider' && React.createElement(Box, { flexDirection: 'column' },
         PROVIDERS.map((p, i) => React.createElement(Text, { 
           key: p, 
@@ -122,18 +123,18 @@ export function OpenFlowSidebar({
             color: i === selectedIndex ? 'BrightMagenta' : 'BrightWhite',
             bold: i === selectedIndex
           }, i === selectedIndex ? '▶ ' : '  ' + s.name),
-          React.createElement(Text, { color: 'DimWhite', dimColor: true }, '  ' + s.desc)
+          React.createElement(Text, { color: 'BrightBlack', dim: true }, '  ' + s.desc)
         ))
       ),
       
       selectedTab === 'commands' && React.createElement(Box, { flexDirection: 'column' },
-        COMMANDS.map((c, i) => React.createElement(Box, { key: c.cmd, flexDirection: 'row' },
+        COMMANDS.map((c, i) => React.createElement(Text, { key: c.cmd, block: true },
           React.createElement(Text, { 
             color: i === selectedIndex ? 'BrightMagenta' : 'BrightWhite',
             bold: i === selectedIndex
           }, i === selectedIndex ? '▶ ' : '  '),
           React.createElement(Text, { color: 'BrightCyan' }, c.cmd),
-          React.createElement(Text, { color: 'DimWhite', dimColor: true }, ' - ' + c.desc)
+          React.createElement(Text, { color: 'BrightBlack', dim: true }, ' - ' + c.desc)
         ))
       ),
       
@@ -143,15 +144,15 @@ export function OpenFlowSidebar({
             color: i === selectedIndex ? 'BrightMagenta' : 'BrightWhite',
             bold: i === selectedIndex
           }, i === selectedIndex ? '▶ ' : '  ' + h.name),
-          React.createElement(Text, { color: 'DimWhite', dimColor: true }, '  ' + h.time)
+          React.createElement(Text, { color: 'BrightBlack', dim: true }, '  ' + h.time)
         ))
       ),
       
       selectedTab === 'operations' && React.createElement(Box, { flexDirection: 'column' },
         OPERATIONS.map((op, i) => {
           const statusIcon = op.status === 'success' ? '✅' : op.status === 'running' ? '🔄' : '⏳'
-          const statusColor = op.status === 'success' ? 'BrightGreen' : op.status === 'running' ? 'BrightYellow' : 'DimWhite'
-          return React.createElement(Box, { key: op.name, flexDirection: 'row' },
+          const statusColor = op.status === 'success' ? 'BrightGreen' : op.status === 'running' ? 'BrightYellow' : 'BrightBlack'
+          return React.createElement(Text, { key: op.name, block: true },
             React.createElement(Text, { 
               color: i === selectedIndex ? 'BrightMagenta' : statusColor,
               bold: i === selectedIndex
@@ -162,30 +163,30 @@ export function OpenFlowSidebar({
       ),
       
       selectedTab === 'settings' && React.createElement(Box, { flexDirection: 'column' },
-        SETTINGS.map((s, i) => React.createElement(Box, { key: s.name, flexDirection: 'row' },
+        SETTINGS.map((s, i) => React.createElement(Text, { key: s.name, block: true },
           React.createElement(Text, { 
             color: i === selectedIndex ? 'BrightMagenta' : 'BrightWhite',
             bold: i === selectedIndex
           }, i === selectedIndex ? '▶ ' : '  '),
           React.createElement(Text, { color: 'BrightWhite' }, s.name),
-          React.createElement(Text, { color: s.enabled ? 'BrightGreen' : 'DimWhite', dimColor: !s.enabled }, s.enabled ? ' [ON]' : ' [OFF]')
+          React.createElement(Text, { color: s.enabled ? 'BrightGreen' : 'BrightBlack', dim: !s.enabled }, s.enabled ? ' [ON]' : ' [OFF]')
         ))
       ),
       
       selectedTab === 'shortcuts' && React.createElement(Box, { flexDirection: 'column' },
-        SHORTCUTS.map((sh, i) => React.createElement(Box, { key: sh.key, flexDirection: 'row' },
+        SHORTCUTS.map((sh, i) => React.createElement(Text, { key: sh.key, block: true },
           React.createElement(Text, { 
             color: i === selectedIndex ? 'BrightMagenta' : 'BrightWhite',
             bold: i === selectedIndex
           }, i === selectedIndex ? '▶ ' : '  '),
           React.createElement(Text, { color: 'BrightCyan' }, sh.key.padEnd(8)),
-          React.createElement(Text, { color: 'DimWhite', dimColor: true }, sh.desc)
+          React.createElement(Text, { color: 'BrightBlack', dim: true }, sh.desc)
         ))
       )
     ),
     
-    React.createElement(Box, { height: 1 }),
-    React.createElement(Text, { color: 'DimMagenta', dimColor: true }, '按 ↑/↓ 切换 Tab')
+    React.createElement(Text, { block: true }, ''),
+    React.createElement(Text, { color: 'BrightBlack', dim: true }, '按 ↑/↓ 切换 Tab')
   )
 }
 

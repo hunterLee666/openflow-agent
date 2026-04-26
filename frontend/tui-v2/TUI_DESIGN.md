@@ -279,19 +279,19 @@ tui-v2/
 - [x] View 组件 (滚动视口)
 - [x] 布局计算引擎
 
-### Phase 3: AI 组件 (进行中)
+### Phase 3: AI 组件 (已完成 ✅)
 - [x] MessageBubble 组件
 - [x] StreamingText 组件
-- [ ] OperationTree 组件
-- [ ] ModelBadge 组件
+- [x] OperationTree 组件
+- [x] ModelBadge 组件
 
-### Phase 4: 布局系统
+### Phase 4: 布局系统 (已完成 ✅)
 - [x] AppLayout 主布局
 - [x] ChatContainer 对话容器
 - [x] Sidebar 侧边栏
-- [ ] CommandPalette 命令面板
+- [x] CommandPalette 命令面板
 
-### Phase 5: 集成测试
+### Phase 5: 集成测试 (进行中)
 - [x] 对接后端 WebSocket
 - [ ] 端到端测试
 - [ ] 性能基准测试
