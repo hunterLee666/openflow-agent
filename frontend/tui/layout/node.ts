@@ -97,6 +97,19 @@ export const LayoutMeasureMode = {
 export type LayoutMeasureMode =
   (typeof LayoutMeasureMode)[keyof typeof LayoutMeasureMode]
 
+import { z } from 'zod'
+
+export const LayoutEdgeSchema = z.enum(['all', 'horizontal', 'vertical', 'left', 'right', 'top', 'bottom', 'start', 'end'])
+export const LayoutGutterSchema = z.enum(['all', 'column', 'row'])
+export const LayoutDisplaySchema = z.enum(['flex', 'none'])
+export const LayoutFlexDirectionSchema = z.enum(['row', 'row-reverse', 'column', 'column-reverse'])
+export const LayoutAlignSchema = z.enum(['auto', 'stretch', 'flex-start', 'center', 'flex-end'])
+export const LayoutJustifySchema = z.enum(['flex-start', 'center', 'flex-end', 'space-between', 'space-around', 'space-evenly'])
+export const LayoutWrapSchema = z.enum(['nowrap', 'wrap', 'wrap-reverse'])
+export const LayoutPositionTypeSchema = z.enum(['relative', 'absolute'])
+export const LayoutOverflowSchema = z.enum(['visible', 'hidden', 'scroll'])
+export const LayoutMeasureModeSchema = z.enum(['undefined', 'exactly', 'at-most'])
+
 export interface LayoutNode {
   insertChild(child: LayoutNode, index: number): void
   removeChild(child: LayoutNode): void
@@ -147,21 +160,4 @@ export interface LayoutNode {
   setGap(gutter: LayoutGutter, value: number): void
   free(): void
   freeRecursive(): void
-}
-
-export interface Size {
-  width: number
-  height: number
-}
-
-export interface Point {
-  x: number
-  y: number
-}
-
-export interface Rectangle {
-  x: number
-  y: number
-  width: number
-  height: number
 }

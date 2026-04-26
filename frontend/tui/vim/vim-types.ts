@@ -1,42 +1,65 @@
-export type VimMode = 'normal' | 'insert' | 'visual' | 'visual-line' | 'command'
+import { z } from "zod";
 
-export interface VimCursor {
-  line: number
-  column: number
-  mode: VimMode
-  selectionStart?: { line: number; column: number }
-  selectionEnd?: { line: number; column: number }
-}
+export const VimModeSchema = z.enum(['normal', 'insert', 'visual', 'visual-line', 'command']);
+export type VimMode = z.infer<typeof VimModeSchema>;
 
-export interface VimKeybinding {
-  keys: string[]
-  action: string
-  description?: string
-}
+export const VimCursorSchema = z.object({
+  line: z.number().int().nonnegative(),
+  column: z.number().int().nonnegative(),
+  mode: VimModeSchema,
+  selectionStart: z.object({
+    line: z.number().int().nonnegative(),
+    column: z.number().int().nonnegative(),
+  }).optional(),
+  selectionEnd: z.object({
+    line: z.number().int().nonnegative(),
+    column: z.number().int().nonnegative(),
+  }).optional(),
+});
+export type VimCursor = z.infer<typeof VimCursorSchema>;
 
-export interface VimState {
-  mode: VimMode
-  cursor: VimCursor
-  pendingKeys: string[]
-  commandBuffer: string
-  lastCommand?: string
-  registers: Map<string, string>
-  jumpList: Array<{ line: number; column: number }>
-  jumpIndex: number
-  marks: Map<string, { line: number; column: number }>
-  history: Array<{ line: number; column: number; text?: string }>
-  historyIndex: number
-}
+export const VimKeybindingSchema = z.object({
+  keys: z.array(z.string()),
+  action: z.string(),
+  description: z.string().optional(),
+});
+export type VimKeybinding = z.infer<typeof VimKeybindingSchema>;
 
-export interface VimConfig {
-  enableVimMode: boolean
-  defaultMode: VimMode
-  useSystemClipboard: boolean
-  relativeLineNumbers: boolean
-  highlightSearch: boolean
-  showModeIndicator: boolean
-  timeoutMs: number
-}
+export const VimStateSchema = z.object({
+  mode: VimModeSchema,
+  cursor: VimCursorSchema,
+  pendingKeys: z.array(z.string()),
+  commandBuffer: z.string(),
+  lastCommand: z.string().optional(),
+  registers: z.record(z.string(), z.string()),
+  jumpList: z.array(z.object({
+    line: z.number().int().nonnegative(),
+    column: z.number().int().nonnegative(),
+  })),
+  jumpIndex: z.number().int().nonnegative(),
+  marks: z.record(z.string(), z.object({
+    line: z.number().int().nonnegative(),
+    column: z.number().int().nonnegative(),
+  })),
+  history: z.array(z.object({
+    line: z.number().int().nonnegative(),
+    column: z.number().int().nonnegative(),
+    text: z.string().optional(),
+  })),
+  historyIndex: z.number().int().nonnegative(),
+});
+export type VimState = z.infer<typeof VimStateSchema>;
+
+export const VimConfigSchema = z.object({
+  enableVimMode: z.boolean(),
+  defaultMode: VimModeSchema,
+  useSystemClipboard: z.boolean(),
+  relativeLineNumbers: z.boolean(),
+  highlightSearch: z.boolean(),
+  showModeIndicator: z.boolean(),
+  timeoutMs: z.number().positive(),
+});
+export type VimConfig = z.infer<typeof VimConfigSchema>;
 
 export const DEFAULT_VIM_CONFIG: VimConfig = {
   enableVimMode: false,
@@ -46,7 +69,7 @@ export const DEFAULT_VIM_CONFIG: VimConfig = {
   highlightSearch: true,
   showModeIndicator: true,
   timeoutMs: 1000,
-}
+};
 
 export const NORMAL_MODE_BINDINGS: VimKeybinding[] = [
   { keys: ['h'], action: 'cursor:left', description: 'Move cursor left' },
@@ -83,107 +106,79 @@ export const NORMAL_MODE_BINDINGS: VimKeybinding[] = [
   { keys: ['n'], action: 'search:next', description: 'Next search result' },
   { keys: ['N'], action: 'search:prev', description: 'Previous search result' },
   { keys: [':'], action: 'mode:command', description: 'Enter command mode' },
-  { keys: ['Ctrl', 'd'], action: 'scroll:half-page-down', description: 'Scroll half page down' },
-  { keys: ['Ctrl', 'u'], action: 'scroll:half-page-up', description: 'Scroll half page up' },
-  { keys: ['Ctrl', 'f'], action: 'scroll:page-down', description: 'Scroll page down' },
-  { keys: ['Ctrl', 'b'], action: 'scroll:page-up', description: 'Scroll page up' },
-  { keys: ['z', 't'], action: 'scroll:top', description: 'Scroll line to top' },
-  { keys: ['z', 'z'], action: 'scroll:center', description: 'Scroll line to center' },
-  { keys: ['z', 'b'], action: 'scroll:bottom', description: 'Scroll line to bottom' },
-  { keys: ['m', 'a'], action: 'mark:set-a', description: 'Set mark a' },
-  { keys: ['`', 'a'], action: 'mark:goto-a', description: 'Go to mark a' },
-  { keys: ['Ctrl', 'o'], action: 'jump:back', description: 'Jump back' },
-  { keys: ['Ctrl', 'i'], action: 'jump:forward', description: 'Jump forward' },
-]
-
-export const VISUAL_MODE_BINDINGS: VimKeybinding[] = [
-  { keys: ['h'], action: 'visual:left', description: 'Extend selection left' },
-  { keys: ['j'], action: 'visual:down', description: 'Extend selection down' },
-  { keys: ['k'], action: 'visual:up', description: 'Extend selection up' },
-  { keys: ['l'], action: 'visual:right', description: 'Extend selection right' },
-  { keys: ['w'], action: 'visual:word-forward', description: 'Extend to next word' },
-  { keys: ['b'], action: 'visual:word-backward', description: 'Extend to previous word' },
-  { keys: ['0'], action: 'visual:line-start', description: 'Extend to line start' },
-  { keys: ['$'], action: 'visual:line-end', description: 'Extend to line end' },
-  { keys: ['Escape'], action: 'mode:normal', description: 'Exit visual mode' },
-  { keys: ['d'], action: 'visual:delete', description: 'Delete selection' },
-  { keys: ['y'], action: 'visual:yank', description: 'Yank selection' },
-  { keys: ['c'], action: 'visual:change', description: 'Change selection' },
-  { keys: ['v'], action: 'mode:normal', description: 'Exit visual mode' },
-  { keys: ['V'], action: 'mode:visual-line', description: 'Switch to visual line mode' },
-  { keys: ['o'], action: 'visual:swap-ends', description: 'Swap selection ends' },
-  { keys: ['O'], action: 'visual:swap-ends', description: 'Swap selection ends' },
-]
+  { keys: ['x'], action: 'delete:char', description: 'Delete character' },
+  { keys: ['r'], action: 'replace:char', description: 'Replace character' },
+];
 
 export const INSERT_MODE_BINDINGS: VimKeybinding[] = [
-  { keys: ['Escape'], action: 'mode:normal', description: 'Exit insert mode' },
-  { keys: ['Ctrl', '['], action: 'mode:normal', description: 'Exit insert mode' },
-  { keys: ['Ctrl', 'o'], action: 'insert:one-command', description: 'Execute one normal command' },
-  { keys: ['Ctrl', 'w'], action: 'insert:delete-word', description: 'Delete word before cursor' },
-  { keys: ['Ctrl', 'u'], action: 'insert:delete-line-start', description: 'Delete to line start' },
-  { keys: ['Ctrl', 'h'], action: 'insert:backspace', description: 'Backspace' },
-  { keys: ['Ctrl', 't'], action: 'insert:indent', description: 'Indent' },
-  { keys: ['Ctrl', 'd'], action: 'insert:dedent', description: 'Dedent' },
-  { keys: ['Ctrl', 'n'], action: 'insert:complete-next', description: 'Next completion' },
-  { keys: ['Ctrl', 'p'], action: 'insert:complete-prev', description: 'Previous completion' },
-]
+  { keys: ['Escape'], action: 'mode:normal', description: 'Enter normal mode' },
+  { keys: ['Backspace'], action: 'delete:before', description: 'Delete character before cursor' },
+  { keys: ['Delete'], action: 'delete:after', description: 'Delete character after cursor' },
+  { keys: ['ArrowLeft'], action: 'cursor:left', description: 'Move cursor left' },
+  { keys: ['ArrowRight'], action: 'cursor:right', description: 'Move cursor right' },
+  { keys: ['ArrowUp'], action: 'cursor:up', description: 'Move cursor up' },
+  { keys: ['ArrowDown'], action: 'cursor:down', description: 'Move cursor down' },
+  { keys: ['Ctrl', 'w'], action: 'delete:word-before', description: 'Delete word before cursor' },
+  { keys: ['Ctrl', 'u'], action: 'delete:line-before', description: 'Delete line before cursor' },
+  { keys: ['Tab'], action: 'indent', description: 'Insert tab' },
+  { keys: ['Enter'], action: 'newline', description: 'Insert newline' },
+];
+
+export const VISUAL_MODE_BINDINGS: VimKeybinding[] = [
+  { keys: ['Escape'], action: 'mode:normal', description: 'Enter normal mode' },
+  { keys: ['d'], action: 'delete:selection', description: 'Delete selection' },
+  { keys: ['y'], action: 'yank:selection', description: 'Yank selection' },
+  { keys: ['c'], action: 'change:selection', description: 'Change selection' },
+  { keys: ['p'], action: 'paste:selection', description: 'Paste in selection' },
+  { keys: ['>', '>'], action: 'indent:selection', description: 'Indent selection' },
+  { keys: ['<', '<'], action: 'dedent:selection', description: 'Dedent selection' },
+];
 
 export const COMMAND_MODE_BINDINGS: VimKeybinding[] = [
-  { keys: ['Escape'], action: 'mode:normal', description: 'Exit command mode' },
+  { keys: ['Escape'], action: 'mode:normal', description: 'Enter normal mode' },
   { keys: ['Enter'], action: 'command:execute', description: 'Execute command' },
-  { keys: ['Backspace'], action: 'command:backspace', description: 'Delete last character' },
-  { keys: ['Tab'], action: 'command:complete', description: 'Complete command' },
-  { keys: ['ArrowUp'], action: 'command:history-prev', description: 'Previous command' },
-  { keys: ['ArrowDown'], action: 'command:history-next', description: 'Next command' },
-]
+  { keys: ['Backspace'], action: 'command:backspace', description: 'Delete character' },
+];
 
-export const EX_COMMANDS: Record<string, string> = {
-  'q': 'quit',
-  'q!': 'quit-force',
-  'w': 'write',
-  'wq': 'write-quit',
-  'x': 'write-quit',
-  'e': 'edit',
-  's': 'substitute',
-  'noh': 'nohlsearch',
-  'set': 'set-option',
-  'marks': 'show-marks',
-  'registers': 'show-registers',
-  'history': 'show-history',
-}
+export const EX_COMMANDS = [
+  { name: 'quit', alias: 'q', description: 'Quit' },
+  { name: 'write', alias: 'w', description: 'Write' },
+  { name: 'wq', description: 'Write and quit' },
+  { name: 'q!', description: 'Force quit' },
+  { name: 'set', description: 'Set option' },
+] as const;
 
-export function createInitialState(config: Partial<VimConfig> = {}): VimState {
-  const mergedConfig = { ...DEFAULT_VIM_CONFIG, ...config }
-
+export function createInitialState(config: VimConfig = DEFAULT_VIM_CONFIG): VimState {
   return {
-    mode: mergedConfig.defaultMode,
+    mode: config.defaultMode,
     cursor: {
       line: 0,
       column: 0,
-      mode: mergedConfig.defaultMode,
+      mode: config.defaultMode,
     },
     pendingKeys: [],
     commandBuffer: '',
-    registers: new Map(),
+    lastCommand: undefined,
+    registers: {},
     jumpList: [],
-    jumpIndex: -1,
-    marks: new Map(),
+    jumpIndex: 0,
+    marks: {},
     history: [],
     historyIndex: -1,
-  }
+  };
 }
 
 export function formatModeIndicator(mode: VimMode): string {
-  const indicators: Record<VimMode, string> = {
-    'normal': '-- NORMAL --',
-    'insert': '-- INSERT --',
-    'visual': '-- VISUAL --',
-    'visual-line': '-- VISUAL LINE --',
-    'command': '-- COMMAND --',
+  switch (mode) {
+    case 'normal': return '--';
+    case 'insert': return 'INSERT';
+    case 'visual': return 'VISUAL';
+    case 'visual-line': return 'V-LINE';
+    case 'command': return ':';
+    default: return '--';
   }
-  return indicators[mode] || ''
 }
 
 export function formatKeySequence(keys: string[]): string {
-  return keys.join(' ')
+  return keys.join('');
 }

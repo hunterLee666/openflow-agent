@@ -2,15 +2,17 @@ import React, { type ReactNode, type ReactElement } from "react";
 import { Box } from "./Box.js";
 import { Text } from "./Text.js";
 import { Button } from "./Button.js";
+import { z } from "zod";
 
-export interface DialogProps {
-  isOpen: boolean;
-  title?: string;
-  children?: ReactNode;
-  footer?: ReactNode;
-  width?: number | string;
-  onClose?: () => void;
-}
+export const DialogPropsSchema = z.object({
+  isOpen: z.boolean(),
+  title: z.string().optional(),
+  children: z.any().optional(),
+  footer: z.any().optional(),
+  width: z.union([z.number(), z.string()]).optional(),
+  onClose: z.function().returns(z.void()).optional(),
+})
+export type DialogProps = z.infer<typeof DialogPropsSchema>
 
 export function Dialog({
   isOpen,

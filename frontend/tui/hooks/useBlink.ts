@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { z } from 'zod'
 
-export interface UseBlinkOptions {
-  interval?: number
-  enabled?: boolean
-}
+export const UseBlinkOptionsSchema = z.object({
+  interval: z.number().positive().optional(),
+  enabled: z.boolean().optional(),
+})
+export type UseBlinkOptions = z.infer<typeof UseBlinkOptionsSchema>
 
 export function useBlink(options: UseBlinkOptions = {}): boolean {
   const { interval = 530, enabled = true } = options

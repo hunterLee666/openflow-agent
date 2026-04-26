@@ -1,14 +1,16 @@
 import React, { type ReactNode, useState, useCallback, useMemo } from 'react'
 import { Box } from './Box.js'
 import { Text } from './Text.js'
+import { z } from 'zod'
 
-export interface TagTabsProps {
-  tabs: string[]
-  selectedIndex: number
-  onSelect: (index: number) => void
-  availableWidth?: number
-  showAllProjects?: boolean
-}
+export const TagTabsPropsSchema = z.object({
+  tabs: z.array(z.string()),
+  selectedIndex: z.number(),
+  onSelect: z.function().args(z.number()).returns(z.void()),
+  availableWidth: z.number().optional(),
+  showAllProjects: z.boolean().optional(),
+})
+export type TagTabsProps = z.infer<typeof TagTabsPropsSchema>
 
 const TAB_PADDING = 2
 const HASH_PREFIX = '#'

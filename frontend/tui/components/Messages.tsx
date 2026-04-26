@@ -3,18 +3,30 @@ import { Box } from './Box.js'
 import { MessageComponent, type Message } from './Message.js'
 import { ScrollBox, type ScrollBoxRef } from './ScrollBox.js'
 import { VirtualList, type VirtualListItem } from './VirtualList.js'
+import { z } from 'zod'
 
 const VIRTUAL_SCROLL_THRESHOLD = 50
 const DEFAULT_MESSAGE_HEIGHT = 4
 const VISIBLE_HEIGHT = 20
 
-export interface MessagesProps {
-  messages: Message[]
-  maxWidth?: number
-  showTimestamps?: boolean
-  scrollToBottom?: boolean
-  enableVirtualScroll?: boolean
-}
+export const MessageSchema: z.ZodType<Message> = z.object({
+  id: z.string(),
+  role: z.enum(['user', 'assistant', 'system', 'tool']),
+  content: z.union([
+    z.object({ type: z.literal('text'), text: z.string() }),
+    z.object({ type: z.literal('tool_result'), toolName: z.string(), toolResult: z.string() }),
+  ]),
+  timestamp: z.number(),
+})
+
+export const MessagesPropsSchema = z.object({
+  messages: z.array(MessageSchema),
+  maxWidth: z.number().optional(),
+  showTimestamps: z.boolean().optional(),
+  scrollToBottom: z.boolean().optional(),
+  enableVirtualScroll: z.boolean().optional(),
+})
+export type MessagesProps = z.infer<typeof MessagesPropsSchema>
 
 export function Messages({
   messages,

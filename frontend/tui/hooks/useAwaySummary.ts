@@ -1,18 +1,21 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
+import { z } from 'zod'
 
-export interface AwaySummaryState {
-  isAway: boolean
-  lastActiveTime: number
-  awayDuration: number
-  summary: string | null
-}
+export const AwaySummaryStateSchema = z.object({
+  isAway: z.boolean(),
+  lastActiveTime: z.number(),
+  awayDuration: z.number(),
+  summary: z.string().nullable(),
+})
+export type AwaySummaryState = z.infer<typeof AwaySummaryStateSchema>
 
-export interface UseAwaySummaryOptions {
-  timeout?: number
-  onAway?: () => void
-  onReturn?: () => void
-  generateSummary?: (awayDuration: number) => string
-}
+export const UseAwaySummaryOptionsSchema = z.object({
+  timeout: z.number().positive().optional(),
+  onAway: z.function().returns(z.void()).optional(),
+  onReturn: z.function().returns(z.void()).optional(),
+  generateSummary: z.function().args(z.number()).returns(z.string()).optional(),
+})
+export type UseAwaySummaryOptions = z.infer<typeof UseAwaySummaryOptionsSchema>
 
 export function useAwaySummary(options: UseAwaySummaryOptions = {}): AwaySummaryState {
   const { timeout = 300000, onAway, onReturn, generateSummary } = options

@@ -13,7 +13,10 @@ import {
 
 export interface VimAction {
   type: string
-  payload?: Record<string, unknown>
+  payload?: {
+    text?: string
+    [key: string]: unknown
+  }
 }
 
 export interface VimActionResult {
@@ -262,10 +265,10 @@ export class VimStateMachine {
       return { type: 'command:set', payload: { option } }
     }
 
-    const exAction = EX_COMMANDS[cmdPart]
-    if (exAction) {
+    const exCmd = EX_COMMANDS.find(cmd => cmd.name === cmdPart || ('alias' in cmd && cmd.alias === cmdPart))
+    if (exCmd) {
       return {
-        type: `command:${exAction}`,
+        type: `command:${exCmd.name}`,
         payload: { line: lineNum ? parseInt(lineNum, 10) : undefined },
       }
     }
@@ -274,7 +277,7 @@ export class VimStateMachine {
   }
 
   moveToMark(mark: string): void {
-    const position = this.state.marks.get(mark)
+    const position = this.state.marks[mark]
     if (position) {
       this.pushJump()
       this.state.cursor.line = position.line
@@ -283,10 +286,10 @@ export class VimStateMachine {
   }
 
   setMark(mark: string): void {
-    this.state.marks.set(mark, {
+    this.state.marks[mark] = {
       line: this.state.cursor.line,
       column: this.state.cursor.column,
-    })
+    }
   }
 
   pushJump(): void {
@@ -316,11 +319,11 @@ export class VimStateMachine {
   }
 
   setRegister(name: string, value: string): void {
-    this.state.registers.set(name, value)
+    this.state.registers[name] = value
   }
 
   getRegister(name: string): string | undefined {
-    return this.state.registers.get(name)
+    return this.state.registers[name]
   }
 
   getCommandHistory(): string[] {

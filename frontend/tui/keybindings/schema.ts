@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export const KEYBINDING_CONTEXTS = [
   'Global',
   'Chat',
@@ -17,9 +19,29 @@ export const KEYBINDING_CONTEXTS = [
   'ModelPicker',
   'Select',
   'Plugin',
-] as const
+] as const;
 
-export type KeybindingContextName = (typeof KEYBINDING_CONTEXTS)[number]
+export const KeybindingContextNameSchema = z.enum([
+  'Global',
+  'Chat',
+  'Autocomplete',
+  'Confirmation',
+  'Help',
+  'Transcript',
+  'HistorySearch',
+  'Task',
+  'ThemePicker',
+  'Settings',
+  'Tabs',
+  'Attachments',
+  'Footer',
+  'MessageSelector',
+  'DiffDialog',
+  'ModelPicker',
+  'Select',
+  'Plugin',
+]);
+export type KeybindingContextName = z.infer<typeof KeybindingContextNameSchema>;
 
 export const KEYBINDING_ACTIONS = [
   'app:interrupt',
@@ -79,25 +101,90 @@ export const KEYBINDING_ACTIONS = [
   'scroll:pageDown',
   'scroll:top',
   'scroll:bottom',
-] as const
+] as const;
 
-export type KeybindingAction = (typeof KEYBINDING_ACTIONS)[number]
+export const KeybindingActionSchema = z.enum([
+  'app:interrupt',
+  'app:exit',
+  'app:toggleTodos',
+  'app:toggleTranscript',
+  'app:toggleBrief',
+  'app:toggleTeammatePreview',
+  'app:toggleTerminal',
+  'app:redraw',
+  'app:globalSearch',
+  'app:quickOpen',
+  'history:search',
+  'history:previous',
+  'history:next',
+  'chat:submit',
+  'chat:cancel',
+  'chat:newline',
+  'chat:historyUp',
+  'chat:historyDown',
+  'chat:complete',
+  'chat:slashCommand',
+  'chat:selectSuggestion',
+  'chat:dismissSuggestion',
+  'message:edit',
+  'message:delete',
+  'message:copy',
+  'message:retry',
+  'navigation:nextTab',
+  'navigation:prevTab',
+  'navigation:closeTab',
+  'navigation:newTab',
+  'navigation:gotoTab',
+  'diff:accept',
+  'diff:reject',
+  'diff:quit',
+  'diff:toggleSide',
+  'help:show',
+  'help:hide',
+  'settings:show',
+  'settings:hide',
+  'select:confirm',
+  'select:cancel',
+  'select:next',
+  'select:previous',
+  'task:showDetails',
+  'task:cancelTask',
+  'task:retryTask',
+  'clipboard:paste',
+  'clipboard:copy',
+  'focus:next',
+  'focus:previous',
+  'focus:escape',
+  'scroll:up',
+  'scroll:down',
+  'scroll:pageUp',
+  'scroll:pageDown',
+  'scroll:top',
+  'scroll:bottom',
+]);
+export type KeybindingAction = z.infer<typeof KeybindingActionSchema>;
 
-export interface KeybindingSchema {
-  context: KeybindingContextName
-  bindings: KeybindingDefinition[]
-}
+export const KeybindingDefinitionSchema = z.object({
+  key: z.string(),
+  action: KeybindingActionSchema.nullable(),
+  description: z.string().optional(),
+  when: z.string().optional(),
+});
+export type KeybindingDefinition = z.infer<typeof KeybindingDefinitionSchema>;
 
-export interface KeybindingDefinition {
-  key: string
-  action: KeybindingAction | null
-  description?: string
-  when?: string
-}
+export const KeybindingSchemaSchema = z.object({
+  context: KeybindingContextNameSchema,
+  bindings: z.array(KeybindingDefinitionSchema),
+});
+export type KeybindingSchema = z.infer<typeof KeybindingSchemaSchema>;
 
 export function createKeybindingSchema(
   context: KeybindingContextName,
   bindings: KeybindingDefinition[],
 ): KeybindingSchema {
-  return { context, bindings }
+  const validated = KeybindingSchemaSchema.safeParse({ context, bindings });
+  if (!validated.success) {
+    throw new Error(`Invalid keybinding schema: ${validated.error.message}`);
+  }
+  return validated.data;
 }

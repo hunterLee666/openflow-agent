@@ -1,12 +1,15 @@
-export interface StreamingConfig {
-  wordsPerChunk: number
-  minChunkIntervalMs: number
-  maxChunkIntervalMs: number
-  enableAdaptiveRate: boolean
-  initialDelayMs: number
-  punctuationBreak: boolean
-  punctuationDelayMs: number
-}
+import { z } from 'zod'
+
+export const StreamingConfigSchema = z.object({
+  wordsPerChunk: z.number().int().positive(),
+  minChunkIntervalMs: z.number().int().nonnegative(),
+  maxChunkIntervalMs: z.number().int().nonnegative(),
+  enableAdaptiveRate: z.boolean(),
+  initialDelayMs: z.number().int().nonnegative(),
+  punctuationBreak: z.boolean(),
+  punctuationDelayMs: z.number().int().nonnegative(),
+})
+export type StreamingConfig = z.infer<typeof StreamingConfigSchema>
 
 export const DEFAULT_STREAMING_CONFIG: StreamingConfig = {
   wordsPerChunk: 3,
@@ -18,24 +21,26 @@ export const DEFAULT_STREAMING_CONFIG: StreamingConfig = {
   punctuationDelayMs: 50,
 }
 
-export interface StreamingChunk {
-  text: string
-  timestamp: number
-  isComplete: boolean
-}
+export const StreamingChunkSchema = z.object({
+  text: z.string(),
+  timestamp: z.number(),
+  isComplete: z.boolean(),
+})
+export type StreamingChunk = z.infer<typeof StreamingChunkSchema>
 
 export type StreamingSource = AsyncIterable<string> | ReadableStream<string>
 
-export interface StreamingState {
-  buffer: string
-  chunks: StreamingChunk[]
-  isComplete: boolean
-  startTime: number
-  totalChars: number
-  currentWordIndex: number
-  lastChunkTime: number
-  adaptiveDelay: number
-}
+export const StreamingStateSchema = z.object({
+  buffer: z.string(),
+  chunks: z.array(StreamingChunkSchema),
+  isComplete: z.boolean(),
+  startTime: z.number(),
+  totalChars: z.number(),
+  currentWordIndex: z.number(),
+  lastChunkTime: z.number(),
+  adaptiveDelay: z.number(),
+})
+export type StreamingState = z.infer<typeof StreamingStateSchema>
 
 export function createStreamingState(config: StreamingConfig): StreamingState {
   return {

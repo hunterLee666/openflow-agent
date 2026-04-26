@@ -1,18 +1,25 @@
-import { readFile, readdir, access } from "node:fs/promises";
-import { join, resolve, dirname } from "node:path";
+import { readFile, readdir } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { z } from "zod";
-import type { CapabilityContext } from "../types/index.js";
 
-const CONFIG_DIR_NAMES = [".openflow"];
-const MEMORY_FILES = ["OPENFLOW.md"];
-const LOCAL_MEMORY_FILES = ["OPENFLOW.local.md"];
+// .openflow 目录规范常量
+const OPENFLOW_DIR = ".openflow";
+const MEMORY_FILES = ["OPENFLOW.md", "OPENFLOW.local.md"];
 const SETTINGS_FILE = "settings.json";
 const LOCAL_SETTINGS_FILE = "settings.local.json";
+const RULES_DIR = "rules";
+const SKILLS_DIR = "skills";
+const AGENTS_DIR = "agents";
+const COMMANDS_DIR = "commands";
+const HOOKS_FILE = "hooks.json";
+const MCP_FILE = ".mcp.json";
+const LSP_FILE = ".lsp.json";
+const OUTPUT_STYLES_DIR = "outputStyles";
 
+// Zod Schemas
 export const ConfigLayerSchema = z.enum(["enterprise", "user", "project"]);
-
 export type ConfigLayer = z.infer<typeof ConfigLayerSchema>;
 
 export const PermissionRuleSchema = z.object({
@@ -22,6 +29,7 @@ export const PermissionRuleSchema = z.object({
   pattern: z.string().optional(),
   pathRegex: z.string().optional(),
   note: z.string().optional(),
+  priority: z.number().optional(),
 });
 
 export const PermissionsConfigSchema = z.object({
@@ -99,12 +107,36 @@ export const CommandDefinitionSchema = z.object({
 
 export type CommandDefinition = z.infer<typeof CommandDefinitionSchema>;
 
+export const LayeredArraySchema = z.object({
+  enterprise: z.array(z.string()),
+  user: z.array(z.string()),
+  project: z.array(z.string()),
+});
+
+export const LayeredAgentsSchema = z.object({
+  enterprise: z.array(AgentDefinitionSchema),
+  user: z.array(AgentDefinitionSchema),
+  project: z.array(AgentDefinitionSchema),
+});
+
+export const LayeredSkillsSchema = z.object({
+  enterprise: z.array(SkillDefinitionSchema),
+  user: z.array(SkillDefinitionSchema),
+  project: z.array(SkillDefinitionSchema),
+});
+
+export const LayeredCommandsSchema = z.object({
+  enterprise: z.array(CommandDefinitionSchema),
+  user: z.array(CommandDefinitionSchema),
+  project: z.array(CommandDefinitionSchema),
+});
+
 export const DiscoveredContentSchema = z.object({
-  memory: z.array(z.string()),
-  rules: z.array(z.string()),
-  agents: z.array(AgentDefinitionSchema),
-  skills: z.array(SkillDefinitionSchema),
-  commands: z.array(CommandDefinitionSchema),
+  memory: LayeredArraySchema,
+  rules: LayeredArraySchema,
+  agents: LayeredAgentsSchema,
+  skills: LayeredSkillsSchema,
+  commands: LayeredCommandsSchema,
   settings: OpenFlowSettingsSchema,
 });
 
@@ -116,7 +148,7 @@ export const ConfigDirSchema = z.object({
   dirName: z.string(),
 });
 
-type ConfigDir = z.infer<typeof ConfigDirSchema>;
+export type ConfigDir = z.infer<typeof ConfigDirSchema>;
 
 export class LayeredConfigLoader {
   private projectDir: string;
@@ -129,11 +161,11 @@ export class LayeredConfigLoader {
 
   async loadAll(): Promise<DiscoveredContent> {
     const content: DiscoveredContent = {
-      memory: [],
-      rules: [],
-      agents: [],
-      skills: [],
-      commands: [],
+      memory: { enterprise: [], user: [], project: [] },
+      rules: { enterprise: [], user: [], project: [] },
+      agents: { enterprise: [], user: [], project: [] },
+      skills: { enterprise: [], user: [], project: [] },
+      commands: { enterprise: [], user: [], project: [] },
       settings: {},
     };
 
@@ -154,59 +186,60 @@ export class LayeredConfigLoader {
   private async findConfigDirs(): Promise<ConfigDir[]> {
     const dirs: ConfigDir[] = [];
 
+    // 1. Enterprise 层 (最高优先级)
     if (this.enterpriseDir && existsSync(this.enterpriseDir)) {
-      for (const dirName of CONFIG_DIR_NAMES) {
-        const path = join(this.enterpriseDir, dirName);
-        if (existsSync(path)) {
-          dirs.push({ path, layer: "enterprise" as const, dirName });
-        }
+      const path = join(this.enterpriseDir, OPENFLOW_DIR);
+      if (existsSync(path)) {
+        dirs.push({ path, layer: "enterprise", dirName: OPENFLOW_DIR });
       }
     }
 
-    const userConfigDir = join(homedir(), ".config");
-    for (const dirName of CONFIG_DIR_NAMES) {
-      const path = join(userConfigDir, dirName);
+    // 2. User 层 (~/.config/.openflow 或 ~/.openflow)
+    const userConfigDirs = [
+      join(homedir(), ".config", OPENFLOW_DIR),
+      join(homedir(), ".openflow"),
+    ];
+
+    for (const path of userConfigDirs) {
       if (existsSync(path)) {
-        dirs.push({ path, layer: "user" as const, dirName });
+        dirs.push({ path, layer: "user", dirName: OPENFLOW_DIR });
+        break; // 只使用第一个找到的
       }
     }
 
-    for (const dirName of CONFIG_DIR_NAMES) {
-      const path = join(this.projectDir, dirName);
-      if (existsSync(path)) {
-        dirs.push({ path, layer: "project" as const, dirName });
-      }
+    // 3. Project 层 (最低优先级)
+    const projectPath = join(this.projectDir, OPENFLOW_DIR);
+    if (existsSync(projectPath)) {
+      dirs.push({ path: projectPath, layer: "project", dirName: OPENFLOW_DIR });
     }
 
     return dirs;
   }
 
   private async loadFromDir(dir: ConfigDir, content: DiscoveredContent): Promise<void> {
+    const layer = dir.layer;
+
+    // 加载记忆文件 (OPENFLOW.md, OPENFLOW.local.md)
     for (const file of MEMORY_FILES) {
       const path = join(dir.path, file);
       if (existsSync(path)) {
-        content.memory.push(path);
+        content.memory[layer].push(path);
       }
     }
 
-    for (const file of LOCAL_MEMORY_FILES) {
-      const path = join(dir.path, file);
-      if (existsSync(path)) {
-        content.memory.push(path);
-      }
-    }
-
-    const rulesPath = join(dir.path, "rules");
+    // 加载规则文件 (rules/*.md)
+    const rulesPath = join(dir.path, RULES_DIR);
     if (existsSync(rulesPath)) {
       const files = await readdir(rulesPath);
       for (const file of files) {
         if (file.endsWith(".md")) {
-          content.rules.push(join(rulesPath, file));
+          content.rules[layer].push(join(rulesPath, file));
         }
       }
     }
 
-    const agentsPath = join(dir.path, "agents");
+    // 加载子代理定义 (agents/*.yaml)
+    const agentsPath = join(dir.path, AGENTS_DIR);
     if (existsSync(agentsPath)) {
       const files = await readdir(agentsPath);
       for (const file of files) {
@@ -216,14 +249,15 @@ export class LayeredConfigLoader {
           if (parsed) {
             const validated = AgentDefinitionSchema.safeParse(parsed);
             if (validated.success) {
-              content.agents.push(validated.data);
+              content.agents[layer].push(validated.data);
             }
           }
         }
       }
     }
 
-    const skillsPath = join(dir.path, "skills");
+    // 加载技能定义 (skills/*.yaml)
+    const skillsPath = join(dir.path, SKILLS_DIR);
     if (existsSync(skillsPath)) {
       const files = await readdir(skillsPath);
       for (const file of files) {
@@ -233,14 +267,15 @@ export class LayeredConfigLoader {
           if (parsed) {
             const validated = SkillDefinitionSchema.safeParse(parsed);
             if (validated.success) {
-              content.skills.push(validated.data);
+              content.skills[layer].push(validated.data);
             }
           }
         }
       }
     }
 
-    const commandsPath = join(dir.path, "commands");
+    // 加载命令定义 (commands/*.yaml)
+    const commandsPath = join(dir.path, COMMANDS_DIR);
     if (existsSync(commandsPath)) {
       const files = await readdir(commandsPath);
       for (const file of files) {
@@ -250,20 +285,22 @@ export class LayeredConfigLoader {
           if (parsed) {
             const validated = CommandDefinitionSchema.safeParse(parsed);
             if (validated.success) {
-              content.commands.push(validated.data);
+              content.commands[layer].push(validated.data);
             }
           }
         }
       }
     }
 
+    // 加载 settings.json 和 settings.local.json
+    // settings.local.json 优先级更高
     const settingsPath = join(dir.path, SETTINGS_FILE);
     if (existsSync(settingsPath)) {
       const settingsContent = await readFile(settingsPath, "utf-8");
       const parsed = JSON.parse(settingsContent);
       const validated = OpenFlowSettingsSchema.safeParse(parsed);
       if (validated.success) {
-        content.settings = { ...content.settings, ...validated.data };
+        content.settings = this.mergeSettings(content.settings, validated.data);
       }
     }
 
@@ -273,9 +310,24 @@ export class LayeredConfigLoader {
       const parsed = JSON.parse(localSettingsContent);
       const validated = OpenFlowSettingsSchema.safeParse(parsed);
       if (validated.success) {
-        content.settings = { ...content.settings, ...validated.data };
+        content.settings = this.mergeSettings(content.settings, validated.data);
       }
     }
+  }
+
+  private mergeSettings(base: OpenFlowSettings, override: Partial<OpenFlowSettings>): OpenFlowSettings {
+    return {
+      ...base,
+      ...override,
+      permissions: {
+        ...base.permissions,
+        ...override.permissions,
+      },
+      plugins: {
+        ...base.plugins,
+        ...override.plugins,
+      },
+    };
   }
 
   private safeParseYaml(content: string): Record<string, unknown> | null {

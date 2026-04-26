@@ -1,6 +1,6 @@
-import { Event } from './event.js'
+import { BaseEvent } from './event.js'
 
-type EventHandler = (event: Event) => void
+type EventHandler = (event: BaseEvent) => void
 
 interface HandlerMap {
   [type: string]: {
@@ -11,7 +11,7 @@ interface HandlerMap {
 
 export interface DOMElement {
   parentNode: DOMElement | null
-  dispatchEvent(event: Event): boolean
+  dispatchEvent(event: BaseEvent): boolean
   addEventListener(type: string, handler: EventHandler, capture?: boolean): void
   removeEventListener(
     type: string,
@@ -22,7 +22,7 @@ export interface DOMElement {
 
 function collectListeners(
   target: DOMElement,
-  event: Event,
+  event: BaseEvent,
 ): Array<{ node: DOMElement; handler: EventHandler; phase: 'capturing' | 'at_target' | 'bubbling' }> {
   const listeners: Array<{
     node: DOMElement
@@ -58,7 +58,7 @@ function collectListeners(
 }
 
 export class Dispatcher {
-  static dispatch(target: DOMElement, event: Event): boolean {
+  static dispatch(target: DOMElement, event: BaseEvent): boolean {
     const listeners = collectListeners(target, event)
 
     for (const listener of listeners) {
@@ -81,7 +81,7 @@ export function createEventTarget(): DOMElement {
   return {
     parentNode: null,
 
-    dispatchEvent(event: Event): boolean {
+    dispatchEvent(event: BaseEvent): boolean {
       const handlers = internals.handlers[event.constructor.name]
       if (!handlers) return true
 
@@ -132,16 +132,16 @@ export function createEventTarget(): DOMElement {
   } as DOMElement
 }
 
-export class FocusEvent extends Event {
+export class FocusEvent extends BaseEvent {
   constructor(
     public readonly type: 'focus' | 'blur',
     public readonly relatedTarget: DOMElement | null,
   ) {
-    super()
+    super(type)
   }
 }
 
-export class KeyboardEvent extends Event {
+export class KeyboardEvent extends BaseEvent {
   constructor(
     public readonly type: 'keydown' | 'keyup' | 'keypress',
     public readonly key: string,
@@ -151,17 +151,17 @@ export class KeyboardEvent extends Event {
     public readonly altKey: boolean,
     public readonly metaKey: boolean,
   ) {
-    super()
+    super(type)
   }
 }
 
-export class MouseEvent extends Event {
+export class MouseEvent extends BaseEvent {
   constructor(
     public readonly type: 'click' | 'mousedown' | 'mouseup' | 'mousemove',
     public readonly x: number,
     public readonly y: number,
     public readonly button: number,
   ) {
-    super()
+    super(type)
   }
 }

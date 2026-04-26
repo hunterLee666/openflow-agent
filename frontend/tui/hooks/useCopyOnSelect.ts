@@ -1,10 +1,19 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
+import { z } from 'zod'
 
-export interface UseCopyOnSelectOptions {
-  enabled?: boolean
-  onCopy?: (text: string) => void
-  timeout?: number
-}
+export const UseCopyOnSelectOptionsSchema = z.object({
+  enabled: z.boolean().optional(),
+  onCopy: z.function().args(z.string()).returns(z.void()).optional(),
+  timeout: z.number().positive().optional(),
+})
+export type UseCopyOnSelectOptions = z.infer<typeof UseCopyOnSelectOptionsSchema>
+
+export const UseCopyOnSelectReturnSchema = z.object({
+  copiedText: z.string().nullable(),
+  handleCopy: z.function().args(z.string()).returns(z.void()),
+  clearCopied: z.function().returns(z.void()),
+})
+export type UseCopyOnSelectReturn = z.infer<typeof UseCopyOnSelectReturnSchema>
 
 export function useCopyOnSelect(options: UseCopyOnSelectOptions = {}): {
   copiedText: string | null

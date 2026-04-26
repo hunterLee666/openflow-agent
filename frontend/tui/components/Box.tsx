@@ -1,62 +1,58 @@
 import React, { type ReactNode, type CSSProperties } from "react";
 import type {
-  FlexDirection,
-  FlexWrap,
-  AlignItems,
-  AlignContent,
-  JustifyContent,
-  Position,
   Spacing,
 } from "../types.js";
+import { z } from "zod";
 
-export interface BoxProps {
-  children?: ReactNode;
-  flexDirection?: FlexDirection;
-  flexWrap?: FlexWrap;
-  flexShrink?: number;
-  flexGrow?: number;
-  alignItems?: AlignItems;
-  alignContent?: AlignContent;
-  justifyContent?: JustifyContent;
-  position?: Position;
-  top?: number;
-  right?: number;
-  bottom?: number;
-  left?: number;
-  margin?: number | Spacing;
-  marginTop?: number;
-  marginBottom?: number;
-  marginLeft?: number;
-  marginRight?: number;
-  padding?: number | Spacing;
-  paddingTop?: number;
-  paddingBottom?: number;
-  paddingLeft?: number;
-  paddingRight?: number;
-  paddingX?: number;
-  paddingY?: number;
-  borderStyle?: "single" | "double" | "round" | "bold" | "none";
-  borderColor?: string;
-  width?: number | string;
-  height?: number | string;
-  minWidth?: number;
-  minHeight?: number;
-  maxWidth?: number;
-  maxHeight?: number;
-  gap?: number;
-  flex?: number | string;
-  overflow?: "visible" | "hidden" | "scroll" | "auto";
-  overflowX?: "visible" | "hidden" | "scroll" | "auto";
-  overflowY?: "visible" | "hidden" | "scroll" | "auto";
-  style?: CSSProperties;
-  backgroundColor?: string;
-  opacity?: number;
-  onClick?: () => void;
-  onMouseEnter?: () => void;
-  onMouseLeave?: () => void;
-  onScroll?: (event: React.UIEvent<HTMLDivElement>) => void;
-  ref?: React.RefObject<HTMLDivElement>;
-}
+export const BoxPropsSchema = z.object({
+  children: z.any().optional(),
+  flexDirection: z.enum(["row", "column", "row-reverse", "column-reverse"]).optional(),
+  flexWrap: z.enum(["nowrap", "wrap", "wrap-reverse"]).optional(),
+  flexShrink: z.number().optional(),
+  flexGrow: z.number().optional(),
+  alignItems: z.enum(["flex-start", "flex-end", "center", "baseline", "stretch"]).optional(),
+  alignContent: z.enum(["flex-start", "flex-end", "center", "space-between", "space-around", "stretch"]).optional(),
+  justifyContent: z.enum(["flex-start", "flex-end", "center", "space-between", "space-around", "space-evenly"]).optional(),
+  position: z.enum(["relative", "absolute"]).optional(),
+  top: z.number().optional(),
+  right: z.number().optional(),
+  bottom: z.number().optional(),
+  left: z.number().optional(),
+  margin: z.union([z.number(), z.any()]).optional(),
+  marginTop: z.number().optional(),
+  marginBottom: z.number().optional(),
+  marginLeft: z.number().optional(),
+  marginRight: z.number().optional(),
+  padding: z.union([z.number(), z.any()]).optional(),
+  paddingTop: z.number().optional(),
+  paddingBottom: z.number().optional(),
+  paddingLeft: z.number().optional(),
+  paddingRight: z.number().optional(),
+  paddingX: z.number().optional(),
+  paddingY: z.number().optional(),
+  borderStyle: z.enum(["single", "double", "round", "bold", "none"]).optional(),
+  borderColor: z.string().optional(),
+  width: z.union([z.number(), z.string()]).optional(),
+  height: z.union([z.number(), z.string()]).optional(),
+  minWidth: z.number().optional(),
+  minHeight: z.number().optional(),
+  maxWidth: z.number().optional(),
+  maxHeight: z.number().optional(),
+  gap: z.number().optional(),
+  flex: z.union([z.number(), z.string()]).optional(),
+  overflow: z.enum(["visible", "hidden", "scroll", "auto"]).optional(),
+  overflowX: z.enum(["visible", "hidden", "scroll", "auto"]).optional(),
+  overflowY: z.enum(["visible", "hidden", "scroll", "auto"]).optional(),
+  style: z.any().optional(),
+  backgroundColor: z.string().optional(),
+  opacity: z.number().optional(),
+  onClick: z.any().optional(),
+  onMouseEnter: z.any().optional(),
+  onMouseLeave: z.any().optional(),
+  onScroll: z.any().optional(),
+  ref: z.any().optional(),
+})
+export type BoxProps = z.infer<typeof BoxPropsSchema>
 
 function getSpacingValue(spacing: number | Spacing | undefined, side: keyof Spacing): number {
   if (spacing === undefined) return 0;

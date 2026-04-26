@@ -1,15 +1,17 @@
 import React, { type ReactNode, useEffect, useState } from "react";
 import { Text } from "./Text.js";
+import { z } from "zod";
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_FRAMES_REVERSE = [...SPINNER_FRAMES].reverse();
 
-export interface SpinnerProps {
-  frames?: string[];
-  interval?: number;
-  color?: string;
-  label?: string;
-}
+export const SpinnerPropsSchema = z.object({
+  frames: z.array(z.string()).optional(),
+  interval: z.number().optional(),
+  color: z.string().optional(),
+  label: z.string().optional(),
+})
+export type SpinnerProps = z.infer<typeof SpinnerPropsSchema>
 
 export function Spinner({
   frames = SPINNER_FRAMES,

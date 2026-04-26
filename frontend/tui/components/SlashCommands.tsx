@@ -2,14 +2,22 @@ import React, { type ReactNode, useState, useCallback } from "react";
 import { Box } from "./Box.js";
 import { Text } from "./Text.js";
 import { useInput } from "../hooks/useInput.js";
-import type { SlashCommand } from "../../../backend/commands/types.js";
+import { z } from "zod";
 
-export interface SlashCommandsProps {
-  commands: SlashCommand[];
-  onSelect: (command: SlashCommand, args: string) => void;
-  onCancel: () => void;
-  maxHeight?: number;
-}
+export const SlashCommandSchema = z.object({
+  name: z.string(),
+  aliases: z.array(z.string()),
+  description: z.string(),
+})
+export type SlashCommand = z.infer<typeof SlashCommandSchema>
+
+export const SlashCommandsPropsSchema = z.object({
+  commands: z.array(SlashCommandSchema),
+  onSelect: z.function().args(SlashCommandSchema, z.string()).returns(z.void()),
+  onCancel: z.function().returns(z.void()),
+  maxHeight: z.number().optional(),
+})
+export type SlashCommandsProps = z.infer<typeof SlashCommandsPropsSchema>
 
 export function SlashCommands({
   commands,

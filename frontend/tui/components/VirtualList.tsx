@@ -8,24 +8,27 @@ import React, {
 } from 'react'
 import { Box } from './Box.js'
 import { Text } from './Text.js'
+import { z } from 'zod'
 
-export interface VirtualListItem<T> {
-  key: string
-  data: T
-  size: number
-}
+export const VirtualListItemSchema = <T extends z.ZodTypeAny>(valueSchema: T) => z.object({
+  key: z.string(),
+  data: valueSchema,
+  size: z.number(),
+})
+export type VirtualListItem<T> = z.infer<ReturnType<typeof VirtualListItemSchema<z.ZodType<T>>>>
 
-export interface VirtualListProps<T> {
-  items: VirtualListItem<T>[]
-  renderItem: (item: T, index: number) => ReactNode
-  estimatedItemSize?: number
-  overscan?: number
-  width?: number
-  height?: number
-  onScroll?: (scrollTop: number, scrollHeight: number, clientHeight: number) => void
-  scrollToIndex?: number
-  autoScrollToBottom?: boolean
-}
+export const VirtualListPropsSchema = <T extends z.ZodTypeAny>(itemSchema: T) => z.object({
+  items: z.array(VirtualListItemSchema(itemSchema)),
+  renderItem: z.function().args(itemSchema, z.number()).returns(z.any()),
+  estimatedItemSize: z.number().optional(),
+  overscan: z.number().optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  onScroll: z.function().args(z.number(), z.number(), z.number()).returns(z.void()).optional(),
+  scrollToIndex: z.number().optional(),
+  autoScrollToBottom: z.boolean().optional(),
+})
+export type VirtualListProps<T> = z.infer<ReturnType<typeof VirtualListPropsSchema<z.ZodType<T>>>>
 
 interface VirtualListState {
   scrollTop: number

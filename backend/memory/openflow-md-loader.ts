@@ -23,7 +23,8 @@ export type OpenflowMdStackResult = z.infer<typeof OpenflowMdStackResultSchema>;
 
 const GLOBAL_OPENFLOW_MD = join(homedir(), ".openflow", "OPENFLOW.md");
 const LOCAL_OPENFLOW_MD = ".openflow/OPENFLOW.local.md";
-const PROJECT_OPENFLOW_MD = "OPENFLOW.md";
+const PROJECT_OPENFLOW_MD = ".openflow/OPENFLOW.md";
+const ROOT_OPENFLOW_MD = "OPENFLOW.md";
 
 const MIN_LINES = 50;
 const MAX_LINES = 200;

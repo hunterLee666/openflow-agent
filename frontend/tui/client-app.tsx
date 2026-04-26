@@ -5,11 +5,13 @@ import { createBridgeClient } from "../../backend/bridge/client.js";
 import type { BridgeClient } from "../../backend/bridge/client.js";
 import type { Message } from "./components/Message.js";
 import type { WebSocketConfig } from "../../backend/transport/types.js";
+import { z } from "zod";
 
-interface TuiClientAppProps {
-  workspaceRoot?: string;
-  wsUrl?: string;
-}
+export const TuiClientAppPropsSchema = z.object({
+  workspaceRoot: z.string().optional(),
+  wsUrl: z.string().optional(),
+})
+export type TuiClientAppProps = z.infer<typeof TuiClientAppPropsSchema>
 
 function TuiClientApp({
   workspaceRoot = process.cwd(),

@@ -1,20 +1,23 @@
 import React, { type ReactNode, type ReactElement, useState } from "react";
 import { Box } from "./Box.js";
 import { Text } from "./Text.js";
+import { z } from "zod";
 
-export interface Tab {
-  id: string;
-  label: string;
-  content?: ReactNode;
-  disabled?: boolean;
-}
+export const TabSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  content: z.any().optional(),
+  disabled: z.boolean().optional(),
+})
+export type Tab = z.infer<typeof TabSchema>
 
-export interface TabsProps {
-  tabs: Tab[];
-  activeTab?: string;
-  onChange?: (tabId: string) => void;
-  variant?: "line" | "boxed";
-}
+export const TabsPropsSchema = z.object({
+  tabs: z.array(TabSchema),
+  activeTab: z.string().optional(),
+  onChange: z.function().args(z.string()).returns(z.void()).optional(),
+  variant: z.enum(["line", "boxed"]).optional(),
+})
+export type TabsProps = z.infer<typeof TabsPropsSchema>
 
 export function Tabs({
   tabs,

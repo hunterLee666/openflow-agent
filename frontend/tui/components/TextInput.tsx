@@ -9,26 +9,28 @@ import React, {
 import { Text } from "./Text.js";
 import { Box } from "./Box.js";
 import { ansiWidth } from "../ansi.js";
+import { z } from 'zod'
 
-export interface TextInputProps {
-  value: string;
-  onChange?: (value: string) => void;
-  onSubmit?: (value: string) => void;
-  onCancel?: () => void;
-  placeholder?: string;
-  mask?: string;
-  multiline?: boolean;
-  maxLength?: number;
-  autoFocus?: boolean;
-  disabled?: boolean;
-  readOnly?: boolean;
-  prefix?: React.ReactNode;
-  suffix?: React.ReactNode;
-  showCursor?: boolean;
-  cursorPosition?: number;
-  onCursorChange?: (position: number) => void;
-  inputFilter?: (input: string) => string;
-}
+export const TextInputPropsSchema = z.object({
+  value: z.string(),
+  onChange: z.function().args(z.string()).returns(z.void()).optional(),
+  onSubmit: z.function().args(z.string()).returns(z.void()).optional(),
+  onCancel: z.function().returns(z.void()).optional(),
+  placeholder: z.string().optional(),
+  mask: z.string().optional(),
+  multiline: z.boolean().optional(),
+  maxLength: z.number().positive().int().optional(),
+  autoFocus: z.boolean().optional(),
+  disabled: z.boolean().optional(),
+  readOnly: z.boolean().optional(),
+  prefix: z.any().optional(),
+  suffix: z.any().optional(),
+  showCursor: z.boolean().optional(),
+  cursorPosition: z.number().int().nonnegative().optional(),
+  onCursorChange: z.function().args(z.number().int()).returns(z.void()).optional(),
+  inputFilter: z.function().args(z.string()).returns(z.string()).optional(),
+})
+export type TextInputProps = z.infer<typeof TextInputPropsSchema>
 
 export function TextInput({
   value,

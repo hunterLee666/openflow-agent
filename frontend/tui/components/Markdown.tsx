@@ -1,12 +1,14 @@
 import React, { type ReactNode, useMemo } from "react";
 import { Text } from "./Text.js";
 import { stripAnsi, ansiWidth } from "../ansi.js";
+import { z } from "zod";
 
-export interface MarkdownProps {
-  children: string;
-  dimColor?: boolean;
-  codeBg?: string;
-}
+export const MarkdownPropsSchema = z.object({
+  children: z.string(),
+  dimColor: z.boolean().optional(),
+  codeBg: z.string().optional(),
+})
+export type MarkdownProps = z.infer<typeof MarkdownPropsSchema>
 
 function escapeHtml(text: string): string {
   return text

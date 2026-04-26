@@ -1,24 +1,28 @@
 import type { Rectangle, Size } from '../layout/geometry.js'
+import { z } from 'zod'
 
-export interface TerminalCursor {
-  x: number
-  y: number
-  visible: boolean
-}
+export const TerminalCursorSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  visible: z.boolean(),
+})
+export type TerminalCursor = z.infer<typeof TerminalCursorSchema>
 
-export interface Cell {
-  char: string
-  style: number
-  hyperlink: number
-}
+export const CellSchema = z.object({
+  char: z.string(),
+  style: z.number(),
+  hyperlink: z.number(),
+})
+export type Cell = z.infer<typeof CellSchema>
 
-export interface Screen {
-  width: number
-  height: number
-  cells: Cell[][]
-  cursor: TerminalCursor
-  dirty: boolean
-}
+export const ScreenSchema = z.object({
+  width: z.number(),
+  height: z.number(),
+  cells: z.array(z.array(CellSchema)),
+  cursor: TerminalCursorSchema,
+  dirty: z.boolean(),
+})
+export type Screen = z.infer<typeof ScreenSchema>
 
 export class CharPool {
   private strings: string[] = [' ', '']

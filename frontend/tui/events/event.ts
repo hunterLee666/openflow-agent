@@ -1,15 +1,30 @@
-export class Event {
-  bubbles = true
+import { z } from "zod";
 
-  private _didStopImmediatePropagation = false
+export const EventSchema = z.object({
+  bubbles: z.boolean().default(true),
+  cancelable: z.boolean().default(true),
+  stopImmediatePropagationFlag: z.boolean().default(false),
+});
+export type Event = z.infer<typeof EventSchema>;
 
-  didStopImmediatePropagation(): boolean {
-    return this._didStopImmediatePropagation
+export class BaseEvent implements Event {
+  bubbles: boolean;
+  cancelable: boolean;
+  stopImmediatePropagationFlag: boolean;
+
+  constructor(type: string, init: EventInit = {}) {
+    this.bubbles = init.bubbles ?? true;
+    this.cancelable = init.cancelable ?? true;
+    this.stopImmediatePropagationFlag = false;
   }
 
   stopImmediatePropagation(): void {
-    this._didStopImmediatePropagation = true
+    this.stopImmediatePropagationFlag = true;
+  }
+
+  didStopImmediatePropagation(): boolean {
+    return this.stopImmediatePropagationFlag;
   }
 }
 
-export type TerminalEvent = Event
+export type TerminalEvent = BaseEvent;

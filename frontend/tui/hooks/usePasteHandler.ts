@@ -1,9 +1,11 @@
 import { useEffect, useRef, useCallback } from 'react'
+import { z } from 'zod'
 
-export interface UsePasteHandlerOptions {
-  onPaste?: (text: string, event: ClipboardEvent) => void
-  enabled?: boolean
-}
+export const UsePasteHandlerOptionsSchema = z.object({
+  onPaste: z.function().args(z.string(), z.instanceof(ClipboardEvent)).returns(z.void()).optional(),
+  enabled: z.boolean().optional(),
+})
+export type UsePasteHandlerOptions = z.infer<typeof UsePasteHandlerOptionsSchema>
 
 export function usePasteHandler(options: UsePasteHandlerOptions = {}): void {
   const { onPaste, enabled = true } = options

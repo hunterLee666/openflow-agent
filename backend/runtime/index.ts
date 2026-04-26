@@ -1,4 +1,4 @@
-export { LayeredConfigLoader, ConfigLayer } from "./layered-config.js";
+export { LayeredConfigLoader, createLayeredConfigLoader } from "./layered-config.js";
 export type {
   OpenFlowSettings,
   AgentDefinition,

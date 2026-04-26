@@ -1,24 +1,26 @@
 import React, { type ReactNode, type CSSProperties } from "react";
 import { FOREGROUND_COLORS, BACKGROUND_COLORS, ANSI_CODES } from "../ansi.js";
+import { z } from "zod";
 
-export interface TextProps {
-  children?: ReactNode;
-  color?: string;
-  backgroundColor?: string;
-  bold?: boolean;
-  dim?: boolean;
-  dimColor?: boolean;
-  italic?: boolean;
-  underline?: boolean;
-  strikethrough?: boolean;
-  inverse?: boolean;
-  blink?: boolean;
-  width?: number | string;
-  style?: CSSProperties;
-  onClick?: () => void;
-  onMouseEnter?: () => void;
-  onMouseLeave?: () => void;
-}
+export const TextPropsSchema = z.object({
+  children: z.any().optional(),
+  color: z.string().optional(),
+  backgroundColor: z.string().optional(),
+  bold: z.boolean().optional(),
+  dim: z.boolean().optional(),
+  dimColor: z.boolean().optional(),
+  italic: z.boolean().optional(),
+  underline: z.boolean().optional(),
+  strikethrough: z.boolean().optional(),
+  inverse: z.boolean().optional(),
+  blink: z.boolean().optional(),
+  width: z.union([z.number(), z.string()]).optional(),
+  style: z.any().optional(),
+  onClick: z.function().returns(z.void()).optional(),
+  onMouseEnter: z.function().returns(z.void()).optional(),
+  onMouseLeave: z.function().returns(z.void()).optional(),
+})
+export type TextProps = z.infer<typeof TextPropsSchema>
 
 function buildAnsiStyle(props: TextProps): string {
   const codes: string[] = [];

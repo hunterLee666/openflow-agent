@@ -1,18 +1,27 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { z } from 'zod'
 
-export interface CursorPosition {
-  offset: number
-  line: number
-  column: number
-}
+export const CursorPositionSchema = z.object({
+  offset: z.number().int().nonnegative(),
+  line: z.number().int().nonnegative(),
+  column: z.number().int().nonnegative(),
+})
+export type CursorPosition = z.infer<typeof CursorPositionSchema>
 
-export interface TextInputState {
-  value: string
-  cursorPosition: CursorPosition
-  selection: { start: number; end: number } | null
-  visibleLines: string[]
-  scrollOffset: number
-}
+export const TextInputSelectionSchema = z.object({
+  start: z.number().int().nonnegative(),
+  end: z.number().int().nonnegative(),
+}).nullable()
+export type TextInputSelection = z.infer<typeof TextInputSelectionSchema>
+
+export const TextInputStateSchema = z.object({
+  value: z.string(),
+  cursorPosition: CursorPositionSchema,
+  selection: TextInputSelectionSchema,
+  visibleLines: z.array(z.string()),
+  scrollOffset: z.number().int().nonnegative(),
+})
+export type TextInputState = z.infer<typeof TextInputStateSchema>
 
 export function useTextInput({
   value,

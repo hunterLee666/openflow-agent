@@ -1,33 +1,36 @@
 import { useEffect, useCallback, useRef } from "react";
+import { z } from 'zod'
 
-export interface KeyEvent {
-  key: string;
-  ctrl: boolean;
-  shift: boolean;
-  alt: boolean;
-  meta: boolean;
-}
+export const KeyEventSchema = z.object({
+  key: z.string(),
+  ctrl: z.boolean(),
+  shift: z.boolean(),
+  alt: z.boolean(),
+  meta: z.boolean(),
+})
+export type KeyEvent = z.infer<typeof KeyEventSchema>
 
-export interface UseInputOptions {
-  onKeyDown?: (key: KeyEvent) => void;
-  onKeyUp?: (key: KeyEvent) => void;
-  onEscape?: () => void;
-  onEnter?: () => void;
-  onBackspace?: () => void;
-  onArrowUp?: () => void;
-  onArrowDown?: () => void;
-  onArrowLeft?: () => void;
-  onArrowRight?: () => void;
-  onTab?: () => void;
-  onCtrlC?: () => void;
-  onCtrlL?: () => void;
-  onCtrlR?: () => void;
-  onPageUp?: () => void;
-  onPageDown?: () => void;
-  onHome?: () => void;
-  onEnd?: () => void;
-  isActive?: boolean;
-}
+export const UseInputOptionsSchema = z.object({
+  onKeyDown: z.function().args(KeyEventSchema).returns(z.void()).optional(),
+  onKeyUp: z.function().args(KeyEventSchema).returns(z.void()).optional(),
+  onEscape: z.function().returns(z.void()).optional(),
+  onEnter: z.function().returns(z.void()).optional(),
+  onBackspace: z.function().returns(z.void()).optional(),
+  onArrowUp: z.function().returns(z.void()).optional(),
+  onArrowDown: z.function().returns(z.void()).optional(),
+  onArrowLeft: z.function().returns(z.void()).optional(),
+  onArrowRight: z.function().returns(z.void()).optional(),
+  onTab: z.function().returns(z.void()).optional(),
+  onCtrlC: z.function().returns(z.void()).optional(),
+  onCtrlL: z.function().returns(z.void()).optional(),
+  onCtrlR: z.function().returns(z.void()).optional(),
+  onPageUp: z.function().returns(z.void()).optional(),
+  onPageDown: z.function().returns(z.void()).optional(),
+  onHome: z.function().returns(z.void()).optional(),
+  onEnd: z.function().returns(z.void()).optional(),
+  isActive: z.boolean().optional(),
+})
+export type UseInputOptions = z.infer<typeof UseInputOptionsSchema>
 
 function parseKeyString(key: string): KeyEvent {
   const ctrl = key.startsWith("\x1b");

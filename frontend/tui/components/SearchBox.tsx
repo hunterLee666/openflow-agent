@@ -2,16 +2,18 @@ import React, { type ReactElement, useState } from "react";
 import { Box } from "./Box.js";
 import { Text } from "./Text.js";
 import { useInput } from "../hooks/useInput.js";
+import { z } from "zod";
 
-export interface SearchBoxProps {
-  query: string;
-  onQueryChange?: (query: string) => void;
-  placeholder?: string;
-  prefix?: string;
-  width?: number | string;
-  onSubmit?: () => void;
-  onCancel?: () => void;
-}
+export const SearchBoxPropsSchema = z.object({
+  query: z.string(),
+  onQueryChange: z.function().args(z.string()).returns(z.void()).optional(),
+  placeholder: z.string().optional(),
+  prefix: z.string().optional(),
+  width: z.union([z.number(), z.string()]).optional(),
+  onSubmit: z.function().returns(z.void()).optional(),
+  onCancel: z.function().returns(z.void()).optional(),
+})
+export type SearchBoxProps = z.infer<typeof SearchBoxPropsSchema>
 
 export function SearchBox({
   query,

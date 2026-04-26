@@ -2,33 +2,38 @@ import React, { type ReactNode } from "react";
 import { Text } from "./Text.js";
 import { Box } from "./Box.js";
 import { Markdown } from "./Markdown.js";
+import { z } from "zod";
 
-export type MessageRole = "user" | "assistant" | "system" | "tool";
+export const MessageRoleSchema = z.enum(["user", "assistant", "system", "tool"])
+export type MessageRole = z.infer<typeof MessageRoleSchema>
 
-export interface MessageContent {
-  type: "text" | "tool_use" | "tool_result";
-  text?: string;
-  name?: string;
-  tool_use_id?: string;
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
-  content?: string;
-}
+export const MessageContentSchema = z.object({
+  type: z.enum(["text", "tool_use", "tool_result"]),
+  text: z.string().optional(),
+  name: z.string().optional(),
+  tool_use_id: z.string().optional(),
+  tool_name: z.string().optional(),
+  tool_input: z.record(z.string(), z.any()).optional(),
+  content: z.string().optional(),
+})
+export type MessageContent = z.infer<typeof MessageContentSchema>
 
-export interface Message {
-  id: string;
-  role: MessageRole;
-  content: MessageContent | MessageContent[];
-  timestamp?: number;
-  isStreaming?: boolean;
-  isError?: boolean;
-}
+export const MessageSchema = z.object({
+  id: z.string(),
+  role: MessageRoleSchema,
+  content: z.union([MessageContentSchema, z.array(MessageContentSchema)]),
+  timestamp: z.number().optional(),
+  isStreaming: z.boolean().optional(),
+  isError: z.boolean().optional(),
+})
+export type Message = z.infer<typeof MessageSchema>
 
-export interface MessageProps {
-  message: Message;
-  showTimestamp?: boolean;
-  maxWidth?: number;
-}
+export const MessagePropsSchema = z.object({
+  message: MessageSchema,
+  showTimestamp: z.boolean().optional(),
+  maxWidth: z.number().optional(),
+})
+export type MessageProps = z.infer<typeof MessagePropsSchema>
 
 const ROLE_COLORS: Record<MessageRole, string> = {
   user: "green",

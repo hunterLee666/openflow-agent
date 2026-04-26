@@ -1,19 +1,24 @@
-export interface Size {
-  width: number
-  height: number
-}
+import { z } from 'zod'
 
-export interface Point {
-  x: number
-  y: number
-}
+export const SizeSchema = z.object({
+  width: z.number(),
+  height: z.number(),
+})
+export type Size = z.infer<typeof SizeSchema>
 
-export interface Rectangle {
-  x: number
-  y: number
-  width: number
-  height: number
-}
+export const PointSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+})
+export type Point = z.infer<typeof PointSchema>
+
+export const RectangleSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+})
+export type Rectangle = z.infer<typeof RectangleSchema>
 
 export function unionRect(a: Rectangle, b: Rectangle): Rectangle {
   const x = Math.min(a.x, b.x)

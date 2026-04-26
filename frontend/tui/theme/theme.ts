@@ -1,71 +1,83 @@
-export type RGBColor = `rgb(${number},${number},${number})`
-export type HexColor = `#${string}`
-export type Ansi256Color = `ansi256(${number})`
+import { z } from "zod";
 
-export type Color = RGBColor | HexColor | Ansi256Color
+export const RGBColorSchema = z.string().regex(/^rgb\(\d+,\d+,\d+\)$/);
+export type RGBColor = z.infer<typeof RGBColorSchema>;
 
-export type TextStyles = {
-  readonly color?: Color
-  readonly backgroundColor?: Color
-  readonly dim?: boolean
-  readonly bold?: boolean
-  readonly italic?: boolean
-  readonly underline?: boolean
-  readonly strikethrough?: boolean
-  readonly inverse?: boolean
-}
+export const HexColorSchema = z.string().regex(/^#[0-9a-fA-F]{3,6}$/);
+export type HexColor = z.infer<typeof HexColorSchema>;
 
-export interface Theme {
-  autoAccept: string
-  bashBorder: string
-  openflow: string
-  openflowShimmer: string
-  permission: string
-  permissionShimmer: string
-  planMode: string
-  ide: string
-  promptBorder: string
-  promptBorderShimmer: string
-  text: string
-  inverseText: string
-  inactive: string
-  inactiveShimmer: string
-  subtle: string
-  suggestion: string
-  remember: string
-  background: string
-  success: string
-  error: string
-  warning: string
-  merged: string
-  warningShimmer: string
-  diffAdded: string
-  diffRemoved: string
-  diffAddedDimmed: string
-  diffRemovedDimmed: string
-  diffAddedWord: string
-  diffRemovedWord: string
-  red_FOR_SUBAGENTS_ONLY: string
-  blue_FOR_SUBAGENTS_ONLY: string
-  green_FOR_SUBAGENTS_ONLY: string
-  yellow_FOR_SUBAGENTS_ONLY: string
-  purple_FOR_SUBAGENTS_ONLY: string
-  orange_FOR_SUBAGENTS_ONLY: string
-  pink_FOR_SUBAGENTS_ONLY: string
-  cyan_FOR_SUBAGENTS_ONLY: string
-  userMessageBackground: string
-  userMessageBackgroundHover: string
-  messageActionsBackground: string
-  selectionBg: string
-  bashMessageBackgroundColor: string
-  memoryBackgroundColor: string
-  rate_limit_fill: string
-  rate_limit_empty: string
-  fastMode: string
-  fastModeShimmer: string
-  clawd_body: string
-  clawd_background: string
-}
+export const Ansi256ColorSchema = z.string().regex(/^ansi256\(\d+\)$/);
+export type Ansi256Color = z.infer<typeof Ansi256ColorSchema>;
+
+export const ColorSchema = z.union([RGBColorSchema, HexColorSchema, Ansi256ColorSchema]);
+export type Color = z.infer<typeof ColorSchema>;
+
+export const TextStylesSchema = z.object({
+  color: ColorSchema.optional(),
+  backgroundColor: ColorSchema.optional(),
+  dim: z.boolean().optional(),
+  bold: z.boolean().optional(),
+  italic: z.boolean().optional(),
+  underline: z.boolean().optional(),
+  strikethrough: z.boolean().optional(),
+  inverse: z.boolean().optional(),
+});
+export type TextStyles = z.infer<typeof TextStylesSchema>;
+
+const themeColorSchema = z.string();
+
+export const ThemeSchema = z.object({
+  autoAccept: themeColorSchema,
+  bashBorder: themeColorSchema,
+  openflow: themeColorSchema,
+  openflowShimmer: themeColorSchema,
+  permission: themeColorSchema,
+  permissionShimmer: themeColorSchema,
+  planMode: themeColorSchema,
+  ide: themeColorSchema,
+  promptBorder: themeColorSchema,
+  promptBorderShimmer: themeColorSchema,
+  text: themeColorSchema,
+  inverseText: themeColorSchema,
+  inactive: themeColorSchema,
+  inactiveShimmer: themeColorSchema,
+  subtle: themeColorSchema,
+  suggestion: themeColorSchema,
+  remember: themeColorSchema,
+  background: themeColorSchema,
+  success: themeColorSchema,
+  error: themeColorSchema,
+  warning: themeColorSchema,
+  merged: themeColorSchema,
+  warningShimmer: themeColorSchema,
+  diffAdded: themeColorSchema,
+  diffRemoved: themeColorSchema,
+  diffAddedDimmed: themeColorSchema,
+  diffRemovedDimmed: themeColorSchema,
+  diffAddedWord: themeColorSchema,
+  diffRemovedWord: themeColorSchema,
+  red_FOR_SUBAGENTS_ONLY: themeColorSchema,
+  blue_FOR_SUBAGENTS_ONLY: themeColorSchema,
+  green_FOR_SUBAGENTS_ONLY: themeColorSchema,
+  yellow_FOR_SUBAGENTS_ONLY: themeColorSchema,
+  purple_FOR_SUBAGENTS_ONLY: themeColorSchema,
+  orange_FOR_SUBAGENTS_ONLY: themeColorSchema,
+  pink_FOR_SUBAGENTS_ONLY: themeColorSchema,
+  cyan_FOR_SUBAGENTS_ONLY: themeColorSchema,
+  userMessageBackground: themeColorSchema,
+  userMessageBackgroundHover: themeColorSchema,
+  messageActionsBackground: themeColorSchema,
+  selectionBg: themeColorSchema,
+  bashMessageBackgroundColor: themeColorSchema,
+  memoryBackgroundColor: themeColorSchema,
+  rate_limit_fill: themeColorSchema,
+  rate_limit_empty: themeColorSchema,
+  fastMode: themeColorSchema,
+  fastModeShimmer: themeColorSchema,
+  clawd_body: themeColorSchema,
+  clawd_background: themeColorSchema,
+});
+export type Theme = z.infer<typeof ThemeSchema>;
 
 export const THEME_NAMES = [
   'dark',
@@ -74,13 +86,30 @@ export const THEME_NAMES = [
   'dark-daltonized',
   'light-ansi',
   'dark-ansi',
-] as const
+] as const;
 
-export type ThemeName = (typeof THEME_NAMES)[number]
+export const ThemeNameSchema = z.enum([
+  'dark',
+  'light',
+  'light-daltonized',
+  'dark-daltonized',
+  'light-ansi',
+  'dark-ansi',
+]);
+export type ThemeName = z.infer<typeof ThemeNameSchema>;
 
-export const THEME_SETTINGS = ['auto', ...THEME_NAMES] as const
+export const THEME_SETTINGS = ['auto', ...THEME_NAMES] as const;
 
-export type ThemeSetting = (typeof THEME_SETTINGS)[number]
+export const ThemeSettingSchema = z.enum([
+  'auto',
+  'dark',
+  'light',
+  'light-daltonized',
+  'dark-daltonized',
+  'light-ansi',
+  'dark-ansi',
+]);
+export type ThemeSetting = z.infer<typeof ThemeSettingSchema>;
 
 const lightTheme: Theme = {
   autoAccept: 'rgb(135,0,255)',
@@ -132,7 +161,7 @@ const lightTheme: Theme = {
   fastModeShimmer: 'rgb(248,113,113)',
   clawd_body: 'rgb(30,30,30)',
   clawd_background: 'rgb(250,250,250)',
-}
+};
 
 const darkTheme: Theme = {
   autoAccept: 'rgb(135,0,255)',
@@ -184,7 +213,7 @@ const darkTheme: Theme = {
   fastModeShimmer: 'rgb(248,113,113)',
   clawd_body: 'rgb(30,30,30)',
   clawd_background: 'rgb(45,45,45)',
-}
+};
 
 export const THEMES: Record<ThemeName, Theme> = {
   dark: darkTheme,
@@ -193,15 +222,15 @@ export const THEMES: Record<ThemeName, Theme> = {
   'dark-daltonized': darkTheme,
   'light-ansi': lightTheme,
   'dark-ansi': darkTheme,
-}
+};
 
 export function getTheme(name: ThemeName): Theme {
-  return THEMES[name] ?? darkTheme
+  return THEMES[name] ?? darkTheme;
 }
 
 export function resolveTheme(setting: ThemeSetting, systemTheme: ThemeName = 'dark'): ThemeName {
   if (setting === 'auto') {
-    return systemTheme
+    return systemTheme;
   }
-  return setting
+  return setting;
 }

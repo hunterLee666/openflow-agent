@@ -1,13 +1,43 @@
-import type {
-  Message as QueryMessage,
-  StreamEvent,
-  QueryResult,
-  ContentBlock,
-} from "../../backend/types/index.js";
 import type { Message } from "./components/Message.js";
 import type { AppState } from "./app.js";
 import { streamWords, renderWithFrameControl, type StreamingConfig, type StreamingRendererOptions } from "./render/streaming-renderer.js";
 import { getStringWidth, truncateString } from "./termio/unicode-width.js";
+
+// Local type definitions for backend types
+export type QueryMessage = {
+  id: string;
+  role: "user" | "assistant" | "system" | "tool";
+  content: string | Array<{
+    type: string;
+    text?: string;
+    [key: string]: unknown;
+  }>;
+  timestamp?: number;
+};
+
+export type StreamEvent = {
+  kind: "assistant_text_delta" | "thinking_delta" | "tool_execution_start" | "tool_execution_end" | "error" | "completion";
+  text?: string;
+  toolName?: string;
+  error?: string;
+  [key: string]: unknown;
+};
+
+export type QueryResult = {
+  status: "completed" | "cancelled" | "budget_exceeded" | "max_turns_exceeded" | "compaction_circuit_breaker" | "fatal_error";
+  finalText?: string;
+  reason?: string;
+  [key: string]: unknown;
+};
+
+export type ContentBlock = {
+  type: "text" | "tool_use" | "tool_result";
+  text?: string;
+  name?: string;
+  input?: unknown;
+  content?: string | unknown[];
+  [key: string]: unknown;
+};
 
 export function queryMessageToUIMessage(
   msg: QueryMessage,
@@ -39,8 +69,15 @@ export async function* streamQueryResponse(
     maxDisplayWidth?: number;
   } = {}
 ): AsyncGenerator<{ text: string; width: number; isComplete: boolean }, void, unknown> {
+  // Create a stream that yields just the text from the streaming chunks
+  async function* textStream(): AsyncGenerator<string, void, unknown> {
+    for await (const chunk of streamWords(source, config.streaming || {})) {
+      yield chunk.text
+    }
+  }
+
   const renderer = renderWithFrameControl(
-    streamWords(source, config.streaming || {}),
+    textStream(),
     config.renderer || {}
   )
 
@@ -179,9 +216,11 @@ export function formatToolResultForDisplay(block: ContentBlock): string {
 
   if (Array.isArray(content)) {
     return content
-      .map((c) => {
+      .map((c: unknown) => {
         if (typeof c === "string") return c;
-        if (c.type === "text" && c.text) return c.text;
+        if (typeof c === "object" && c !== null && "type" in c && (c as { type: string }).type === "text" && "text" in c) {
+          return (c as { text?: string }).text ?? "";
+        }
         return JSON.stringify(c);
       })
       .join("\n");

@@ -1,5 +1,6 @@
 import type { Size } from '../layout/geometry.js'
 import type { CharPool, HyperlinkPool, Screen, StylePool } from './screen.js'
+import { z } from 'zod'
 
 export interface Cursor {
   x: number
@@ -12,6 +13,18 @@ export interface Frame {
   viewport: Size
   cursor: Cursor
 }
+
+export const CursorSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  visible: z.boolean(),
+})
+
+export const FrameSchema = z.object({
+  screen: z.any(),
+  viewport: z.any(),
+  cursor: CursorSchema,
+})
 
 export function createFrame(
   rows: number,

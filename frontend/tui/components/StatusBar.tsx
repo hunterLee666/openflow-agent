@@ -1,20 +1,23 @@
 import React, { type ReactNode } from "react";
 import { Box } from "./Box.js";
 import { Text } from "./Text.js";
+import { z } from "zod";
 
-export interface StatusBarProps {
-  segments?: StatusSegment[];
-  left?: ReactNode;
-  right?: ReactNode;
-  compact?: boolean;
-}
+export const StatusSegmentSchema = z.object({
+  label: z.string(),
+  color: z.string().optional(),
+  value: z.union([z.string(), z.number()]).optional(),
+  onClick: z.function().returns(z.void()).optional(),
+})
+export type StatusSegment = z.infer<typeof StatusSegmentSchema>
 
-export interface StatusSegment {
-  label: string;
-  color?: string;
-  value?: string | number;
-  onClick?: () => void;
-}
+export const StatusBarPropsSchema = z.object({
+  segments: z.array(StatusSegmentSchema).optional(),
+  left: z.any().optional(),
+  right: z.any().optional(),
+  compact: z.boolean().optional(),
+})
+export type StatusBarProps = z.infer<typeof StatusBarPropsSchema>
 
 export function StatusBar({
   segments = [],

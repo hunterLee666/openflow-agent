@@ -1,16 +1,19 @@
 import { useState, useEffect, useCallback } from 'react'
+import { z } from 'zod'
 
-export interface IdeSelection {
-  text: string
-  startLine: number
-  endLine: number
-  filePath?: string
-}
+export const IdeSelectionSchema = z.object({
+  text: z.string(),
+  startLine: z.number().int().positive(),
+  endLine: z.number().int().positive(),
+  filePath: z.string().optional(),
+})
+export type IdeSelection = z.infer<typeof IdeSelectionSchema>
 
-export interface UseIdeSelectionOptions {
-  enabled?: boolean
-  onSelectionChange?: (selection: IdeSelection | null) => void
-}
+export const UseIdeSelectionOptionsSchema = z.object({
+  enabled: z.boolean().optional(),
+  onSelectionChange: z.function().args(z.union([IdeSelectionSchema, z.null()])).returns(z.void()).optional(),
+})
+export type UseIdeSelectionOptions = z.infer<typeof UseIdeSelectionOptionsSchema>
 
 export function useIdeSelection(options: UseIdeSelectionOptions = {}): IdeSelection | null {
   const { enabled = true, onSelectionChange } = options

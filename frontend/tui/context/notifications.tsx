@@ -1,130 +1,129 @@
-import { createContext, useContext, useCallback, useState, type ReactNode } from 'react'
+import { createContext, useContext, useCallback, useState, type ReactNode } from 'react';
+import { z } from 'zod';
 
-export type NotificationType = 'info' | 'success' | 'warning' | 'error'
-export type NotificationPriority = 'low' | 'medium' | 'high' | 'immediate'
+export const NotificationTypeSchema = z.enum(['info', 'success', 'warning', 'error']);
+export type NotificationType = z.infer<typeof NotificationTypeSchema>;
 
-export interface BaseNotification {
-  key: string
-  invalidates?: string[]
-  priority: NotificationPriority
-  timeoutMs?: number
-  fold?: (accumulator: Notification, incoming: Notification) => Notification
-}
+export const NotificationPrioritySchema = z.enum(['low', 'medium', 'high', 'immediate']);
+export type NotificationPriority = z.infer<typeof NotificationPrioritySchema>;
 
-export interface TextNotification extends BaseNotification {
-  text: string
-  color?: string
-}
+const BaseNotificationSchema = z.object({
+  key: z.string(),
+  invalidates: z.array(z.string()).optional(),
+  priority: NotificationPrioritySchema,
+  timeoutMs: z.number().positive().optional(),
+  fold: z.function().optional(),
+});
+export type BaseNotification = z.infer<typeof BaseNotificationSchema>;
 
-export interface JSXNotification extends BaseNotification {
-  jsx: ReactNode
-}
+const TextNotificationSchema = BaseNotificationSchema.extend({
+  text: z.string(),
+  color: z.string().optional(),
+});
+export type TextNotification = z.infer<typeof TextNotificationSchema>;
 
-export type Notification = TextNotification | JSXNotification
+const JSXNotificationSchema = BaseNotificationSchema.extend({
+  jsx: z.any(),
+});
+export type JSXNotification = z.infer<typeof JSXNotificationSchema>;
 
-const DEFAULT_TIMEOUT_MS = 8000
+export const NotificationSchema: z.ZodType<BaseNotification & { text?: string; jsx?: ReactNode }> =
+  z.union([TextNotificationSchema, JSXNotificationSchema]);
+export type Notification = z.infer<typeof NotificationSchema>;
+
+const DEFAULT_TIMEOUT_MS = 8000;
 
 interface NotificationState {
-  queue: Notification[]
-  current: Notification | null
+  queue: Notification[];
+  current: Notification | null;
 }
 
 interface NotificationContextValue {
-  notifications: NotificationState
-  addNotification: (notification: Notification) => void
-  removeNotification: (key: string) => void
-  clearAll: () => void
+  notifications: NotificationState;
+  addNotification: (notification: Notification) => void;
+  removeNotification: (key: string) => void;
+  clearAll: () => void;
 }
 
-export const NotificationContext = createContext<NotificationContextValue | null>(null)
+export const NotificationContext = createContext<NotificationContextValue | null>(null);
 
 export function useNotifications(): {
-  addNotification: (notification: Notification) => void
-  removeNotification: (key: string) => void
-  clearAll: () => void
+  addNotification: (notification: Notification) => void;
+  removeNotification: (key: string) => void;
+  clearAll: () => void;
 } {
-  const context = useContext(NotificationContext)
+  const context = useContext(NotificationContext);
   if (!context) {
     return {
       addNotification: () => {},
       removeNotification: () => {},
       clearAll: () => {},
-    }
+    };
   }
-  return context
+  return context;
 }
 
 export function useCurrentNotification(): Notification | null {
-  const context = useContext(NotificationContext)
-  return context?.notifications.current ?? null
+  const context = useContext(NotificationContext);
+  return context?.notifications.current ?? null;
 }
 
-interface NotificationProviderProps {
-  children: ReactNode
+export interface NotificationProviderProps {
+  children: ReactNode;
 }
 
 export function NotificationProvider({ children }: NotificationProviderProps) {
-  const [state, setState] = useState<NotificationState>({
+  const [notifications, setNotifications] = useState<NotificationState>({
     queue: [],
     current: null,
-  })
-
-  const removeNotification = useCallback((key: string) => {
-    setState(prev => ({
-      ...prev,
-      queue: prev.queue.filter(n => n.key !== key),
-      current: prev.current?.key === key ? null : prev.current,
-    }))
-  }, [])
-
-  const clearAll = useCallback(() => {
-    setState({ queue: [], current: null })
-  }, [])
+  });
 
   const addNotification = useCallback((notification: Notification) => {
-    setState(prev => {
-      if (notification.priority === 'immediate') {
-        if (prev.current) {
-          return {
-            ...prev,
-            current: notification,
-          }
-        }
-        return {
-          ...prev,
-          current: notification,
-        }
-      }
+    const validated = NotificationSchema.safeParse(notification);
+    if (!validated.success) {
+      console.error('Invalid notification:', validated.error);
+      return;
+    }
 
-      const existingIndex = prev.queue.findIndex(n => n.key === notification.key)
+    setNotifications((prev) => {
+      const target = validated.data;
+      const existingIndex = prev.queue.findIndex((n) => n.key === target.key);
+
       if (existingIndex >= 0) {
-        const existing = prev.queue[existingIndex]!
-        if ('fold' in existing && existing.fold) {
-          const folded = existing.fold(existing, notification)
-          const newQueue = [...prev.queue]
-          newQueue[existingIndex] = folded
-          return { ...prev, queue: newQueue }
+        if (target.fold) {
+          const existing = prev.queue[existingIndex];
+          const folded = target.fold(existing, target) as Notification;
+          const newQueue = [...prev.queue];
+          newQueue[existingIndex] = folded;
+          return { ...prev, queue: newQueue };
         }
+        return prev;
       }
-
-      const invalidates = notification.invalidates || []
-      const filteredQueue = prev.queue.filter(n => !invalidates.includes(n.key))
 
       return {
         ...prev,
-        queue: [...filteredQueue, notification].sort((a, b) => {
-          const priorityOrder = { immediate: 0, high: 1, medium: 2, low: 3 }
-          return priorityOrder[a.priority] - priorityOrder[b.priority]
-        }),
-      }
-    })
-  }, [])
+        queue: [...prev.queue, target],
+      };
+    });
+  }, []);
+
+  const removeNotification = useCallback((key: string) => {
+    setNotifications((prev) => ({
+      ...prev,
+      queue: prev.queue.filter((n) => n.key !== key),
+      current: prev.current?.key === key ? null : prev.current,
+    }));
+  }, []);
+
+  const clearAll = useCallback(() => {
+    setNotifications({ queue: [], current: null });
+  }, []);
 
   return (
-    <NotificationContext.Provider value={{ notifications: state, addNotification, removeNotification, clearAll }}>
+    <NotificationContext.Provider value={{ notifications, addNotification, removeNotification, clearAll }}>
       {children}
     </NotificationContext.Provider>
-  )
+  );
 }
 
-export default NotificationContext
+export default NotificationContext;

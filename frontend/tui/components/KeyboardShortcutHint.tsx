@@ -1,18 +1,21 @@
 import React, { type ReactElement } from "react";
 import { Box } from "./Box.js";
 import { Text } from "./Text.js";
+import { z } from "zod";
 
-export interface KeyboardShortcut {
-  key: string;
-  modifiers?: readonly ("ctrl" | "alt" | "shift" | "meta")[];
-  description?: string;
-}
+export const KeyboardShortcutSchema = z.object({
+  key: z.string(),
+  modifiers: z.array(z.enum(["ctrl", "alt", "shift", "meta"])).readonly().optional(),
+  description: z.string().optional(),
+})
+export type KeyboardShortcut = z.infer<typeof KeyboardShortcutSchema>
 
-export interface KeyboardShortcutHintProps {
-  shortcut: KeyboardShortcut | KeyboardShortcut[];
-  description?: string;
-  variant?: "inline" | "block";
-}
+export const KeyboardShortcutHintPropsSchema = z.object({
+  shortcut: z.union([KeyboardShortcutSchema, z.array(KeyboardShortcutSchema)]),
+  description: z.string().optional(),
+  variant: z.enum(["inline", "block"]).optional(),
+})
+export type KeyboardShortcutHintProps = z.infer<typeof KeyboardShortcutHintPropsSchema>
 
 function formatShortcut(shortcut: KeyboardShortcut): string {
   const parts: string[] = [];

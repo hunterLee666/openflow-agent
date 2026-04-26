@@ -1,15 +1,17 @@
 import React, { type ReactNode, type ReactElement, useCallback } from "react";
 import { Text } from "./Text.js";
 import { Box } from "./Box.js";
+import { z } from "zod";
 
-export interface ButtonProps {
-  children?: ReactNode;
-  onClick?: () => void;
-  variant?: "primary" | "secondary" | "danger";
-  size?: "small" | "medium" | "large";
-  disabled?: boolean;
-  focused?: boolean;
-}
+export const ButtonPropsSchema = z.object({
+  children: z.any().optional(),
+  onClick: z.function().returns(z.void()).optional(),
+  variant: z.enum(["primary", "secondary", "danger"]).optional(),
+  size: z.enum(["small", "medium", "large"]).optional(),
+  disabled: z.boolean().optional(),
+  focused: z.boolean().optional(),
+})
+export type ButtonProps = z.infer<typeof ButtonPropsSchema>
 
 export function Button({
   children,

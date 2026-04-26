@@ -3,6 +3,7 @@ import { Box } from "./Box.js";
 import { Text } from "./Text.js";
 import { Dialog } from "./Dialog.js";
 import { Button } from "./Button.js";
+import { z } from "zod";
 
 const GOODBYE_MESSAGES = [
   "Goodbye!",
@@ -16,12 +17,13 @@ function getRandomGoodbyeMessage(): string {
   return GOODBYE_MESSAGES[Math.floor(Math.random() * GOODBYE_MESSAGES.length)];
 }
 
-export interface ExitFlowProps {
-  isOpen: boolean;
-  onDone: (message?: string) => void;
-  onCancel?: () => void;
-  showWorktree?: boolean;
-}
+export const ExitFlowPropsSchema = z.object({
+  isOpen: z.boolean(),
+  onDone: z.function().args(z.string().optional()).returns(z.void()),
+  onCancel: z.function().returns(z.void()).optional(),
+  showWorktree: z.boolean().optional(),
+})
+export type ExitFlowProps = z.infer<typeof ExitFlowPropsSchema>
 
 export function ExitFlow({
   isOpen,

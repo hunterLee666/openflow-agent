@@ -35,35 +35,45 @@ import {
   getMouseProtocolSequence,
   type TerminalInfo,
 } from "./termio/index.js";
+import { z } from "zod";
 
-export interface AppProps {
-  title?: string;
-  subtitle?: string;
-  messages?: Message[];
-  onSendMessage?: (message: string) => void;
-  onExit?: () => void;
-  children?: ReactNode;
-  isLoading?: boolean;
-  error?: string | null;
-  showHelp?: boolean;
-  showNotifications?: boolean;
-  showStatusBar?: boolean;
-  prompt?: string;
-  enableVimMode?: boolean;
-  vimConfig?: Partial<VimConfig>;
-}
+export const AppNotificationSchema = z.object({
+  id: z.string(),
+  type: z.enum(['info', 'warning', 'error']),
+  message: z.string(),
+})
+export type AppNotification = z.infer<typeof AppNotificationSchema>
 
-export interface AppState {
-  input: string;
-  messages: Message[];
-  isLoading: boolean;
-  selectedIndex: number;
-  showHelp: boolean;
-  notifications: Array<{ id: string; type: 'info' | 'warning' | 'error'; message: string }>;
-  vimMode: VimMode;
-  vimState: VimState | null;
-  terminalInfo: TerminalInfo | null;
-}
+export const AppPropsSchema = z.object({
+  title: z.string().optional(),
+  subtitle: z.string().optional(),
+  messages: z.array(z.any()).optional(),
+  onSendMessage: z.function().args(z.string()).returns(z.void()).optional(),
+  onExit: z.function().returns(z.void()).optional(),
+  children: z.any().optional(),
+  isLoading: z.boolean().optional(),
+  error: z.string().nullable().optional(),
+  showHelp: z.boolean().optional(),
+  showNotifications: z.boolean().optional(),
+  showStatusBar: z.boolean().optional(),
+  prompt: z.string().optional(),
+  enableVimMode: z.boolean().optional(),
+  vimConfig: z.record(z.string(), z.any()).optional(),
+})
+export type AppProps = z.infer<typeof AppPropsSchema>
+
+export const AppStateSchema = z.object({
+  input: z.string(),
+  messages: z.array(z.any()),
+  isLoading: z.boolean(),
+  selectedIndex: z.number(),
+  showHelp: z.boolean(),
+  notifications: z.array(AppNotificationSchema),
+  vimMode: z.enum(['normal', 'insert', 'visual', 'visual-line', 'command']),
+  vimState: z.any().nullable(),
+  terminalInfo: z.any().nullable(),
+})
+export type AppState = z.infer<typeof AppStateSchema>
 
 export function App({
   title = "OpenFlow CLI",
@@ -226,21 +236,27 @@ export function App({
         handleSend(input);
       }
     },
-    onKey: (key: string) => {
+    onKeyDown: (event) => {
       if (enableVimMode && vimMachineRef.current) {
-        const result = vimMachineRef.current.handleKey(key)
+        const result = vimMachineRef.current.handleKey(event.key)
         setVimMode(result.newState.mode)
         setVimState(result.newState)
 
-        if (result.action === 'insert_text' && result.text) {
-          setInput(prev => prev + result.text)
-        } else if (result.action === 'delete_char') {
-          setInput(prev => prev.slice(0, -1))
-        } else if (result.action === 'delete_line') {
-          setInput('')
-        } else if (result.action === 'submit') {
-          if (input.trim()) {
-            handleSend(input)
+        const action = result.action
+        if (action) {
+          if (action.type === 'insert_text') {
+            const payload = action.payload
+            if (payload && payload.text) {
+              setInput(prev => prev + payload.text)
+            }
+          } else if (action.type === 'delete_char') {
+            setInput(prev => prev.slice(0, -1))
+          } else if (action.type === 'delete_line') {
+            setInput('')
+          } else if (action.type === 'submit') {
+            if (input.trim()) {
+              handleSend(input)
+            }
           }
         }
       }
@@ -351,7 +367,7 @@ export function App({
             color={vimMode === 'normal' ? 'green' : vimMode === 'insert' ? 'cyan' : vimMode === 'visual' ? 'yellow' : 'magenta'}
             bold
           >
-            {formatModeIndicator(vimState)}
+            {formatModeIndicator(vimMode)}
           </Text>
         )}
         <Text color="cyan" bold>

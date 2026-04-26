@@ -1,5 +1,5 @@
 import { EventEmitter as NodeEventEmitter } from 'events'
-import { Event } from './event.js'
+import { BaseEvent } from './event.js'
 
 export class EventEmitter extends NodeEventEmitter {
   constructor() {
@@ -18,7 +18,7 @@ export class EventEmitter extends NodeEventEmitter {
       return false
     }
 
-    const ccEvent = args[0] instanceof Event ? args[0] : null
+    const ccEvent = args[0] instanceof BaseEvent ? args[0] : null
 
     for (const listener of listeners) {
       listener.apply(this, args)

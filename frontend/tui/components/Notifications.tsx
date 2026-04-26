@@ -8,24 +8,28 @@ import React, {
 import { Box } from "./Box.js";
 import { Text } from "./Text.js";
 import { Spinner } from "./Spinner.js";
+import { z } from "zod";
 
-export type NotificationType = "info" | "success" | "warning" | "error";
+export const NotificationTypeSchema = z.enum(["info", "success", "warning", "error"])
+export type NotificationType = z.infer<typeof NotificationTypeSchema>
 
-export interface Notification {
-  id: string;
-  type: NotificationType;
-  title?: string;
-  message: string;
-  duration?: number;
-  dismissible?: boolean;
-}
+export const NotificationSchema = z.object({
+  id: z.string(),
+  type: NotificationTypeSchema,
+  title: z.string().optional(),
+  message: z.string(),
+  duration: z.number().optional(),
+  dismissible: z.boolean().optional(),
+})
+export type Notification = z.infer<typeof NotificationSchema>
 
-export interface NotificationsProps {
-  notifications?: Notification[];
-  maxVisible?: number;
-  position?: "top" | "bottom";
-  onDismiss?: (id: string) => void;
-}
+export const NotificationsPropsSchema = z.object({
+  notifications: z.array(NotificationSchema).optional(),
+  maxVisible: z.number().optional(),
+  position: z.enum(["top", "bottom"]).optional(),
+  onDismiss: z.function().args(z.string()).returns(z.void()).optional(),
+})
+export type NotificationsProps = z.infer<typeof NotificationsPropsSchema>
 
 const NOTIFICATION_COLORS: Record<NotificationType, string> = {
   info: "cyan",

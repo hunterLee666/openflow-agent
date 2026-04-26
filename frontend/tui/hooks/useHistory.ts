@@ -1,20 +1,30 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { z } from 'zod'
 
-export interface UseHistoryOptions<T> {
-  maxSize?: number
-  onNavigate?: (item: T | null, index: number) => void
-}
+export const UseHistoryOptionsSchema = <T extends z.ZodTypeAny>(
+  itemSchema: T
+) => z.object({
+  maxSize: z.number().int().positive().optional(),
+  onNavigate: z.function().args(
+    z.union([itemSchema, z.null()]),
+    z.number().int()
+  ).returns(z.void()).optional(),
+})
+export type UseHistoryOptions<T> = z.infer<ReturnType<typeof UseHistoryOptionsSchema<z.ZodType<T>>>>
 
-export interface UseHistoryReturn<T> {
-  history: readonly T[]
-  historyIndex: number
-  push: (item: T) => void
-  goBack: () => T | null
-  goForward: () => T | null
-  goTo: (index: number) => T | null
-  reset: () => void
-  clear: () => void
-}
+export const UseHistoryReturnSchema = <T extends z.ZodTypeAny>(
+  itemSchema: T
+) => z.object({
+  history: z.array(itemSchema).readonly(),
+  historyIndex: z.number().int(),
+  push: z.function().args(itemSchema).returns(z.void()),
+  goBack: z.function().returns(z.union([itemSchema, z.null()])),
+  goForward: z.function().returns(z.union([itemSchema, z.null()])),
+  goTo: z.function().args(z.number().int()).returns(z.union([itemSchema, z.null()])),
+  reset: z.function().returns(z.void()),
+  clear: z.function().returns(z.void()),
+})
+export type UseHistoryReturn<T> = z.infer<ReturnType<typeof UseHistoryReturnSchema<z.ZodType<T>>>>
 
 export function useHistory<T>(options: UseHistoryOptions<T> = {}): UseHistoryReturn<T> {
   const { maxSize = 100, onNavigate } = options

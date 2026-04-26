@@ -4,19 +4,22 @@ import { Text } from "./Text.js";
 import { Tabs } from "./Tabs.js";
 import { Dialog } from "./Dialog.js";
 import { KeyboardShortcutHint, COMMON_SHORTCUTS } from "./KeyboardShortcutHint.js";
+import { z } from "zod";
 
-export interface CommandHelp {
-  name: string;
-  description?: string;
-  shortcut?: string;
-}
+export const CommandHelpSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  shortcut: z.string().optional(),
+})
+export type CommandHelp = z.infer<typeof CommandHelpSchema>
 
-export interface HelpProps {
-  isOpen: boolean;
-  onClose: () => void;
-  commands?: CommandHelp[];
-  customCommands?: CommandHelp[];
-}
+export const HelpPropsSchema = z.object({
+  isOpen: z.boolean(),
+  onClose: z.function().returns(z.void()),
+  commands: z.array(CommandHelpSchema).optional(),
+  customCommands: z.array(CommandHelpSchema).optional(),
+})
+export type HelpProps = z.infer<typeof HelpPropsSchema>
 
 function GeneralHelp(): ReactElement {
   return (

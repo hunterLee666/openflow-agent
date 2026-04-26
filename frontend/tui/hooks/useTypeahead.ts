@@ -1,17 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { z } from 'zod'
 
-export interface TypeaheadMatch<T> {
-  item: T
-  index: number
-  match: string
-}
+export const TypeaheadMatchSchema = <T extends z.ZodTypeAny>(itemSchema: T) => z.object({
+  item: itemSchema,
+  index: z.number().int().nonnegative(),
+  match: z.string(),
+})
+export type TypeaheadMatch<T> = z.infer<ReturnType<typeof TypeaheadMatchSchema<z.ZodType<T>>>>
 
-export interface UseTypeaheadOptions<T> {
-  items: T[]
-  getSearchString: (item: T) => string
-  onMatch?: (match: TypeaheadMatch<T> | null) => void
-  timeout?: number
-}
+export const UseTypeaheadOptionsSchema = <T extends z.ZodTypeAny>(itemSchema: T) => z.object({
+  items: z.array(itemSchema),
+  getSearchString: z.function().args(itemSchema).returns(z.string()),
+  onMatch: z.function().args(z.union([TypeaheadMatchSchema(itemSchema), z.null()])).returns(z.void()).optional(),
+  timeout: z.number().positive().optional(),
+})
+export type UseTypeaheadOptions<T> = z.infer<ReturnType<typeof UseTypeaheadOptionsSchema<z.ZodType<T>>>>
 
 export function useTypeahead<T>({
   items,

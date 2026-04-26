@@ -4,39 +4,47 @@ import { Text } from "./Text.js";
 import { Dialog } from "./Dialog.js";
 import { Tabs } from "./Tabs.js";
 import { useInput } from "../hooks/useInput.js";
+import { z } from "zod";
 
-export interface DiffFile {
-  path: string;
-  linesAdded: number;
-  linesRemoved: number;
-  isNewFile?: boolean;
-  isBinary?: boolean;
-}
+export const DiffFileSchema = z.object({
+  path: z.string(),
+  linesAdded: z.number(),
+  linesRemoved: z.number(),
+  isNewFile: z.boolean().optional(),
+  isBinary: z.boolean().optional(),
+})
+export type DiffFile = z.infer<typeof DiffFileSchema>
 
-export interface DiffHunk {
-  lines: string[];
-  oldStart: number;
-  oldLines: number;
-  newStart: number;
-  newLines: number;
-}
+export const DiffHunkSchema = z.object({
+  lines: z.array(z.string()),
+  oldStart: z.number(),
+  oldLines: z.number(),
+  newStart: z.number(),
+  newLines: z.number(),
+})
+export type DiffHunk = z.infer<typeof DiffHunkSchema>
 
-export interface DiffData {
-  files: DiffFile[];
-  hunks: Map<string, DiffHunk[]>;
-  stats?: {
-    filesChanged: number;
-    linesAdded: number;
-    linesRemoved: number;
-  };
-}
+export const DiffStatsSchema = z.object({
+  filesChanged: z.number(),
+  linesAdded: z.number(),
+  linesRemoved: z.number(),
+})
+export type DiffStats = z.infer<typeof DiffStatsSchema>
 
-export interface DiffDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  diffData: DiffData;
-  title?: string;
-}
+export const DiffDataSchema = z.object({
+  files: z.array(DiffFileSchema),
+  hunks: z.custom<Map<string, DiffHunk[]>>(),
+  stats: DiffStatsSchema.optional(),
+})
+export type DiffData = z.infer<typeof DiffDataSchema>
+
+export const DiffDialogPropsSchema = z.object({
+  isOpen: z.boolean(),
+  onClose: z.function().returns(z.void()),
+  diffData: DiffDataSchema,
+  title: z.string().optional(),
+})
+export type DiffDialogProps = z.infer<typeof DiffDialogPropsSchema>
 
 function DiffStats({ diffData }: { diffData: DiffData }): ReactElement {
   const stats = diffData.stats || {

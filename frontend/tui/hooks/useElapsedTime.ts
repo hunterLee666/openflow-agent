@@ -1,17 +1,20 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { z } from 'zod'
 
-export interface UseElapsedTimeOptions {
-  autoStart?: boolean
-  updateInterval?: number
-}
+export const UseElapsedTimeOptionsSchema = z.object({
+  autoStart: z.boolean().optional(),
+  updateInterval: z.number().positive().optional(),
+})
+export type UseElapsedTimeOptions = z.infer<typeof UseElapsedTimeOptionsSchema>
 
-export interface UseElapsedTimeReturn {
-  elapsed: number
-  start: () => void
-  stop: () => void
-  reset: () => void
-  isRunning: boolean
-}
+export const UseElapsedTimeReturnSchema = z.object({
+  elapsed: z.number(),
+  start: z.function().returns(z.void()),
+  stop: z.function().returns(z.void()),
+  reset: z.function().returns(z.void()),
+  isRunning: z.boolean(),
+})
+export type UseElapsedTimeReturn = z.infer<typeof UseElapsedTimeReturnSchema>
 
 export function useElapsedTime(options: UseElapsedTimeOptions = {}): UseElapsedTimeReturn {
   const { autoStart = false, updateInterval = 100 } = options
