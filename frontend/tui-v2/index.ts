@@ -163,3 +163,64 @@ process.on('SIGTERM', () => {
 })
 
 console.error('进程已保持运行状态')
+
+// 添加键盘事件处理
+const TABS: TabType[] = ['model', 'provider', 'skills', 'commands', 'history', 'operations', 'settings', 'shortcuts']
+
+process.stdin.on('data', (data: Buffer) => {
+  const key = data.toString()
+  
+  // Ctrl+C 退出
+  if (key === '\x03') {
+    root.terminate(0)
+    process.exit(0)
+  }
+  
+  // Ctrl+Q 退出
+  if (key === '\x11') {
+    root.terminate(0)
+    process.exit(0)
+  }
+  
+  // 上箭头 - 切换上一个 Tab
+  if (key === '\x1b[A' || key === '\x1bOA') {
+    const currentIndex = TABS.indexOf(selectedTab)
+    const newIndex = (currentIndex - 1 + TABS.length) % TABS.length
+    selectedTab = TABS[newIndex]
+    selectedIndex = 0
+    render()
+    return
+  }
+  
+  // 下箭头 - 切换下一个 Tab
+  if (key === '\x1b[B' || key === '\x1bOB') {
+    const currentIndex = TABS.indexOf(selectedTab)
+    const newIndex = (currentIndex + 1) % TABS.length
+    selectedTab = TABS[newIndex]
+    selectedIndex = 0
+    render()
+    return
+  }
+  
+  // 左箭头 - 上一个列表项
+  if (key === '\x1b[D' || key === '\x1bOD') {
+    selectedIndex = Math.max(0, selectedIndex - 1)
+    render()
+    return
+  }
+  
+  // 右箭头 - 下一个列表项
+  if (key === '\x1b[C' || key === '\x1bOC') {
+    selectedIndex = selectedIndex + 1
+    render()
+    return
+  }
+  
+  // Enter - 确认选择
+  if (key === '\r' || key === '\n') {
+    console.error(`选择了: Tab=${selectedTab}, Index=${selectedIndex}`)
+    return
+  }
+  
+  // 其他按键 - 忽略
+})
