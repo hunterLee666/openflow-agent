@@ -16,9 +16,6 @@ console.error('导入 WebSocketClient 完成')
 import { Message } from './components/ChatArea'
 console.error('导入 ChatArea 完成')
 
-import Input from './core/input'
-console.error('导入 Input 完成')
-
 console.error('所有导入完成')
 
 const WS_URL = process.argv[2] || 'ws://localhost:8765'
@@ -38,13 +35,13 @@ type TabType = 'model' | 'provider' | 'skills' | 'commands' | 'history' | 'opera
 let selectedTab: TabType = 'model'
 let selectedIndex = 0
 
-const input = new Input()
+// 只创建一个 root 实例
+const root = createRoot()
+console.error('[INIT] root 创建完成')
 
 function render() {
   try {
     console.error('[RENDER] 开始渲染...')
-    const root = createRoot()
-    console.error('[RENDER] 创建 root 完成')
     
     const app = React.createElement(OpenFlowApp, {
       messages,
@@ -149,75 +146,20 @@ client.connect().then(() => {
   render()
 })
 
-const TABS: TabType[] = ['model', 'provider', 'skills', 'commands', 'history', 'operations', 'settings', 'shortcuts']
-
-console.error('[INPUT] 注册输入事件监听器...')
-input.on((key: string) => {
-  console.error(`[INPUT] 收到按键: ${JSON.stringify(key)}`)
-  if (key === '\r' || key === '\n') {
-    if (inputValue.trim()) {
-      const content = inputValue
-      messages = [...messages, {
-        id: `user-${Date.now()}`,
-        role: 'user',
-        content,
-        timestamp: new Date()
-      }]
-      inputValue = ''
-      status = 'running'
-      render()
-      
-      const request: TransportMessage = {
-        id: `req-${Date.now()}`,
-        type: 'request',
-        channel: 'chat',
-        payload: {
-          content,
-          provider: PROVIDER,
-          model: MODEL,
-          baseUrl: BASE_URL,
-          sessionId
-        },
-        timestamp: new Date()
-      }
-      
-      client.send(request).catch(err => {
-        console.error('Failed to send message:', err)
-        status = 'error'
-        render()
-      })
-    }
-  } else if (key === '\x7f' || key === '\b') {
-    inputValue = inputValue.slice(0, -1)
-    render()
-  } else if (key === '\x03') {
-    console.error('[INPUT] 收到 Ctrl+C, 退出')
-    client.disconnect().catch(() => {})
-    process.exit(0)
-  } else if (key === '\x1b[A') {
-    const idx = TABS.indexOf(selectedTab)
-    selectedTab = TABS[idx > 0 ? idx - 1 : TABS.length - 1]
-    selectedIndex = 0
-    render()
-  } else if (key === '\x1b[B') {
-    const idx = TABS.indexOf(selectedTab)
-    selectedTab = TABS[(idx + 1) % TABS.length]
-    selectedIndex = 0
-    render()
-  } else if (key.length === 1 && key >= ' ') {
-    inputValue += key
-    render()
-  }
-})
-
-console.error('[INPUT] 恢复 stdin 流...')
+// 保持进程运行
 process.stdin.resume()
-console.error('[INPUT] stdin 已恢复')
 
+// 处理退出信号
 process.on('SIGINT', () => {
-  console.error('[SIGINT] 收到 SIGINT 信号')
-  client.disconnect().catch(() => {})
+  console.error('收到 SIGINT 信号')
+  root.terminate(0)
   process.exit(0)
 })
 
-console.error('[APP] 应用启动完成，等待用户输入...')
+process.on('SIGTERM', () => {
+  console.error('收到 SIGTERM 信号')
+  root.terminate(0)
+  process.exit(0)
+})
+
+console.error('进程已保持运行状态')

@@ -117,11 +117,11 @@ function CommandList({
           paddingTop="0"
           paddingBottom="0"
         >
-          <Text color="cyan" width={20}>
+          <Text color="cyan">
             {cmd.name}
           </Text>
           {cmd.description && (
-            <Text dimColor={true} style={{ flex: 1 }}>
+            <Text dimColor={true}>
               {cmd.description}
             </Text>
           )}

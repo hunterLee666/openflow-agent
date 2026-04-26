@@ -55,34 +55,29 @@ function KeyBadge({
     <Box
       flexDirection="row"
       alignItems="center"
-      padding={{ top: "0", bottom: "0", left: 1, right: 1 }}
-      style={{
-        backgroundColor: isHighlighted ? "#3a5a8e" : "#2a2a3e",
-        border: "1px solid #444",
-        borderRadius: 3,
-      }}
+      padding={{ top: 0, bottom: 0, left: 1, right: 1 }}
     >
       {shortcut.modifiers?.includes("ctrl") && (
-        <Text color="dim" style={{ fontSize: 10 }}>
+        <Text dimColor={true}>
           Ctrl+
         </Text>
       )}
       {shortcut.modifiers?.includes("alt") && (
-        <Text color="dim" style={{ fontSize: 10 }}>
+        <Text dimColor={true}>
           Alt+
         </Text>
       )}
       {shortcut.modifiers?.includes("shift") && (
-        <Text color="dim" style={{ fontSize: 10 }}>
+        <Text dimColor={true}>
           Shift+
         </Text>
       )}
       {shortcut.modifiers?.includes("meta") && (
-        <Text color="dim" style={{ fontSize: 10 }}>
+        <Text dimColor={true}>
           ⌘+
         </Text>
       )}
-      <Text color={isHighlighted ? "brightWhite" : "white"} style={{ fontSize: 11 }}>
+      <Text color={isHighlighted ? "brightWhite" : "white"}>
         {shortcut.key.toUpperCase()}
       </Text>
     </Box>
@@ -102,7 +97,6 @@ export function KeyboardShortcutHint({
         flexDirection="column"
         gap={1}
         padding={1}
-        style={{ backgroundColor: "#1a1a2e", border: "1px solid #333", borderRadius: 4 }}
       >
         <Box flexDirection="row" gap={1} flexWrap="wrap">
           {shortcuts.map((s, idx) => (
@@ -110,7 +104,7 @@ export function KeyboardShortcutHint({
           ))}
         </Box>
         {description && (
-          <Text color="dim" style={{ fontSize: 11 }}>
+          <Text dimColor={true}>
             {description}
           </Text>
         )}
@@ -126,7 +120,7 @@ export function KeyboardShortcutHint({
         ))}
       </Box>
       {description && (
-        <Text color="dim" style={{ fontSize: 10 }}>
+        <Text dimColor={true}>
           {description}
         </Text>
       )}
@@ -162,9 +156,9 @@ export function ShortcutList({
           flexDirection="row"
           alignItems="center"
           justifyContent="space-between"
-          padding={{ top: "0", bottom: "0" }}
+          padding={{ top: 0, bottom: 0 }}
         >
-          <Text color="white" style={{ fontSize: 11 }}>
+          <Text color="white">
             {item.description}
           </Text>
           <KeyboardShortcutHint shortcut={item.shortcut} variant="inline" />

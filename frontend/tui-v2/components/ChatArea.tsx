@@ -1,0 +1,46 @@
+import React from 'react'
+import Text from './Text'
+import { Box } from './Box'
+
+export interface Message {
+  id: string
+  role: 'user' | 'assistant' | 'system' | 'tool'
+  content: string
+  timestamp: Date
+}
+
+export interface ChatAreaProps {
+  messages: Message[]
+  inputValue: string
+  onSend?: (message: string) => void
+}
+
+export function ChatArea({ messages, inputValue }: ChatAreaProps): React.ReactElement {
+  return React.createElement(Box, { flexDirection: 'column', flexGrow: 1 },
+    React.createElement(Box, { flexDirection: 'column', flexGrow: 1 },
+      ...messages.map((msg) =>
+        React.createElement(Box, {
+          key: msg.id,
+          flexDirection: 'column',
+          paddingX: 1,
+          paddingY: 0,
+          borderStyle: msg.role === 'user' ? 'rounded' : undefined,
+          borderColor: msg.role === 'user' ? 'BrightMagenta' : undefined
+        },
+          React.createElement(Text, {
+            color: msg.role === 'user' ? 'BrightMagenta' : 'BrightWhite',
+            bold: true,
+            block: true
+          }, msg.role === 'user' ? '👤 用户' : '🤖 助手'),
+          React.createElement(Text, { color: 'BrightWhite', block: true }, msg.content)
+        )
+      )
+    ),
+    React.createElement(Box, { flexDirection: 'row', paddingX: 1, paddingY: 1 },
+      React.createElement(Text, { color: 'BrightMagenta', bold: true }, '❯ '),
+      React.createElement(Text, { color: 'BrightWhite' }, inputValue || '输入消息...')
+    )
+  )
+}
+
+export default ChatArea
