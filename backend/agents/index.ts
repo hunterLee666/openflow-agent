@@ -45,12 +45,13 @@ export type {
   PlanResult,
 } from "./plan-agent.js";
 
-export { VerificationAgent, createVerificationAgent, VerificationVerdict } from "./verification-agent.js";
+export { VerificationAgent, createVerificationAgent, VerificationVerdictSchema, VerificationCheckSchema, VerificationResultSchema } from "./verification-agent.js";
 export type {
   VerificationAgentConfig,
   VerificationCheck,
   AdversarialProbe,
   VerificationResult,
+  VerificationVerdict,
 } from "./verification-agent.js";
 
 export { AntiRecursionGuard, createAntiRecursionGuard } from "./anti-recursion.js";

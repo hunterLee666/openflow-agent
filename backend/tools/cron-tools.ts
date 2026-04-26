@@ -231,7 +231,7 @@ export function createCronTools(scheduler: CronScheduler): ToolDefinition[] {
       let jobs = scheduler.getAllJobs();
 
       if (filter === "active") {
-        jobs = jobs.filter((j) => j.enabled && j.status !== "completed");
+        jobs = jobs.filter((j) => j.enabled && j.status !== "paused" && j.status !== "completed");
       } else if (filter === "paused") {
         jobs = jobs.filter((j) => j.status === "paused");
       } else if (filter === "completed") {

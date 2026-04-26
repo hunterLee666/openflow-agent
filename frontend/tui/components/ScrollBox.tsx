@@ -85,7 +85,7 @@ export const ScrollBox = forwardRef<ScrollBoxRef, ScrollBoxProps>(function Scrol
         <Box
           flexDirection="row"
           alignItems="center"
-          padding={{ top: 0, bottom: 0 }}
+          padding={{ top: "0", bottom: "0" }}
           style={{ fontSize: 8 }}
         >
           <Text color="dim">

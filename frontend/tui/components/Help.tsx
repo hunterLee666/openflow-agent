@@ -27,7 +27,7 @@ function GeneralHelp(): ReactElement {
       <Text bold color="brightWhite">
         Quick Start
       </Text>
-      <Box flexDirection="column" gap={0} paddingLeft={2}>
+      <Box flexDirection="column" gap="0" paddingLeft={2}>
         <Text>
           <Text color="cyan">/help</Text> - Show this help menu
         </Text>
@@ -53,7 +53,7 @@ function GeneralHelp(): ReactElement {
           Keyboard Shortcuts
         </Text>
       </Box>
-      <Box flexDirection="column" gap={0} paddingLeft={2}>
+      <Box flexDirection="column" gap="0" paddingLeft={2}>
         <Box flexDirection="row" alignItems="center" gap={2}>
           <KeyboardShortcutHint shortcut={COMMON_SHORTCUTS.enter} />
           <Text>Send message</Text>
@@ -103,7 +103,7 @@ function CommandList({
   }
 
   return (
-    <Box flexDirection="column" gap={0} padding={1}>
+    <Box flexDirection="column" gap="0" padding={1}>
       <Box marginBottom={1}>
         <Text bold color="brightWhite">
           {title}
@@ -114,8 +114,8 @@ function CommandList({
           key={cmd.name || index}
           flexDirection="row"
           gap={2}
-          paddingTop={0}
-          paddingBottom={0}
+          paddingTop="0"
+          paddingBottom="0"
         >
           <Text color="cyan" width={20}>
             {cmd.name}

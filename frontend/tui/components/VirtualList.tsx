@@ -159,10 +159,10 @@ export function VirtualList<T>({
       onScroll={handleScroll}
     >
       <Box position="relative" height={totalSize}>
-        <Box position="absolute" top={offsetY} left={0} right={0} flexDirection="column">
+        <Box position="absolute" top={offsetY} left="0" right="0" flexDirection="column">
           {visibleItems.map(({ item, index, offset }) => (
             <Box key={item.key} height={item.size} position="relative">
-              <Box position="absolute" top={0} left={0} right={0}>
+              <Box position="absolute" top="0" left="0" right="0">
                 {renderItem(item.data as T, index)}
               </Box>
             </Box>

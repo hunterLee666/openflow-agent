@@ -15,7 +15,15 @@
     "build": "bun build backend/main.tsx --outdir ./dist --target bun",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "test:run": "bun test"
+    "test:unit": "bun test tests/unit/",
+    "test:integration": "bun test tests/integration/",
+    "test:e2e": "bun test tests/e2e/",
+    "test:e2e:core": "bun test tests/e2e/core-scenarios.test.ts",
+    "test:e2e:edge": "bun test tests/e2e/edge-cases.test.ts",
+    "test:e2e:memory": "bun test tests/e2e/memory-system.test.ts",
+    "test:e2e:tools": "bun test tests/e2e/tools-system.test.ts",
+    "test:all": "bun test tests/",
+    "test:coverage": "bun test --coverage"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",

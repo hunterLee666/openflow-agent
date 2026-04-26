@@ -79,7 +79,7 @@ export function SlashCommands({
         <Box
           key={cmd.name}
           flexDirection="row"
-          padding={{ top: 0, bottom: 0, left: 1, right: 1 }}
+          padding={{ top: "0", bottom: "0", left: 1, right: 1 }}
           style={{
             backgroundColor: index === selectedIndex ? "#2a2a4e" : "transparent",
           }}

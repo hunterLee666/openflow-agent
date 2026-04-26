@@ -21,7 +21,7 @@ function escapeHtml(text: string): string {
 
 function renderInlineCode(text: string): ReactNode {
   return React.createElement(
-    "span",
+    Text,
     { style: { backgroundColor: "#333", padding: "0 4px", borderRadius: 3 } },
     text
   );
@@ -29,19 +29,15 @@ function renderInlineCode(text: string): ReactNode {
 
 function renderCode(code: string, lang?: string): ReactNode {
   return React.createElement(
-    "pre",
-    { style: { backgroundColor: "#1e1e1e", padding: 8, borderRadius: 4, overflow: "auto" } },
-    React.createElement(
-      "code",
-      { style: { color: "#d4d4d4", fontFamily: "monospace" } },
-      code
-    )
+    Text,
+    { style: { backgroundColor: "#1e1e1e", padding: 8, borderRadius: 4, overflow: "auto", fontFamily: "monospace" } },
+    code
   );
 }
 
 function renderLink(text: string, href: string): ReactNode {
   return React.createElement(
-    "span",
+    Text,
     { style: { color: "#58a6ff", textDecoration: "underline" } },
     text
   );
@@ -70,9 +66,9 @@ function renderList(text: string, ordered: boolean, start?: number): ReactNode {
     "span",
     null,
     items.map((item, i) => {
-      const marker = ordered ? `${start! + i}. ` : "• ";
+      const marker = ordered ? `${(start ?? 1) + i}. ` : "• ";
       return React.createElement(
-        "span",
+        Text,
         { key: i },
         React.createElement(Text, { color: "dim" }, marker),
         item.trim(),

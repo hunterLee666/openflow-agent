@@ -1,8 +1,9 @@
 import { EventEmitter } from "node:events";
 import type { ToolDefinition } from "../types/index.js";
+import type { VerificationVerdict } from "./verification-agent.js";
 import { ExploreAgent } from "./explore-agent.js";
 import { PlanAgent } from "./plan-agent.js";
-import { VerificationAgent, VerificationVerdict } from "./verification-agent.js";
+import { VerificationAgent } from "./verification-agent.js";
 import { AntiRecursionGuard } from "./anti-recursion.js";
 import { ForkPrefixOptimizer } from "./fork-prefix.js";
 import { MessageRouter } from "./message-router.js";

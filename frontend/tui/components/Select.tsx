@@ -136,7 +136,7 @@ export function Select<T = string>({
               key={String(option.value)}
               flexDirection="row"
               alignItems="center"
-              padding={{ top: 0, bottom: 0, left: 1, right: 1 }}
+              padding={{ top: "0", bottom: "0", left: 1, right: 1 }}
               style={{
                 backgroundColor:
                   index === selectedIndex ? "#3a3a5e" : "transparent",

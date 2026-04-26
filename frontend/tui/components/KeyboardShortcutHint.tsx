@@ -55,7 +55,7 @@ function KeyBadge({
     <Box
       flexDirection="row"
       alignItems="center"
-      padding={{ top: 0, bottom: 0, left: 1, right: 1 }}
+      padding={{ top: "0", bottom: "0", left: 1, right: 1 }}
       style={{
         backgroundColor: isHighlighted ? "#3a5a8e" : "#2a2a3e",
         border: "1px solid #444",
@@ -162,7 +162,7 @@ export function ShortcutList({
           flexDirection="row"
           alignItems="center"
           justifyContent="space-between"
-          padding={{ top: 0, bottom: 0 }}
+          padding={{ top: "0", bottom: "0" }}
         >
           <Text color="white" style={{ fontSize: 11 }}>
             {item.description}

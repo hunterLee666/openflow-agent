@@ -32,6 +32,60 @@ export const UseInputOptionsSchema = z.object({
 })
 export type UseInputOptions = z.infer<typeof UseInputOptionsSchema>
 
+// Global registry for multiple listeners
+type ListenerEntry = {
+  options: UseInputOptions;
+  id: number;
+};
+
+let listenerIdCounter = 0;
+const listeners: ListenerEntry[] = [];
+
+function notifyListeners(key: string, keyEvent: KeyEvent): boolean {
+  // Notify in reverse order (most recently registered first)
+  for (let i = listeners.length - 1; i >= 0; i--) {
+    const entry = listeners[i];
+    if (entry.options.isActive === false) continue;
+
+    const opts = entry.options;
+
+    if (keyEvent.ctrl && key === "c") {
+      opts.onCtrlC?.();
+    } else if (keyEvent.ctrl && key === "l") {
+      opts.onCtrlL?.();
+    } else if (keyEvent.ctrl && key === "r") {
+      opts.onCtrlR?.();
+    } else if (key === "Escape") {
+      opts.onEscape?.();
+    } else if (key === "Enter") {
+      opts.onEnter?.();
+    } else if (key === "Backspace") {
+      opts.onBackspace?.();
+    } else if (key === "ArrowUp") {
+      opts.onArrowUp?.();
+    } else if (key === "ArrowDown") {
+      opts.onArrowDown?.();
+    } else if (key === "ArrowLeft") {
+      opts.onArrowLeft?.();
+    } else if (key === "ArrowRight") {
+      opts.onArrowRight?.();
+    } else if (key === "Tab") {
+      opts.onTab?.();
+    } else if (key === "PageUp") {
+      opts.onPageUp?.();
+    } else if (key === "PageDown") {
+      opts.onPageDown?.();
+    } else if (key === "Home") {
+      opts.onHome?.();
+    } else if (key === "End") {
+      opts.onEnd?.();
+    }
+
+    opts.onKeyDown?.(keyEvent);
+  }
+  return true;
+}
+
 function parseKeyString(key: string): KeyEvent {
   const ctrl = key.startsWith("\x1b");
   const alt = key.includes("\x1b[");
@@ -56,6 +110,20 @@ export function useInput(options: UseInputOptions): void {
   optionsRef.current = options;
 
   useEffect(() => {
+    const id = ++listenerIdCounter;
+    listeners.push({ options: optionsRef.current, id });
+
+    return () => {
+      const idx = listeners.findIndex(l => l.id === id);
+      if (idx !== -1) listeners.splice(idx, 1);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (listeners.length > 1) {
+      return; // Only the first listener sets up stdin
+    }
+
     if (!process.stdin.isTTY) {
       return;
     }
@@ -156,39 +224,7 @@ export function useInput(options: UseInputOptions): void {
           meta: false,
         };
 
-        if (keyEvent.ctrl && keyEvent.key === "c") {
-          optionsRef.current.onCtrlC?.();
-        } else if (keyEvent.ctrl && keyEvent.key === "l") {
-          optionsRef.current.onCtrlL?.();
-        } else if (keyEvent.ctrl && keyEvent.key === "r") {
-          optionsRef.current.onCtrlR?.();
-        } else if (keyEvent.key === "Escape") {
-          optionsRef.current.onEscape?.();
-        } else if (keyEvent.key === "Enter") {
-          optionsRef.current.onEnter?.();
-        } else if (keyEvent.key === "Backspace") {
-          optionsRef.current.onBackspace?.();
-        } else if (keyEvent.key === "ArrowUp") {
-          optionsRef.current.onArrowUp?.();
-        } else if (keyEvent.key === "ArrowDown") {
-          optionsRef.current.onArrowDown?.();
-        } else if (keyEvent.key === "ArrowLeft") {
-          optionsRef.current.onArrowLeft?.();
-        } else if (keyEvent.key === "ArrowRight") {
-          optionsRef.current.onArrowRight?.();
-        } else if (keyEvent.key === "Tab") {
-          optionsRef.current.onTab?.();
-        } else if (keyEvent.key === "PageUp") {
-          optionsRef.current.onPageUp?.();
-        } else if (keyEvent.key === "PageDown") {
-          optionsRef.current.onPageDown?.();
-        } else if (keyEvent.key === "Home") {
-          optionsRef.current.onHome?.();
-        } else if (keyEvent.key === "End") {
-          optionsRef.current.onEnd?.();
-        }
-
-        optionsRef.current.onKeyDown?.(keyEvent);
+        notifyListeners(key, keyEvent);
 
         buffer = buffer.slice(consumed);
       }

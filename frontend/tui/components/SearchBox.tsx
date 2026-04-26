@@ -108,7 +108,7 @@ export function SearchBox({
 
   return (
     <Box
-      flexShrink={0}
+      flexShrink="0"
       flexDirection="row"
       alignItems="center"
       paddingX={1}

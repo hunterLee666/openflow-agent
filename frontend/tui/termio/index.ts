@@ -100,8 +100,6 @@ export {
 } from './mouse.js'
 export type { MouseProtocolConfig, MouseEvent } from './mouse.js'
 export {
-  TerminalCapability,
-  CapabilityQuery,
   DEFAULT_TERMINAL_INFO,
   detectTerminalCapabilities,
   getFallbackStrategy,
@@ -109,7 +107,7 @@ export {
   isTerminalCapable,
   detectTerminalFromEnv,
 } from './capability-detect.js'
-export type { TerminalInfo } from './capability-detect.js'
+export type { TerminalInfo, TerminalCapability, CapabilityQuery } from './capability-detect.js'
 export {
   getStringWidth,
   getCharWidth,

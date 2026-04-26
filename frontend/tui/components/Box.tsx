@@ -1,51 +1,50 @@
-import React, { type ReactNode, type CSSProperties } from "react";
-import type {
-  Spacing,
-} from "../types.js";
+import React, { type ReactNode } from "react";
+import { Box as InkBox, Text as InkText } from "ink";
+import type { Spacing } from "../types.js";
 import { z } from "zod";
 
 export const BoxPropsSchema = z.object({
   children: z.any().optional(),
   flexDirection: z.enum(["row", "column", "row-reverse", "column-reverse"]).optional(),
   flexWrap: z.enum(["nowrap", "wrap", "wrap-reverse"]).optional(),
-  flexShrink: z.number().optional(),
-  flexGrow: z.number().optional(),
+  flexShrink: z.union([z.number(), z.string()]).optional(),
+  flexGrow: z.union([z.number(), z.string()]).optional(),
   alignItems: z.enum(["flex-start", "flex-end", "center", "baseline", "stretch"]).optional(),
   alignContent: z.enum(["flex-start", "flex-end", "center", "space-between", "space-around", "stretch"]).optional(),
   justifyContent: z.enum(["flex-start", "flex-end", "center", "space-between", "space-around", "space-evenly"]).optional(),
   position: z.enum(["relative", "absolute"]).optional(),
-  top: z.number().optional(),
-  right: z.number().optional(),
-  bottom: z.number().optional(),
-  left: z.number().optional(),
-  margin: z.union([z.number(), z.any()]).optional(),
-  marginTop: z.number().optional(),
-  marginBottom: z.number().optional(),
-  marginLeft: z.number().optional(),
-  marginRight: z.number().optional(),
-  padding: z.union([z.number(), z.any()]).optional(),
-  paddingTop: z.number().optional(),
-  paddingBottom: z.number().optional(),
-  paddingLeft: z.number().optional(),
-  paddingRight: z.number().optional(),
-  paddingX: z.number().optional(),
-  paddingY: z.number().optional(),
+  top: z.union([z.number(), z.string()]).optional(),
+  right: z.union([z.number(), z.string()]).optional(),
+  bottom: z.union([z.number(), z.string()]).optional(),
+  left: z.union([z.number(), z.string()]).optional(),
+  margin: z.union([z.number(), z.string(), z.any()]).optional(),
+  marginTop: z.union([z.number(), z.string()]).optional(),
+  marginBottom: z.union([z.number(), z.string()]).optional(),
+  marginLeft: z.union([z.number(), z.string()]).optional(),
+  marginRight: z.union([z.number(), z.string()]).optional(),
+  padding: z.union([z.number(), z.string(), z.any()]).optional(),
+  paddingTop: z.union([z.number(), z.string()]).optional(),
+  paddingBottom: z.union([z.number(), z.string()]).optional(),
+  paddingLeft: z.union([z.number(), z.string()]).optional(),
+  paddingRight: z.union([z.number(), z.string()]).optional(),
+  paddingX: z.union([z.number(), z.string()]).optional(),
+  paddingY: z.union([z.number(), z.string()]).optional(),
   borderStyle: z.enum(["single", "double", "round", "bold", "none"]).optional(),
   borderColor: z.string().optional(),
   width: z.union([z.number(), z.string()]).optional(),
   height: z.union([z.number(), z.string()]).optional(),
-  minWidth: z.number().optional(),
-  minHeight: z.number().optional(),
-  maxWidth: z.number().optional(),
-  maxHeight: z.number().optional(),
-  gap: z.number().optional(),
+  minWidth: z.union([z.number(), z.string()]).optional(),
+  minHeight: z.union([z.number(), z.string()]).optional(),
+  maxWidth: z.union([z.number(), z.string()]).optional(),
+  maxHeight: z.union([z.number(), z.string()]).optional(),
+  gap: z.union([z.number(), z.string()]).optional(),
   flex: z.union([z.number(), z.string()]).optional(),
   overflow: z.enum(["visible", "hidden", "scroll", "auto"]).optional(),
   overflowX: z.enum(["visible", "hidden", "scroll", "auto"]).optional(),
   overflowY: z.enum(["visible", "hidden", "scroll", "auto"]).optional(),
   style: z.any().optional(),
   backgroundColor: z.string().optional(),
-  opacity: z.number().optional(),
+  opacity: z.union([z.number(), z.string()]).optional(),
   onClick: z.any().optional(),
   onMouseEnter: z.any().optional(),
   onMouseLeave: z.any().optional(),
@@ -54,39 +53,14 @@ export const BoxPropsSchema = z.object({
 })
 export type BoxProps = z.infer<typeof BoxPropsSchema>
 
-function getSpacingValue(spacing: number | Spacing | undefined, side: keyof Spacing): number {
-  if (spacing === undefined) return 0;
-  if (typeof spacing === "number") return spacing;
-  return spacing[side] ?? 0;
-}
-
-const BORDER_COLORS: Record<string, string> = {
-  black: "\x1b[30m",
-  red: "\x1b[31m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  magenta: "\x1b[35m",
-  cyan: "\x1b[36m",
-  white: "\x1b[37m",
-  brightBlack: "\x1b[90m",
-  brightRed: "\x1b[91m",
-  brightGreen: "\x1b[92m",
-  brightYellow: "\x1b[93m",
-  brightBlue: "\x1b[94m",
-  brightMagenta: "\x1b[95m",
-  brightCyan: "\x1b[96m",
-  brightWhite: "\x1b[97m",
-};
-
 export function Box({
   children,
-  flexDirection = "row",
+  flexDirection,
   flexWrap,
   flexShrink,
   flexGrow,
-  alignItems = "stretch",
-  justifyContent = "flex-start",
+  alignItems,
+  justifyContent,
   margin,
   marginTop,
   marginBottom,
@@ -108,6 +82,7 @@ export function Box({
   overflow,
   overflowX,
   overflowY,
+  style,
   backgroundColor,
   opacity,
   onClick,
@@ -116,93 +91,61 @@ export function Box({
   onScroll,
   ...props
 }: BoxProps): ReactNode {
-  const style: CSSProperties = {
-    display: "flex",
+  const inkProps: Record<string, unknown> = {
     flexDirection,
     flexWrap,
+    flexShrink: flexShrink !== undefined ? Number(flexShrink) : undefined,
+    flexGrow: flexGrow !== undefined ? Number(flexGrow) : undefined,
     alignItems,
     justifyContent,
-    cursor: onClick ? "pointer" : undefined,
-    ...props.style,
+    gap: gap !== undefined ? Number(gap) : undefined,
+    flex: flex !== undefined ? Number(flex) : undefined,
+    width: width !== undefined ? (typeof width === "string" ? width : Number(width)) : undefined,
+    height: height !== undefined ? (typeof height === "string" ? height : Number(height)) : undefined,
+    overflowX: overflow || overflowX,
+    overflowY: overflow || overflowY,
+    ...props,
   };
 
-  if (width !== undefined) {
-    style.width = typeof width === "number" ? `${width}` : width;
-  }
-  if (height !== undefined) {
-    style.height = typeof height === "number" ? `${height}` : height;
-  }
-  if (gap !== undefined) {
-    style.gap = gap;
-  }
-  if (flex !== undefined) {
-    style.flex = typeof flex === "number" ? `${flex} 0 0` : flex;
-  }
-  if (flexShrink !== undefined) {
-    style.flexShrink = flexShrink;
-  }
-  if (flexGrow !== undefined) {
-    style.flexGrow = flexGrow;
-  }
-  if (overflow !== undefined) {
-    style.overflow = overflow;
-  }
-  if (overflowX !== undefined) {
-    style.overflowX = overflowX;
-  }
-  if (overflowY !== undefined) {
-    style.overflowY = overflowY;
-  }
   if (margin !== undefined) {
     if (typeof margin === "number") {
-      style.margin = margin;
-    } else {
-      if (margin.top !== undefined) style.marginTop = margin.top;
-      if (margin.right !== undefined) style.marginRight = margin.right;
-      if (margin.bottom !== undefined) style.marginBottom = margin.bottom;
-      if (margin.left !== undefined) style.marginLeft = margin.left;
+      inkProps.margin = margin;
+    } else if (typeof margin === "object") {
+      inkProps.marginTop = margin.top !== undefined ? Number(margin.top) : undefined;
+      inkProps.marginRight = margin.right !== undefined ? Number(margin.right) : undefined;
+      inkProps.marginBottom = margin.bottom !== undefined ? Number(margin.bottom) : undefined;
+      inkProps.marginLeft = margin.left !== undefined ? Number(margin.left) : undefined;
     }
   }
-  if (marginTop !== undefined) style.marginTop = marginTop;
-  if (marginBottom !== undefined) style.marginBottom = marginBottom;
-  if (marginLeft !== undefined) style.marginLeft = marginLeft;
-  if (marginRight !== undefined) style.marginRight = marginRight;
+  if (marginTop !== undefined) inkProps.marginTop = Number(marginTop);
+  if (marginBottom !== undefined) inkProps.marginBottom = Number(marginBottom);
+  if (marginLeft !== undefined) inkProps.marginLeft = Number(marginLeft);
+  if (marginRight !== undefined) inkProps.marginRight = Number(marginRight);
+
   if (padding !== undefined) {
     if (typeof padding === "number") {
-      style.padding = padding;
-    } else {
-      if (padding.top !== undefined) style.paddingTop = padding.top;
-      if (padding.right !== undefined) style.paddingRight = padding.right;
-      if (padding.bottom !== undefined) style.paddingBottom = padding.bottom;
-      if (padding.left !== undefined) style.paddingLeft = padding.left;
+      inkProps.padding = padding;
+    } else if (typeof padding === "object") {
+      inkProps.paddingTop = padding.top !== undefined ? Number(padding.top) : undefined;
+      inkProps.paddingRight = padding.right !== undefined ? Number(padding.right) : undefined;
+      inkProps.paddingBottom = padding.bottom !== undefined ? Number(padding.bottom) : undefined;
+      inkProps.paddingLeft = padding.left !== undefined ? Number(padding.left) : undefined;
     }
   }
-  if (paddingTop !== undefined) style.paddingTop = paddingTop;
-  if (paddingBottom !== undefined) style.paddingBottom = paddingBottom;
-  if (paddingLeft !== undefined) style.paddingLeft = paddingLeft;
-  if (paddingRight !== undefined) style.paddingRight = paddingRight;
+  if (paddingTop !== undefined) inkProps.paddingTop = Number(paddingTop);
+  if (paddingBottom !== undefined) inkProps.paddingBottom = Number(paddingBottom);
+  if (paddingLeft !== undefined) inkProps.paddingLeft = Number(paddingLeft);
+  if (paddingRight !== undefined) inkProps.paddingRight = Number(paddingRight);
   if (paddingX !== undefined) {
-    style.paddingLeft = paddingX;
-    style.paddingRight = paddingX;
+    inkProps.paddingLeft = Number(paddingX);
+    inkProps.paddingRight = Number(paddingX);
   }
   if (paddingY !== undefined) {
-    style.paddingTop = paddingY;
-    style.paddingBottom = paddingY;
-  }
-  if (backgroundColor) {
-    style.backgroundColor = backgroundColor;
-  }
-  if (opacity !== undefined) {
-    style.opacity = opacity;
+    inkProps.paddingTop = Number(paddingY);
+    inkProps.paddingBottom = Number(paddingY);
   }
 
-  return React.createElement("div", {
-    style,
-    onClick,
-    onMouseEnter,
-    onMouseLeave,
-    onScroll,
-  }, children);
+  return React.createElement(InkBox, inkProps, children);
 }
 
 export default Box;

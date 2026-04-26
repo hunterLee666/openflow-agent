@@ -1,14 +1,11 @@
 import React, {
-  type ChangeEvent,
-  type KeyboardEvent,
   useState,
-  useRef,
   useCallback,
   useEffect,
 } from "react";
+import { useInput } from "../hooks/useInput.js";
 import { Text } from "./Text.js";
 import { Box } from "./Box.js";
-import { ansiWidth } from "../ansi.js";
 import { z } from 'zod'
 
 export const TextInputPropsSchema = z.object({
@@ -51,105 +48,47 @@ export function TextInput({
   onCursorChange,
   inputFilter,
 }: TextInputProps): React.ReactNode {
-  const [internalValue, setInternalValue] = useState(value);
   const [cursor, setCursor] = useState(cursorPosition ?? value.length);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setInternalValue(value);
     if (cursorPosition !== undefined) {
       setCursor(cursorPosition);
     }
-  }, [value, cursorPosition]);
-
-  const handleChange = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
-      let newValue = (e.target as unknown as { value: string }).value;
-
-      if (maxLength && newValue.length > maxLength) {
-        newValue = newValue.slice(0, maxLength);
-      }
-
-      if (inputFilter) {
-        newValue = inputFilter(newValue);
-      }
-
-      setInternalValue(newValue);
-      setCursor(newValue.length);
-      onChange?.(newValue);
-      onCursorChange?.(newValue.length);
-    },
-    [maxLength, inputFilter, onChange, onCursorChange]
-  );
-
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLInputElement>) => {
-      switch (e.key) {
-        case "Enter":
-          if (!e.shiftKey || !multiline) {
-            e.preventDefault();
-            if (internalValue.trim()) {
-              onSubmit?.(internalValue);
-              setInternalValue("");
-              setCursor(0);
-            }
-          }
-          break;
-        case "Escape":
-          e.preventDefault();
-          onCancel?.();
-          break;
-        case "ArrowLeft":
-          setCursor((prev) => Math.max(0, prev - 1));
-          onCursorChange?.(Math.max(0, cursor - 1));
-          break;
-        case "ArrowRight":
-          setCursor((prev) => Math.min(internalValue.length, prev + 1));
-          onCursorChange?.(Math.min(internalValue.length, cursor + 1));
-          break;
-        case "Home":
-          setCursor(0);
-          onCursorChange?.(0);
-          break;
-        case "End":
-          setCursor(internalValue.length);
-          onCursorChange?.(internalValue.length);
-          break;
-        case "Backspace":
-          if (cursor > 0) {
-            const newValue =
-              internalValue.slice(0, cursor - 1) + internalValue.slice(cursor);
-            setInternalValue(newValue);
-            setCursor((prev) => prev - 1);
-            onChange?.(newValue);
-            onCursorChange?.(cursor - 1);
-          }
-          e.preventDefault();
-          break;
-        case "Delete":
-          if (cursor < internalValue.length) {
-            const newValue =
-              internalValue.slice(0, cursor) + internalValue.slice(cursor + 1);
-            setInternalValue(newValue);
-            onChange?.(newValue);
-          }
-          e.preventDefault();
-          break;
-      }
-    },
-    [internalValue, cursor, multiline, onSubmit, onCancel, onChange, onCursorChange]
-  );
+  }, [cursorPosition]);
 
   useEffect(() => {
-    if (autoFocus && inputRef.current && !disabled) {
-      (inputRef.current as unknown as { focus: () => void }).focus();
+    if (cursor > value.length) {
+      setCursor(value.length);
     }
-  }, [autoFocus, disabled]);
+  }, [value]);
 
-  const displayValue = mask ? mask.repeat(internalValue.length) : internalValue;
+  useInput({
+    isActive: autoFocus && !disabled && !readOnly,
+    onKeyDown: (keyEvent) => {
+      const { key } = keyEvent;
+
+      // Only handle printable characters, let app.tsx handle special keys
+      if (key.length === 1) {
+        const newValue =
+          value.slice(0, cursor) + key + value.slice(cursor);
+
+        if (maxLength && newValue.length > maxLength) {
+          return;
+        }
+
+        const filteredValue = inputFilter ? inputFilter(newValue) : newValue;
+        onChange?.(filteredValue);
+        setCursor((prev) => prev + 1);
+        onCursorChange?.(cursor + 1);
+      }
+    },
+  });
+
+  const displayValue = mask ? mask.repeat(value.length) : value;
   const visibleChars = 60;
   const startOffset = Math.max(0, cursor - visibleChars + 1);
   const beforeCursor = displayValue.slice(startOffset, cursor);
+  const afterCursor = displayValue.slice(cursor + 1);
   const cursorChar = displayValue[cursor] || " ";
 
   return (
@@ -159,32 +98,18 @@ export function TextInput({
         <Text color="dim">...</Text>
       )}
       <Text>{beforeCursor}</Text>
-      {showCursor && !disabled && (
+      {showCursor && autoFocus && !disabled && (
         <Text inverse bold={!mask}>
           {mask ? (mask[0] || "•") : cursorChar}
         </Text>
       )}
-      <Text dim={!showCursor || disabled}>
-        {displayValue.slice(cursor + 1)}
+      <Text dim={!showCursor || !autoFocus || disabled}>
+        {afterCursor}
       </Text>
+      {!displayValue && placeholder && autoFocus && (
+        <Text color="dim">{placeholder}</Text>
+      )}
       {suffix && <Box margin={{ left: 1 }}>{suffix}</Box>}
-      <input
-        ref={inputRef}
-        type="text"
-        value={internalValue}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        disabled={disabled}
-        readOnly={readOnly}
-        style={{
-          position: "absolute",
-          opacity: 0,
-          pointerEvents: "none",
-          width: 1,
-          height: 1,
-        }}
-        tabIndex={-1}
-      />
     </Box>
   );
 }

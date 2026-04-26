@@ -30,7 +30,7 @@ export function StatusBar({
       <Box
         flexDirection="row"
         alignItems="center"
-        padding={{ top: 0, bottom: 0, left: 1, right: 1 }}
+        padding={{ top: "0", bottom: "0", left: 1, right: 1 }}
         style={{ backgroundColor: "#1a1a2e", borderTop: "1px solid #333" }}
       >
         {left && <Box flex={1}>{left}</Box>}

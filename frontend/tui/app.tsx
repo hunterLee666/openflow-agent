@@ -392,7 +392,7 @@ export function App({
           segments={[
             { label: 'mode', value: enableVimMode ? vimMode : 'chat' },
             { label: 'connection', value: 'connected' },
-            { label: 'tokens', value: 0 },
+            { label: 'tokens', value: '0' },
             ...(terminalInfo ? [{ label: 'terminal', value: terminalInfo.name }] : []),
           ]}
         />

@@ -302,17 +302,18 @@ export class TokenOptimizer {
     return result.join(" ") + (result.length < sentences.length ? "..." : "");
   }
 
-  private estimateTokens(text: string): number {
-    if (!text || text.length === 0) return 0;
+  private estimateTokens(text: unknown): number {
+    const strText = String(text || "");
+    if (strText.length === 0) return 0;
 
-    const words = text.split(/\s+/).filter((w) => w.length > 0).length;
+    const words = strText.split(/\s+/).filter((w) => w.length > 0).length;
 
-    const chineseChars = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+    const chineseChars = (strText.match(/[\u4e00-\u9fff]/g) || []).length;
     const englishWords = words - Math.floor(chineseChars / 2);
 
     const tokenCount = Math.ceil(englishWords * 1.3) + Math.ceil(chineseChars * 0.5);
 
-    const punctuation = (text.match(/[^\w\s\u4e00-\u9fff]/g) || []).length;
+    const punctuation = (strText.match(/[^\w\s\u4e00-\u9fff]/g) || []).length;
     const punctuationTokens = Math.ceil(punctuation * 0.3);
 
     return Math.max(1, tokenCount + punctuationTokens);
