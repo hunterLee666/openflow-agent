@@ -1,4 +1,4 @@
-import { TextProps } from './text-props'
+import { TextProps } from '../types'
 import Reconciler from 'react-reconciler'
 
 let currentUpdatePriority = 0
@@ -54,7 +54,6 @@ export class TextInstance {
 }
 
 export default (resetAfterCommit: () => void) => {
-  // prettier-ignore
   const reconciler = Reconciler({
     supportsMutation: true,
     appendChild(parentInstance: any, child: any) { parentInstance.appendChild(child) },
@@ -73,7 +72,6 @@ export default (resetAfterCommit: () => void) => {
     insertBefore(parentInstance: any, child: any, beforeChild: any) { parentInstance.insertBefore(child, beforeChild) },
     insertInContainerBefore(container: any, child: any, beforeChild: any) { container.insertBefore(child, beforeChild) },
     prepareForCommit() { return null },
-    // @ts-expect-error any
     prepareUpdate() { return true },
     removeChild(parentInstance: any, child: any) { parentInstance.removeChild(child) },
     removeChildFromContainer(container: any, child: any) { container.removeChild(child) },

@@ -1,4 +1,3 @@
-import Renderer from './renderer'
 import { type Char, type Color, type Modifier } from './screen'
 
 const ESC = '\x1B'
@@ -29,26 +28,19 @@ class Term {
     process.on('exit', this.onExit)
 
     if (fullscreen) {
-      // 直接写入终端，不等待 render()
-      process.stdout.write(`${ESC}[?1049h`) // 启用替代缓冲区
-      process.stdout.write(`${ESC}c`) // 清屏
-      process.stdout.write(`${ESC}[H`) // 移动光标到左上角
-      process.stdout.write(`${ESC}[?25l`) // 隐藏光标
-      console.error('[TERM] 全屏模式已启用')
+      this.append(`${ESC}[?1049h`)
+      this.append(`${ESC}c`)
     } else {
-      console.error('[TERM] 非全屏模式，查询光标位置...')
       const cursor = await this.termGetCursor()
-      console.error('[TERM] 光标位置:', cursor)
       this.offset = cursor
-      this.append(`${ESC}[?25l`) // 隐藏光标
     }
-    console.error('[TERM] 初始化完成')
+    this.append(`${ESC}[?25l`)
   }
 
   reinit() {
     this.prevModifier = {}
     this.prevBuffer = undefined
-    this.append(`${ESC}[?1049h${ESC}c${ESC}[?25l`) // enables the alternative buffer, clear screen, make cursor invisible
+    this.append(`${ESC}[?1049h${ESC}c${ESC}[?25l`)
   }
 
   onExit = (code: number) => {
@@ -63,16 +55,16 @@ class Term {
 
     const sequence: string[] = []
     if (this.fullscreen) {
-      sequence.push(`${ESC}[?1049l`) // disables the alternative buffer
+      sequence.push(`${ESC}[?1049l`)
     } else {
       const y = this.maxCursor.y - this.cursor.y
-      if (y > 0) sequence.push(`${ESC}[${y}B`) // moves cursor down
+      if (y > 0) sequence.push(`${ESC}[${y}B`)
       const x = this.maxCursor.x - this.cursor.x + 1
-      if (x > 0) sequence.push(`${ESC}[${x}C`) // moves cursor right
+      if (x > 0) sequence.push(`${ESC}[${x}C`)
       sequence.push(`\n`)
     }
-    sequence.push(`${ESC}[?25h`) // make cursor visible
-    if (this.isMouseEnabled) sequence.push(`${ESC}[?1000l`) // disable mouse
+    sequence.push(`${ESC}[?25h`)
+    if (this.isMouseEnabled) sequence.push(`${ESC}[?1000l`)
     return sequence.join('')
   }
 
@@ -85,34 +77,23 @@ class Term {
   }
 
   enableMouse() {
-    this.append(`${ESC}[?1000h${ESC}[?1005h`) // enable mouse
+    this.append(`${ESC}[?1000h${ESC}[?1005h`)
     this.isMouseEnabled = true
   }
 
   async termGetCursor(): Promise<{ x: number; y: number }> {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        process.stdin.removeListener('data', onData)
-        resolve({ x: 0, y: 0 })
-      }, 1000)
-      
-      const onData = (data: Buffer) => {
-        clearTimeout(timeout)
-        try {
-          const [x, y] = data
-            .toString()
-            .slice(2, -1)
-            .split(';')
-            .reverse()
-            .map(i => parseInt(i) - 1)
-          resolve({ x, y })
-        } catch {
-          resolve({ x: 0, y: 0 })
-        }
-      }
-      
-      process.stdin.on('data', onData)
-      process.stdout.write('\x1b[6n')
+    process.stdin.setRawMode(true)
+    process.stdout.write('\x1b[6n')
+    return await new Promise(resolve => {
+      process.stdin.once('data', data => {
+        const [x, y] = data
+          .toString()
+          .slice(2, -1)
+          .split(';')
+          .reverse()
+          .map(i => parseInt(i) - 1)
+        resolve({ x, y })
+      })
     })
   }
 
@@ -131,7 +112,7 @@ class Term {
 
   parseColor(color: Color | string | number, offset = 0) {
     if (typeof color === 'number') {
-      if (color < 0 || color > 255) throw new Error('color not found')
+      if (color < 0 || color > 255) throw new Error(`color not found: ${color}`)
       return `${38 + offset};5;${color}`
     }
 
@@ -140,7 +121,7 @@ class Term {
       return `${38 + offset};2;${r};${g};${b}`
     }
 
-    const names = {
+    const names: Record<string, number> = {
       black: 30,
       red: 31,
       green: 32,
@@ -150,16 +131,28 @@ class Term {
       cyan: 36,
       white: 37,
       brightblack: 90,
+      dimblack: 90,
       brightred: 91,
+      dimred: 91,
       brightgreen: 92,
+      dimgreen: 92,
       brightyellow: 93,
+      dimyellow: 93,
       brightblue: 94,
+      dimblue: 94,
       brightmagenta: 95,
+      dimmagenta: 95,
       brightcyan: 96,
-      brightwhite: 97
+      dimcyan: 96,
+      brightwhite: 97,
+      dimwhite: 97
     }
-    const colorFromName = (names as any)[color.toLowerCase()]
-    if (colorFromName === undefined) throw new Error('color not found')
+    const colorKey = String(color).toLowerCase().replace(/[^a-z]/g, '')
+    const colorFromName = names[colorKey]
+    if (colorFromName === undefined) {
+      console.error(`Unknown color: "${color}", normalized: "${colorKey}"`)
+      return 39
+    }
     return colorFromName + offset
   }
 
@@ -189,17 +182,21 @@ class Term {
     return (code >= 9211 && code <= 9214) || [9829, 9889, 11096].includes(code) || (code >= 57344 && code <= 64838)
   }
 
-  render(buffer: Char[][]) {
+  render(buffer: Char[][]): string | undefined {
     let full = false
     let result = ''
 
     if (this.isResized) {
       if (this.fullscreen) {
-        result += `${ESC}[H` // moves cursor to home position
+        result += `${ESC}[H`
         this.cursor = { x: 0, y: 0 }
         full = true
       }
       this.isResized = false
+    }
+
+    if (!full && this.prevBuffer === undefined) {
+      full = true
     }
 
     for (let y = 0; y < buffer.length; y++) {
@@ -208,18 +205,17 @@ class Term {
       let includesEmoji = false
       let includesIcon = false
 
-      const diffLine = full
+      const diffLine: (Char | null)[] = full
         ? line
-        : line
-            .map((i: Char, x: number) => {
-              const [prevChar, prevModifier] = prevLine && prevLine[x] ? prevLine[x] : [' ', {}]
-              const [char, modifier] = i
-              return prevChar !== char || JSON.stringify(prevModifier) !== JSON.stringify(modifier) ? i : null
-            })
-            .filter(i => i !== undefined)
+        : line.map((i: Char, x: number) => {
+            const [prevChar, prevModifier] = prevLine && prevLine[x] ? prevLine[x] : [' ', {}]
+            const [char, modifier] = i
+            return prevChar !== char || JSON.stringify(prevModifier) !== JSON.stringify(modifier) ? i : null
+          })
 
-      const chunks: Record<string, [any, any]> = {}
+      const chunks: Record<string, [string, string]> = {}
       let chunksAt = 0
+
       diffLine.forEach((value, x: number) => {
         if (value === null) {
           chunksAt = x + 1
@@ -236,8 +232,8 @@ class Term {
         chunks[chunksAt][1] += char
       })
 
-      Object.entries(chunks).map(([index, value]) => {
-        const [str, strWithModifiers] = value as [string, string]
+      Object.entries(chunks).forEach(([index, value]) => {
+        const [str, strWithModifiers] = value
         const x = parseInt(index)
         if (/\p{Emoji}/u.test(str)) includesEmoji = true
         if (!includesIcon && str.split('').find((i: string) => this.isIcon(i))) includesIcon = true
@@ -259,26 +255,26 @@ class Term {
           }
 
           if (y !== this.cursor.y && x !== this.cursor.x) {
-            result += `${ESC}[${y + 1 + this.offset.y};${x + 1}H` // move cursor to position
+            result += `${ESC}[${y + 1 + this.offset.y};${x + 1}H`
           } else if (y > this.cursor.y) {
             const diff = y - this.cursor.y
-            result += `${ESC}[${diff > 1 ? diff : ''}B` // move cursor down
+            result += `${ESC}[${diff > 1 ? diff : ''}B`
           } else if (y < this.cursor.y) {
             const diff = this.cursor.y - y
-            result += `${ESC}[${diff > 1 ? diff : ''}A` // move cursor up
+            result += `${ESC}[${diff > 1 ? diff : ''}A`
           } else if (x > this.cursor.x) {
             if (includesEmoji || includesIcon) {
-              result += `${ESC}[G${ESC}[${x > 1 ? x : ''}C` // move cursor to column, move cursor right
+              result += `${ESC}[G${ESC}[${x > 1 ? x : ''}C`
             } else {
               const diff = x - this.cursor.x
-              result += `${ESC}[${diff > 1 ? diff : ''}C` // move cursor right
+              result += `${ESC}[${diff > 1 ? diff : ''}C`
             }
           } else if (x < this.cursor.x) {
             if (includesEmoji) {
-              result += `${ESC}[G${ESC}[${x > 1 ? x : ''}C` // move cursor to start, move cursor right
+              result += `${ESC}[G${ESC}[${x > 1 ? x : ''}C`
             } else {
               const diff = this.cursor.x - x
-              result += `${ESC}[${diff > 1 ? diff : ''}D` // move cursor left
+              result += `${ESC}[${diff > 1 ? diff : ''}D`
             }
           }
         }
@@ -286,10 +282,7 @@ class Term {
 
         this.cursor = { x: x + str.length, y }
       })
-      // if (this.cursor.x > buffer[y].length - 1) {
-      //   this.cursor = { x: 0, y: 0 }
-      //   result += `${ESC}[H` // moves cursor to home position
-      // }
+
       if (this.cursor.x > this.maxCursor.x) this.maxCursor.x = this.cursor.x
       if (this.cursor.y > this.maxCursor.y) this.maxCursor.y = this.cursor.y
     }
@@ -305,15 +298,18 @@ class Term {
     }
 
     if (result) {
-      if (this.print) return Renderer.terminate(result)
+      if (this.print) {
+        return result
+      }
 
       process.stdout.write(result)
-      // log(/* Date.now(), */ result)
     }
 
     if (this.result !== undefined) {
-      Renderer.terminate(this.result)
+      process.stdout.write(String(this.result))
     }
+
+    return undefined
   }
 }
 

@@ -1,50 +1,10 @@
-import { TextProps } from './text-props'
-import { TextElement } from './reconciler'
+import { TextProps, Color, Modifier, Char, Bounds } from '../types'
+import { TextElement, TextInstance } from './reconciler'
 import { ReactElement } from 'react'
 
-export type Color =
-  | number
-  | string
-  | 'Black'
-  | 'Red'
-  | 'Green'
-  | 'Yellow'
-  | 'Blue'
-  | 'Magenta'
-  | 'Cyan'
-  | 'White'
-  | 'BrightBlack'
-  | 'BrightRed'
-  | 'BrightGreen'
-  | 'BrightYellow'
-  | 'BrightBlue'
-  | 'BrightMagenta'
-  | 'BrightCyan'
-  | 'BrightWhite'
+export type { Color, Modifier, Char, Bounds }
 
-export interface Modifier {
-  background?: Color
-  color?: Color
-  clear?: boolean
-  bold?: boolean
-  dim?: boolean
-  italic?: boolean
-  underline?: boolean
-  blinking?: boolean
-  inverse?: boolean
-  strikethrough?: boolean
-}
-
-export type Char = [string, Modifier]
-
-interface Bounds {
-  x: number
-  y: number
-  x1: number
-  y1: number
-  x2: number
-  y2: number
-}
+const ESC = '\x1B'
 
 class Screen {
   buffer: Char[][]
@@ -84,7 +44,22 @@ class Screen {
   renderElement(element: ReactElement | ReactElement[] | any, prevBounds: Bounds, prevProps: TextProps = {}) {
     if (Array.isArray(element)) return element.forEach(i => this.renderElement(i, prevBounds, prevProps))
 
-    const { children, ...props } = element.props ?? { children: element }
+    if (element instanceof TextInstance) {
+      const text = element.value
+      if (text.includes('\n')) {
+        const lines = text.split('\n')
+        lines.forEach((line: string, index: number) => {
+          this.cursor.x = this.put(line, prevBounds, prevProps)
+          if (index < lines.length - 1) this.carret(prevBounds)
+        })
+      } else {
+        this.cursor.x = this.put(text, prevBounds, prevProps)
+      }
+      return
+    }
+
+    const props = { ...(element.props ?? {}) }
+    const children = props.children ?? element.children ?? (typeof element === 'string' || typeof element === 'number' ? element : null)
 
     if (typeof props.x === 'string')
       props.x = this.stringAt(props.x, props.absolute ? this.buffer[0].length : prevBounds.x2 - prevBounds.x)
@@ -135,7 +110,7 @@ class Screen {
       this.fill(bounds, props.absolute ? bounds : prevBounds, modifiers)
 
     if (Array.isArray(children) || children?.props) {
-      this.renderElement(element.children, bounds, modifiers)
+      this.renderElement(element.children ?? children, bounds, modifiers)
     } else if (typeof children === 'number' || children) {
       const text = children.toString()
       if (text.includes('\n')) {
@@ -172,7 +147,6 @@ class Screen {
 
     let i: number
     for (i = 0; i < text.length; i++) {
-      if (y < 0 || y >= this.buffer.length) break
       if (y < Math.max(0, bounds.y1) || y >= Math.min(this.buffer.length, bounds.y2)) break
       if (x + i < Math.max(0, bounds.x1) || x + i >= Math.min(this.buffer[y].length, bounds.x2)) continue
 
@@ -185,6 +159,86 @@ class Screen {
   carret(bounds: Bounds) {
     this.cursor.x = bounds.x ?? 0
     this.cursor.y++
+  }
+
+  parseColor(color: Color | string | number, offset = 0) {
+    if (typeof color === 'number') {
+      if (color < 0 || color > 255) throw new Error('color not found')
+      return `${38 + offset};5;${color}`
+    }
+
+    if (typeof color === 'string' && color.startsWith('#')) {
+      const hex = color.substring(1)
+      const r = parseInt(hex.substring(0, 2), 16)
+      const g = parseInt(hex.substring(2, 4), 16)
+      const b = parseInt(hex.substring(4, 6), 16)
+      return `${38 + offset};2;${r};${g};${b}`
+    }
+
+    const names: Record<string, number> = {
+      black: 30,
+      red: 31,
+      green: 32,
+      yellow: 33,
+      blue: 34,
+      magenta: 35,
+      cyan: 36,
+      white: 37,
+      brightblack: 90,
+      brightred: 91,
+      brightgreen: 92,
+      brightyellow: 93,
+      brightblue: 94,
+      brightmagenta: 95,
+      brightcyan: 96,
+      brightwhite: 97
+    }
+    const colorFromName = names[String(color).toLowerCase()]
+    if (colorFromName === undefined) throw new Error('color not found')
+    return colorFromName + offset
+  }
+
+  createStyleCode(modifiers: Modifier): string {
+    if (JSON.stringify(modifiers) === '{}') return `${ESC}[0m`
+
+    const codes: (number | string)[] = []
+
+    if (modifiers.color) codes.push(this.parseColor(modifiers.color))
+    if (modifiers.background) codes.push(this.parseColor(modifiers.background, 10))
+    if (modifiers.bold) codes.push(1)
+    if (modifiers.dim) codes.push(2)
+    if (modifiers.italic) codes.push(3)
+    if (modifiers.underline) codes.push(4)
+    if (modifiers.blinking) codes.push(5)
+    if (modifiers.inverse) codes.push(7)
+    if (modifiers.strikethrough) codes.push(9)
+
+    return codes.length > 0 ? `${ESC}[${codes.join(';')}m` : `${ESC}[0m`
+  }
+
+  renderToString(): string {
+    let result = ''
+    let prevModifiers: Modifier = {}
+
+    for (let y = 0; y < this.buffer.length; y++) {
+      const line = this.buffer[y]
+      let lineResult = ''
+
+      for (let x = 0; x < line.length; x++) {
+        const [char, modifiers] = line[x]
+
+        if (JSON.stringify(modifiers) !== JSON.stringify(prevModifiers)) {
+          lineResult += this.createStyleCode(modifiers)
+          prevModifiers = modifiers
+        }
+
+        lineResult += char
+      }
+
+      result += lineResult + '\n'
+    }
+
+    return result + `${ESC}[0m`
   }
 }
 

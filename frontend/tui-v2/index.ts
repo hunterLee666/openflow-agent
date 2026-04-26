@@ -1,22 +1,13 @@
-console.error('index.ts 开始加载...')
-
 import { createRoot } from './core/renderer'
-console.error('导入 createRoot 完成')
 
 import React from 'react'
-console.error('导入 React 完成')
 
 import { OpenFlowApp } from './components/OpenFlowApp'
-console.error('导入 OpenFlowApp 完成')
 
 import { WebSocketClient } from './core/transport'
 import { TransportMessage } from './core/transport'
-console.error('导入 WebSocketClient 完成')
 
 import { Message } from './components/ChatArea'
-console.error('导入 ChatArea 完成')
-
-console.error('所有导入完成')
 
 const WS_URL = process.argv[2] || 'ws://localhost:8765'
 const PROVIDER = process.argv[3] || 'Bailian'
@@ -37,12 +28,9 @@ let selectedIndex = 0
 
 // 只创建一个 root 实例
 const root = createRoot()
-console.error('[INIT] root 创建完成')
 
 function render() {
   try {
-    console.error('[RENDER] 开始渲染...')
-    
     const app = React.createElement(OpenFlowApp, {
       messages,
       provider: PROVIDER,
@@ -91,29 +79,22 @@ function render() {
       }
     })
     
-    console.error('[RENDER] 创建 app 完成')
     root.render(app, { fullscreen: true, print: false })
-    console.error('[RENDER] root.render 完成')
   } catch (err) {
-    console.error('[RENDER] 渲染错误:', err)
+    // 渲染错误时静默处理
   }
 }
 
-console.error('开始连接 WebSocket...')
-
 const client = new WebSocketClient(WS_URL, {
   onConnect: () => {
-    console.error('Connected to backend')
     status = 'idle'
     render()
   },
   onDisconnect: () => {
-    console.error('Disconnected from backend')
     status = 'error'
     render()
   },
   onError: (error) => {
-    console.error('WebSocket error:', error)
     status = 'error'
     render()
   },
@@ -168,14 +149,10 @@ const client = new WebSocketClient(WS_URL, {
   }
 })
 
-console.error('正在连接 WebSocket...')
 client.connect().then(() => {
-  console.error('WebSocket 连接成功')
   status = 'idle'
   render()
 }).catch(err => {
-  console.error('WebSocket 连接失败:', err.message || err)
-  console.error('仍然渲染界面...')
   status = 'error'
   render()
 })
@@ -185,18 +162,14 @@ process.stdin.resume()
 
 // 处理退出信号
 process.on('SIGINT', () => {
-  console.error('收到 SIGINT 信号')
   root.terminate(0)
   process.exit(0)
 })
 
 process.on('SIGTERM', () => {
-  console.error('收到 SIGTERM 信号')
   root.terminate(0)
   process.exit(0)
 })
-
-console.error('进程已保持运行状态')
 
 // 添加键盘事件处理
 const TABS: TabType[] = ['model', 'provider', 'skills', 'commands', 'history', 'operations', 'settings', 'shortcuts']
@@ -252,7 +225,6 @@ process.stdin.on('data', (data: Buffer) => {
   
   // Enter - 确认选择
   if (key === '\r' || key === '\n') {
-    console.error(`选择了: Tab=${selectedTab}, Index=${selectedIndex}`)
     return
   }
   

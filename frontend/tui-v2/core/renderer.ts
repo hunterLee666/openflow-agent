@@ -9,7 +9,7 @@ class Renderer {
   container: TextElement
   screen: Screen
   input: Input
-  term: Term
+  term: Term | null
   reconciler: ReturnType<typeof Reconciler>
   callback?: (value: any) => void
   throttleAt = 0
@@ -20,7 +20,7 @@ class Renderer {
     this.screen = new Screen()
     this.input = new Input()
     this.reconciler = Reconciler(this.throttle)
-    this.term = new Term()
+    this.term = null
   }
 
   render(reactElement: ReactElement, options = { fullscreen: true, print: false }) {
@@ -30,25 +30,6 @@ class Renderer {
         reactElement,
         this.reconciler.createContainer(this.container, 0, null, false, null, '', () => {}, null)
       )
-      console.error('[RENDER] 渲染完成，保持进程运行')
-      // 保持进程运行
-      if (process.stdin.isTTY) {
-        process.stdin.resume()
-      }
-    }).catch(err => {
-      console.error('渲染初始化失败:', err)
-      // 回退到非全屏模式
-      this.term = new Term()
-      this.term.init(false, true).then(() => {
-        this.reconciler.updateContainer(
-          reactElement,
-          this.reconciler.createContainer(this.container, 0, null, false, null, '', () => {}, null)
-        )
-        console.error('[RENDER] 回退模式渲染完成')
-        if (process.stdin.isTTY) {
-          process.stdin.resume()
-        }
-      })
     })
   }
 
@@ -64,23 +45,24 @@ class Renderer {
     })
   }
 
-  print(reactElement: ReactElement, options = { fullscreen: false, print: true }) {
-    this.render(reactElement, options)
-
+  print(reactElement: ReactElement, options = { fullscreen: false, print: true }): Promise<string> {
     return new Promise(resolve => {
-      this.callback = resolve
+      this.term = new Term()
+      this.term.init(options.fullscreen, options.print).then(() => {
+        this.reconciler.updateContainer(
+          reactElement,
+          this.reconciler.createContainer(this.container, 0, null, false, null, '', () => {}, null)
+        )
+        
+        this.screen.render(this.container.children)
+        const result = this.term?.render(this.screen.buffer)
+        resolve(result || '')
+      })
     })
   }
 
   frame(reactElement: ReactElement, options = { fullscreen: false, print: true }) {
-    this.render(reactElement, options)
-
-    return new Promise(resolve => {
-      this.callback = (value: any) => {
-        process.stdout.write(value)
-        resolve(value)
-      }
-    })
+    return this.print(reactElement, options)
   }
 
   terminate(value: any) {
