@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { SemanticCompressor, createSemanticCompressor } from "../../src/memory/semantic-compressor.js";
-import { TripleIndex, createTripleIndex } from "../../src/memory/triple-index.js";
-import { SemanticSynthesizer, createSemanticSynthesizer } from "../../src/memory/semantic-synthesizer.js";
-import { QueryPlanner, QueryComplexity, createQueryPlanner } from "../../src/memory/query-planner.js";
-import { SessionManager, createSessionManager } from "../../src/memory/session-manager.js";
+import { SemanticCompressor, createSemanticCompressor } from "../../backend/memory/semantic-compressor.js";
+import { TripleIndex, createTripleIndex } from "../../backend/memory/triple-index.js";
+import { SemanticSynthesizer, createSemanticSynthesizer } from "../../backend/memory/semantic-synthesizer.js";
+import { QueryPlanner, QueryComplexity, createQueryPlanner } from "../../backend/memory/query-planner.js";
+import { SessionManager, createSessionManager } from "../../backend/memory/session-manager.js";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";

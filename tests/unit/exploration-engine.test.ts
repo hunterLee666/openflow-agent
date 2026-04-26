@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { ExplorationEngine, createExplorationEngine } from "../../src/memory/exploration-engine.js";
+import { ExplorationEngine, createExplorationEngine } from "../../backend/memory/exploration-engine.js";
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";

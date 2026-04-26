@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { CronScheduler } from "../../src/scheduler/cron-scheduler.js";
+import { CronScheduler } from "../../backend/scheduler/cron-scheduler.js";
 import { mkdir, rm, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";

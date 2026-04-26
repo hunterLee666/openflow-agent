@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { EnhancedMemoryCore, createEnhancedMemoryCore } from "../../src/memory/enhanced-memory-core.js";
+import { EnhancedMemoryCore, createEnhancedMemoryCore } from "../../backend/memory/enhanced-memory-core.js";
 import { mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";

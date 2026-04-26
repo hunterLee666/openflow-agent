@@ -17,6 +17,6 @@
     "types": ["bun-types"],
     "resolveJsonModule": true
   },
-  "include": ["backend/**/*", "frontend/**/*", "src/**/*", "tests/**/*"],
+  "include": ["backend/**/*", "frontend/**/*", "tests/**/*"],
   "exclude": ["node_modules", "dist"]
 }

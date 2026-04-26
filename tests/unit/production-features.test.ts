@@ -3,22 +3,22 @@ import {
   CircuitBreaker,
   CircuitBreakerError,
   CircuitBreakerRegistry,
-} from "../../src/utils/circuit-breaker.js";
+} from "../../backend/utils/circuit-breaker.js";
 import {
   TranscriptStore,
   createUserMessageEvent,
   createAssistantMessageEvent,
   createErrorEvent,
-} from "../../src/utils/transcript.js";
+} from "../../backend/utils/transcript.js";
 import {
   retryWithBackoff,
   calculateExponentialBackoff,
   RetryBudget,
-} from "../../src/utils/retry-with-backoff.js";
+} from "../../backend/utils/retry-with-backoff.js";
 import {
   DegradationLadder,
   DEFAULT_DEGRADATION_LEVELS,
-} from "../../src/utils/degradation-ladder.js";
+} from "../../backend/utils/degradation-ladder.js";
 
 describe("Circuit Breaker", () => {
   let breaker: CircuitBreaker;

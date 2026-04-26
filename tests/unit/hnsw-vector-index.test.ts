@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { HNSWVectorIndex, createHNSWVectorIndex } from "../../src/memory/hnsw-vector-index.js";
+import { HNSWVectorIndex, createHNSWVectorIndex } from "../../backend/memory/hnsw-vector-index.js";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { IntentRecognizer, createIntentRecognizer, IntentType, SafetyLevel, SafetyFlag } from "../../src/memory/intent-recognizer.js";
-import { GoalTracker, createGoalTracker } from "../../src/memory/goal-tracker.js";
-import { SafetyChecker, createSafetyChecker } from "../../src/memory/safety-checker.js";
+import { IntentRecognizer, createIntentRecognizer, IntentType, SafetyLevel, SafetyFlag } from "../../backend/memory/intent-recognizer.js";
+import { GoalTracker, createGoalTracker } from "../../backend/memory/goal-tracker.js";
+import { SafetyChecker, createSafetyChecker } from "../../backend/memory/safety-checker.js";
 
 describe("Intent Recognition System", () => {
   describe("IntentRecognizer (规则模式)", () => {
