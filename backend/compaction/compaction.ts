@@ -1,18 +1,22 @@
 import type { Message, ContentBlock } from "../session/types.js";
+import { z } from "zod";
 
-export interface CompactOptions {
-  maxTokens?: number;
-  force?: boolean;
-  preserveRecentMessages?: number;
-}
+export const CompactOptionsSchema = z.object({
+  maxTokens: z.number().optional(),
+  force: z.boolean().optional(),
+  preserveRecentMessages: z.number().optional(),
+});
 
-export interface CompactResult {
-  messages: Message[];
-  executed: boolean;
-  tokensFreed: number;
-  boundaryMessage?: Message;
-  summary?: string;
-}
+export const CompactResultSchema = z.object({
+  messages: z.any() as z.ZodType<Message[]>,
+  executed: z.boolean(),
+  tokensFreed: z.number(),
+  boundaryMessage: z.any() as z.ZodType<Message | undefined>,
+  summary: z.string().optional(),
+});
+
+export type CompactOptions = z.infer<typeof CompactOptionsSchema>;
+export type CompactResult = z.infer<typeof CompactResultSchema>;
 
 export const COMPACT_TOKEN_BUDGET = 50000;
 

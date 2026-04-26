@@ -1,23 +1,28 @@
-import { SafetyLevel, SafetyFlag } from "./intent-recognizer.js";
+import { z } from "zod";
+import { SafetyLevel, SafetyFlag, SafetyLevelSchema, SafetyFlagSchema } from "./intent-recognizer.js";
 import type { IntentRecognitionResult } from "./intent-recognizer.js";
 
-export interface SafetyCheckResult {
-  level: SafetyLevel;
-  flags: SafetyFlag[];
-  blockMessage?: string;
-  warnings: string[];
-  requiresConfirmation: boolean;
-  confirmationMessage?: string;
-}
+export const SafetyCheckResultSchema = z.object({
+  level: SafetyLevelSchema,
+  flags: z.array(SafetyFlagSchema),
+  blockMessage: z.string().optional(),
+  warnings: z.array(z.string()),
+  requiresConfirmation: z.boolean(),
+  confirmationMessage: z.string().optional(),
+});
 
-export interface SafetyPolicy {
-  blockedPatterns: string[];
-  warnedPatterns: string[];
-  allowedPatterns: string[];
-  maxDestructiveOperations: number;
-  enableLLMCheck: boolean;
-  strictMode: boolean;
-}
+export type SafetyCheckResult = z.infer<typeof SafetyCheckResultSchema>;
+
+export const SafetyPolicySchema = z.object({
+  blockedPatterns: z.array(z.string()),
+  warnedPatterns: z.array(z.string()),
+  allowedPatterns: z.array(z.string()),
+  maxDestructiveOperations: z.number(),
+  enableLLMCheck: z.boolean(),
+  strictMode: z.boolean(),
+});
+
+export type SafetyPolicy = z.infer<typeof SafetyPolicySchema>;
 
 const DEFAULT_BLOCKED_PATTERNS = [
   "^rm -rf /$",

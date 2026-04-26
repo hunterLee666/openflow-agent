@@ -21,29 +21,34 @@ import {
 import { verifyJwt, type JwtVerifyOptions } from './jwt-auth.js';
 import { SessionRunner, type SessionRunnerConfig } from './session-runner.js';
 import { BoundedUUIDSet } from './bounded-set.js';
+import { z } from 'zod';
 
-export interface BridgeDependencies {
-  jwtSecret: string;
-  jwtOptions?: JwtVerifyOptions;
-  sessionRunnerConfig?: SessionRunnerConfig;
-  handlers?: Map<string, (params: unknown, sessionId: string) => Promise<unknown>>;
-  transportConfig: Parameters<typeof createTransport>[0];
-}
+export const BridgeDependenciesSchema = z.object({
+  jwtSecret: z.string(),
+  jwtOptions: z.any().optional(),
+  sessionRunnerConfig: z.any().optional(),
+  handlers: z.any().optional(),
+  transportConfig: z.any(),
+});
 
-export interface BridgeMainConfig {
-  dependencies: BridgeDependencies;
-  maxMessageBytes?: number;
-  enableDebugLogging?: boolean;
-}
+export const BridgeMainConfigSchema = z.object({
+  dependencies: BridgeDependenciesSchema,
+  maxMessageBytes: z.number().optional(),
+  enableDebugLogging: z.boolean().optional(),
+});
 
-export interface BridgeMetrics {
-  messagesReceived: number;
-  messagesSent: number;
-  authFailures: number;
-  errors: number;
-  averageLatencyMs: number;
-  activeSessions: number;
-}
+export const BridgeMetricsSchema = z.object({
+  messagesReceived: z.number(),
+  messagesSent: z.number(),
+  authFailures: z.number(),
+  errors: z.number(),
+  averageLatencyMs: z.number(),
+  activeSessions: z.number(),
+});
+
+export type BridgeDependencies = z.infer<typeof BridgeDependenciesSchema>;
+export type BridgeMainConfig = z.infer<typeof BridgeMainConfigSchema>;
+export type BridgeMetrics = z.infer<typeof BridgeMetricsSchema>;
 
 export class BridgeMain extends EventEmitter {
   private transport: Transport | null = null;
@@ -60,6 +65,7 @@ export class BridgeMain extends EventEmitter {
   private messageCount = 0;
   private authFailures = 0;
   private errorCount = 0;
+  private dependencies: BridgeDependencies;
 
   constructor(config: BridgeMainConfig) {
     super();
@@ -88,8 +94,8 @@ export class BridgeMain extends EventEmitter {
       this.dependencies.transportConfig,
       {
         onMessage: (msg) => this.handleIncomingMessage(msg),
-        onConnect: () => this.emit('connected'),
-        onDisconnect: () => this.emit('disconnected'),
+        onConnect: () => { this.emit('connected'); },
+        onDisconnect: () => { this.emit('disconnected'); },
         onError: (err) => this.emit('error', err),
       }
     );

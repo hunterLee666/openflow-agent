@@ -1,48 +1,59 @@
+import { z } from 'zod';
 import type { SearchResult } from './triple-index.js';
 import type { MemoryUnit } from './semantic-compressor.js';
 import type { IntentRecognitionResult, Entity as IntentEntity } from './intent-recognizer.js';
 
-export enum QueryComplexity {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-}
+export const QueryComplexity = {
+  LOW: 'low',
+  MEDIUM: 'medium',
+  HIGH: 'high',
+} as const;
 
-export interface RetrievalPlan {
-  query: string;
-  complexity: QueryComplexity;
-  retrievalDepth: number;
-  enableSemanticSearch: boolean;
-  enableLexicalSearch: boolean;
-  enableSymbolicFilter: boolean;
-  enableReflection: boolean;
-  intentResult?: IntentRecognitionResult;
-  filters?: {
-    entities?: string[];
-    timeRange?: { start: string; end: string };
-    sourceType?: string;
-    minSalience?: number;
-    intentType?: string;
-    knowledgeGraph?: boolean;
-  };
-}
+export const QueryComplexitySchema = z.enum(['low', 'medium', 'high']);
 
-export interface QueryAnalysis {
-  originalQuery: string;
-  complexity: QueryComplexity;
-  extractedEntities: string[];
-  extractedTimeRange?: { start: string; end: string };
-  intentType: 'fact_lookup' | 'aggregation' | 'temporal' | 'preference' | 'experience';
-  intentResult?: IntentRecognitionResult;
-}
+export type QueryComplexity = (typeof QueryComplexity)[keyof typeof QueryComplexity];
 
-export interface RetrievalConfig {
-  lowDepth: number;
-  mediumDepth: number;
-  highDepth: number;
-  enableParallelRetrieval: boolean;
-  maxParallelWorkers: number;
-}
+export const RetrievalPlanSchema = z.object({
+  query: z.string(),
+  complexity: QueryComplexitySchema,
+  retrievalDepth: z.number(),
+  enableSemanticSearch: z.boolean(),
+  enableLexicalSearch: z.boolean(),
+  enableSymbolicFilter: z.boolean(),
+  enableReflection: z.boolean(),
+  intentResult: z.any().optional(),
+  filters: z.object({
+    entities: z.array(z.string()).optional(),
+    timeRange: z.object({ start: z.string(), end: z.string() }).optional(),
+    sourceType: z.string().optional(),
+    minSalience: z.number().optional(),
+    intentType: z.string().optional(),
+    knowledgeGraph: z.boolean().optional(),
+  }).optional(),
+});
+
+export type RetrievalPlan = z.infer<typeof RetrievalPlanSchema>;
+
+export const QueryAnalysisSchema = z.object({
+  originalQuery: z.string(),
+  complexity: QueryComplexitySchema,
+  extractedEntities: z.array(z.string()),
+  extractedTimeRange: z.object({ start: z.string(), end: z.string() }).optional(),
+  intentType: z.enum(['fact_lookup', 'aggregation', 'temporal', 'preference', 'experience']),
+  intentResult: z.any().optional(),
+});
+
+export type QueryAnalysis = z.infer<typeof QueryAnalysisSchema>;
+
+export const RetrievalConfigSchema = z.object({
+  lowDepth: z.number(),
+  mediumDepth: z.number(),
+  highDepth: z.number(),
+  enableParallelRetrieval: z.boolean(),
+  maxParallelWorkers: z.number(),
+});
+
+export type RetrievalConfig = z.infer<typeof RetrievalConfigSchema>;
 
 const DEFAULT_CONFIG: RetrievalConfig = {
   lowDepth: 3,
@@ -66,9 +77,9 @@ export class QueryPlanner {
 
   async analyzeQuery(query: string, intentResult?: IntentRecognitionResult): Promise<QueryAnalysis> {
     const complexity = await this.estimateComplexity(query);
-    const entities = this.extractEntities(query, intentResult);
+    const entities = this.extractEntities(query);
     const timeRange = this.extractTimeRange(query);
-    const intentType = this.inferIntentType(query, intentResult);
+    const intentType = this.inferIntentType(query);
 
     return {
       originalQuery: query,

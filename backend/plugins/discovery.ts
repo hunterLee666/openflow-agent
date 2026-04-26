@@ -172,7 +172,7 @@ export class PluginDiscovery {
         manifest: {
           name: skill.name,
           version: "1.0.0",
-          type: CapabilityType.SKILL,
+          type: "skill" as const,
           description: skill.description,
           triggers: skill.triggers,
         },

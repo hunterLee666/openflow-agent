@@ -129,6 +129,10 @@ export class PluginLoader {
   }
 
   private async resolveCommandComponent(pluginPath: string, component: PluginComponent): Promise<CommandComponent | null> {
+    if (component.type !== "command") {
+      return null;
+    }
+
     const entryPath = component.entry ? join(pluginPath, component.entry) : null;
 
     if (entryPath) {
@@ -145,14 +149,18 @@ export class PluginLoader {
       description: component.description,
       entry: entryPath || "",
       config: {
-        slashCommand: (component.config?.slashCommand as string) || `/${component.name}`,
-        permission: (component.config?.permission as "read-only" | "write" | "full") || "read-only",
-        arguments: (component.config?.arguments as Array<{ name: string; description: string; required?: boolean }>) || [],
+        slashCommand: component.config.slashCommand || `/${component.name}`,
+        permission: component.config.permission || "read-only",
+        arguments: component.config.arguments || [],
       },
     };
   }
 
   private async resolveAgentComponent(pluginPath: string, component: PluginComponent): Promise<AgentComponent | null> {
+    if (component.type !== "agent") {
+      return null;
+    }
+
     const entryPath = component.entry ? join(pluginPath, component.entry) : null;
 
     if (entryPath) {
@@ -169,15 +177,19 @@ export class PluginLoader {
       description: component.description,
       entry: entryPath || "",
       config: {
-        model: (component.config?.model as string) || undefined,
-        tools: (component.config?.tools as string[]) || [],
-        systemPrompt: (component.config?.systemPrompt as string) || undefined,
-        maxTurns: (component.config?.maxTurns as number) || 10,
+        model: component.config.model,
+        tools: component.config.tools || [],
+        systemPrompt: component.config.systemPrompt,
+        maxTurns: component.config.maxTurns ?? 10,
       },
     };
   }
 
   private async resolveSkillComponent(pluginPath: string, component: PluginComponent): Promise<SkillComponent | null> {
+    if (component.type !== "skill") {
+      return null;
+    }
+
     const entryPath = component.entry ? join(pluginPath, component.entry) : null;
 
     if (entryPath) {
@@ -194,14 +206,18 @@ export class PluginLoader {
       description: component.description,
       entry: entryPath || undefined,
       config: {
-        trigger: (component.config?.trigger as string[]) || [],
-        metadata: (component.config?.metadata as Record<string, unknown>) || {},
-        agentskillsIo: (component.config?.agentskillsIo as SkillComponent["config"]["agentskillsIo"]) || undefined,
+        trigger: component.config.trigger || [],
+        metadata: component.config.metadata || {},
+        agentskillsIo: component.config.agentskillsIo,
       },
     };
   }
 
   private async resolveHookComponent(pluginPath: string, component: PluginComponent): Promise<HookComponent | null> {
+    if (component.type !== "hook") {
+      return null;
+    }
+
     const entryPath = component.entry ? join(pluginPath, component.entry) : null;
 
     if (!entryPath) {
@@ -221,10 +237,10 @@ export class PluginLoader {
       description: component.description,
       entry: entryPath,
       config: {
-        event: (component.config?.event as string) || "SessionStart",
-        matcher: (component.config?.matcher as string) || undefined,
-        priority: (component.config?.priority as number) || 100,
-        type: (component.config?.type as "command" | "prompt") || "command",
+        event: component.config.event,
+        matcher: component.config.matcher,
+        priority: component.config.priority ?? 100,
+        type: component.config.type ?? "command",
       },
     };
   }

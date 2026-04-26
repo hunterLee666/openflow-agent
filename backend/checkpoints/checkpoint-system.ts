@@ -2,37 +2,43 @@ import { readFile, writeFile, mkdir, readdir, stat, unlink } from "node:fs/promi
 import { join, resolve, dirname, basename } from "node:path";
 import { createHash } from "node:crypto";
 import { generateCheckpointId, CheckpointType } from "../state/checkpoint-id.js";
+import { z } from "zod";
 
-export interface FileSnapshot {
-  filePath: string;
-  content: string;
-  hash: string;
-  timestamp: number;
-  size: number;
-}
+export const FileSnapshotSchema = z.object({
+  filePath: z.string(),
+  content: z.string(),
+  hash: z.string(),
+  timestamp: z.number(),
+  size: z.number(),
+});
 
-export interface Checkpoint {
-  id: string;
-  sessionId: string;
-  timestamp: number;
-  label?: string;
-  snapshots: FileSnapshot[];
-  metadata: Record<string, unknown>;
-}
+export const CheckpointSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  timestamp: z.number(),
+  label: z.string().optional(),
+  snapshots: z.array(FileSnapshotSchema),
+  metadata: z.record(z.string(), z.unknown()),
+});
 
-export interface RollbackResult {
-  success: boolean;
-  restored: string[];
-  failed: string[];
-  errors: string[];
-}
+export const RollbackResultSchema = z.object({
+  success: z.boolean(),
+  restored: z.array(z.string()),
+  failed: z.array(z.string()),
+  errors: z.array(z.string()),
+});
 
-export interface CheckpointConfig {
-  maxCheckpoints: number;
-  maxAge: number;
-  includePatterns: string[];
-  excludePatterns: string[];
-}
+export const CheckpointConfigSchema = z.object({
+  maxCheckpoints: z.number(),
+  maxAge: z.number(),
+  includePatterns: z.array(z.string()),
+  excludePatterns: z.array(z.string()),
+});
+
+export type FileSnapshot = z.infer<typeof FileSnapshotSchema>;
+export type Checkpoint = z.infer<typeof CheckpointSchema>;
+export type RollbackResult = z.infer<typeof RollbackResultSchema>;
+export type CheckpointConfig = z.infer<typeof CheckpointConfigSchema>;
 
 const DEFAULT_CONFIG: CheckpointConfig = {
   maxCheckpoints: 50,

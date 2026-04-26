@@ -2,40 +2,48 @@ import { readFile } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
+import { z } from "zod";
 
-export interface OpenflowSettings {
-  model?: string;
-  modelOverrides?: Record<string, string>;
-  availableModels?: string[];
-  env?: Record<string, string>;
-  permissions?: {
-    allow?: string[];
-    deny?: string[];
-  };
-  effortLevel?: "low" | "medium" | "high" | "xhigh" | "max";
-  apiKeyHelper?: string;
-  [key: string]: unknown;
-}
+export const OpenflowSettingsSchema = z.object({
+  model: z.string().optional(),
+  modelOverrides: z.record(z.string(), z.string()).optional(),
+  availableModels: z.array(z.string()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
+  permissions: z.object({
+    allow: z.array(z.string()).optional(),
+    deny: z.array(z.string()).optional(),
+  }).optional(),
+  effortLevel: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+  apiKeyHelper: z.string().optional(),
+}).passthrough();
 
-export interface ModelAlias {
-  alias: string;
-  description: string;
-  resolveTo: string;
-}
+export type OpenflowSettings = z.infer<typeof OpenflowSettingsSchema>;
 
-export interface ConfigSource {
-  path: string;
-  priority: number;
-  settings: OpenflowSettings;
-}
+export const ModelAliasSchema = z.object({
+  alias: z.string(),
+  description: z.string(),
+  resolveTo: z.string(),
+});
 
-export interface MergedConfig {
-  model?: string;
-  modelOverrides: Record<string, string>;
-  availableModels?: string[];
-  env: Record<string, string>;
-  sources: ConfigSource[];
-}
+export type ModelAlias = z.infer<typeof ModelAliasSchema>;
+
+export const ConfigSourceSchema = z.object({
+  path: z.string(),
+  priority: z.number(),
+  settings: OpenflowSettingsSchema,
+});
+
+export type ConfigSource = z.infer<typeof ConfigSourceSchema>;
+
+export const MergedConfigSchema = z.object({
+  model: z.string().optional(),
+  modelOverrides: z.record(z.string(), z.string()),
+  availableModels: z.array(z.string()).optional(),
+  env: z.record(z.string(), z.string()),
+  sources: z.array(ConfigSourceSchema),
+});
+
+export type MergedConfig = z.infer<typeof MergedConfigSchema>;
 
 const CONFIG_FOLDERS = [".openflow"];
 const SETTINGS_FILE = "settings.json";
@@ -102,7 +110,8 @@ export class OpenflowConfigAdapter {
 
       try {
         const content = await readFile(settingsPath, "utf-8");
-        const settings = JSON.parse(content) as OpenflowSettings;
+        const rawSettings = JSON.parse(content);
+        const settings = OpenflowSettingsSchema.parse(rawSettings);
 
         sources.push({
           path: settingsPath,

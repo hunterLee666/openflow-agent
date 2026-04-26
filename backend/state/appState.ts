@@ -1,46 +1,63 @@
-export interface SessionSlice {
-  sessionId: string;
-  cwd: string;
-  startedAt: number;
-  lastUserMessageAt?: number;
-  resumedFromCheckpoint?: string;
-}
+import { z } from "zod";
 
-export interface ToolInvocation {
-  id: string;
-  name: string;
-  status: "pending" | "running" | "success" | "error";
-  startedAt: number;
-  endedAt?: number;
-  argsDigest?: string;
-}
+export const SessionSliceSchema = z.object({
+  sessionId: z.string(),
+  cwd: z.string(),
+  startedAt: z.number(),
+  lastUserMessageAt: z.number().optional(),
+  resumedFromCheckpoint: z.string().optional(),
+});
 
-export interface ToolsSlice {
-  registryVersion: string;
-  active: ToolInvocation[];
-  lastError?: { code: string; message: string };
-}
+export type SessionSlice = z.infer<typeof SessionSliceSchema>;
 
-export interface UiSlice {
-  theme: "dark" | "light" | "system";
-  layout: "compact" | "comfortable";
-  modalStack: string[];
-  focusPaneId?: string;
-}
+export const ToolInvocationSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.enum(["pending", "running", "success", "error"]),
+  startedAt: z.number(),
+  endedAt: z.number().optional(),
+  argsDigest: z.string().optional(),
+});
 
-export interface ConfigSlice {
-  schemaVersion: number;
-  model: string;
-  approvalPolicy: "off" | "ask" | "strict";
-  experimental: Record<string, boolean>;
-}
+export type ToolInvocation = z.infer<typeof ToolInvocationSchema>;
 
-export interface AppState {
-  session: SessionSlice;
-  tools: ToolsSlice;
-  ui: UiSlice;
-  config: ConfigSlice;
-}
+export const ToolsSliceSchema = z.object({
+  registryVersion: z.string(),
+  active: z.array(ToolInvocationSchema),
+  lastError: z.object({
+    code: z.string(),
+    message: z.string(),
+  }).optional(),
+});
+
+export type ToolsSlice = z.infer<typeof ToolsSliceSchema>;
+
+export const UiSliceSchema = z.object({
+  theme: z.enum(["dark", "light", "system"]),
+  layout: z.enum(["compact", "comfortable"]),
+  modalStack: z.array(z.string()),
+  focusPaneId: z.string().optional(),
+});
+
+export type UiSlice = z.infer<typeof UiSliceSchema>;
+
+export const ConfigSliceSchema = z.object({
+  schemaVersion: z.number(),
+  model: z.string(),
+  approvalPolicy: z.enum(["off", "ask", "strict"]),
+  experimental: z.record(z.string(), z.boolean()),
+});
+
+export type ConfigSlice = z.infer<typeof ConfigSliceSchema>;
+
+export const AppStateSchema = z.object({
+  session: SessionSliceSchema,
+  tools: ToolsSliceSchema,
+  ui: UiSliceSchema,
+  config: ConfigSliceSchema,
+});
+
+export type AppState = z.infer<typeof AppStateSchema>;
 
 export const defaultSession: SessionSlice = {
   sessionId: "",
@@ -87,6 +104,9 @@ export const sanitizeForLog = (state: AppState): Partial<AppState> => ({
       id: t.id,
       name: t.name,
       status: t.status,
+      startedAt: t.startedAt,
+      endedAt: t.endedAt,
+      argsDigest: t.argsDigest,
     })),
   },
   ui: { ...state.ui },

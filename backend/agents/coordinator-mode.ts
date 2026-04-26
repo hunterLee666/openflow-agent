@@ -1,30 +1,35 @@
 import type { SubAgentMessage, SubAgentTask, SubAgentResult, SubAgentContext } from "./sub-agent-system.js";
 import type { ToolDefinition } from "../types/index.js";
 import { AntiRecursionGuard } from "./anti-recursion.js";
+import { z } from "zod";
 
-export interface WorkerAgent {
-  id: string;
-  name: string;
-  description: string;
-  systemPrompt: string;
-  allowedTools: string[];
-}
+export const WorkerAgentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  systemPrompt: z.string(),
+  allowedTools: z.array(z.string()),
+});
 
-export interface CoordinatorConfig {
-  maxDelegationDepth: number;
-  enableValidation: boolean;
-  aggregationStrategy: "concat" | "vote" | "best";
-  maxWorkers: number;
-}
+export const CoordinatorConfigSchema = z.object({
+  maxDelegationDepth: z.number(),
+  enableValidation: z.boolean(),
+  aggregationStrategy: z.enum(["concat", "vote", "best"]),
+  maxWorkers: z.number(),
+});
 
-export interface TaskDecomposition {
-  subtasks: Array<{
-    id: string;
-    description: string;
-    assignedWorkerId: string;
-    dependencies: string[];
-  }>;
-}
+export const TaskDecompositionSchema = z.object({
+  subtasks: z.array(z.object({
+    id: z.string(),
+    description: z.string(),
+    assignedWorkerId: z.string(),
+    dependencies: z.array(z.string()),
+  })),
+});
+
+export type WorkerAgent = z.infer<typeof WorkerAgentSchema>;
+export type CoordinatorConfig = z.infer<typeof CoordinatorConfigSchema>;
+export type TaskDecomposition = z.infer<typeof TaskDecompositionSchema>;
 
 export class CoordinatorMode {
   private config: CoordinatorConfig;

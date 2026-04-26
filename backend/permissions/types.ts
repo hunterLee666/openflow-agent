@@ -36,46 +36,6 @@ export enum FailClosedReason {
   GeneralUncertainty = "general_uncertainty",
 }
 
-export interface PermissionRule {
-  name: string;
-  action: "deny" | "ask" | "allow";
-  tool?: string;
-  pattern?: string;
-  pathRegex?: string;
-  note?: string;
-  sandboxException?: boolean;
-}
-
-export interface PermissionRequest {
-  toolName: string;
-  input: unknown;
-  mode: PermissionMode;
-  projectRoot: string;
-  rules: PermissionRule[];
-  preapprovedCommands?: string[];
-  sandboxEnabled?: boolean;
-  sessionId?: string;
-}
-
-export interface PermissionResult {
-  decision: PermissionDecision;
-  step: PipelineStep;
-  reason?: string;
-  requiresSandbox?: boolean;
-  auditLog?: AuditLogEntry;
-}
-
-export interface AuditLogEntry {
-  timestamp: number;
-  event: string;
-  step: PipelineStep;
-  tool: string;
-  reasonCode: string;
-  hashRedactedInput?: string;
-  mode: PermissionMode;
-  decision: PermissionDecision;
-}
-
 export const PermissionRuleSchema = z.object({
   name: z.string(),
   action: z.enum(["deny", "ask", "allow"]),
@@ -84,7 +44,46 @@ export const PermissionRuleSchema = z.object({
   pathRegex: z.string().optional(),
   note: z.string().optional(),
   sandboxException: z.boolean().optional(),
+  priority: z.number().optional(),
 });
+
+export type PermissionRule = z.infer<typeof PermissionRuleSchema>;
+
+export const PermissionRequestSchema = z.object({
+  toolName: z.string(),
+  input: z.unknown(),
+  mode: z.nativeEnum(PermissionMode),
+  projectRoot: z.string(),
+  rules: z.array(PermissionRuleSchema),
+  preapprovedCommands: z.array(z.string()).optional(),
+  sandboxEnabled: z.boolean().optional(),
+  sessionId: z.string().optional(),
+});
+
+export type PermissionRequest = z.infer<typeof PermissionRequestSchema>;
+
+export const PermissionResultSchema = z.object({
+  decision: z.nativeEnum(PermissionDecision),
+  step: z.nativeEnum(PipelineStep),
+  reason: z.string().optional(),
+  requiresSandbox: z.boolean().optional(),
+  auditLog: z.custom<AuditLogEntry>().optional(),
+});
+
+export type PermissionResult = z.infer<typeof PermissionResultSchema>;
+
+export const AuditLogEntrySchema = z.object({
+  timestamp: z.number(),
+  event: z.string(),
+  step: z.nativeEnum(PipelineStep),
+  tool: z.string(),
+  reasonCode: z.string(),
+  hashRedactedInput: z.string().optional(),
+  mode: z.nativeEnum(PermissionMode),
+  decision: z.nativeEnum(PermissionDecision),
+});
+
+export type AuditLogEntry = z.infer<typeof AuditLogEntrySchema>;
 
 export const PermissionModeSchema = z.enum([
   "default",

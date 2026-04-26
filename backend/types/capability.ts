@@ -1,32 +1,69 @@
-export enum CapabilityType {
-  SKILL = "skill",
-  TOOL = "tool",
-  COMMAND = "command",
-  AGENT = "agent",
-  MEMORY_STRATEGY = "memory_strategy",
-  OUTPUT_STYLE = "output_style",
-}
+import { z } from "zod";
 
-export enum CapabilityStatus {
-  LOADED = "loaded",
-  ACTIVATED = "activated",
-  DISABLED = "disabled",
-  ERROR = "error",
-}
+export const CapabilityTypeSchema = z.enum(["skill", "tool", "command", "agent", "memory_strategy", "output_style"]);
 
-export interface CapabilityManifest {
-  name: string;
-  version: string;
-  type: CapabilityType;
-  description: string;
-  author?: string;
-  license?: string;
-  dependencies?: string[];
-  triggers?: string[];
-  allowedTools?: string[];
-  requiredPermissions?: string[];
-  tags?: string[];
-}
+export const CapabilityStatusSchema = z.enum(["loaded", "activated", "disabled", "error"]);
+
+export const CapabilityManifestSchema = z.object({
+  name: z.string(),
+  version: z.string(),
+  type: CapabilityTypeSchema,
+  description: z.string(),
+  author: z.string().optional(),
+  license: z.string().optional(),
+  dependencies: z.array(z.string()).optional(),
+  triggers: z.array(z.string()).optional(),
+  allowedTools: z.array(z.string()).optional(),
+  requiredPermissions: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export const ToolDefinitionSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  inputSchema: z.unknown(),
+  handler: z.any(),
+  isReadOnly: z.boolean().optional(),
+  isConcurrencySafe: z.boolean().optional(),
+  resourceKeys: z.array(z.string()).optional(),
+});
+
+export const CapabilityInfoSchema = z.object({
+  name: z.string(),
+  version: z.string(),
+  type: CapabilityTypeSchema,
+  status: CapabilityStatusSchema,
+  description: z.string(),
+  source: z.string(),
+  enabled: z.boolean(),
+});
+
+export const CapabilitySourceSchema = z.object({
+  type: z.enum(["filesystem", "npm", "remote", "builtin"]),
+  path: z.string().optional(),
+  url: z.string().optional(),
+  packages: z.array(z.string()).optional(),
+});
+
+export const DiscoveryErrorSchema = z.object({
+  source: z.string(),
+  message: z.string(),
+  path: z.string().optional(),
+});
+
+export const DiscoveryResultSchema = z.object({
+  plugins: z.array(z.any()),
+  errors: z.array(DiscoveryErrorSchema),
+});
+
+export type CapabilityType = z.infer<typeof CapabilityTypeSchema>;
+export type CapabilityStatus = z.infer<typeof CapabilityStatusSchema>;
+export type CapabilityManifest = z.infer<typeof CapabilityManifestSchema>;
+export type ToolDefinition = z.infer<typeof ToolDefinitionSchema>;
+export type CapabilityInfo = z.infer<typeof CapabilityInfoSchema>;
+export type CapabilitySource = z.infer<typeof CapabilitySourceSchema>;
+export type DiscoveryError = z.infer<typeof DiscoveryErrorSchema>;
+export type DiscoveryResult = z.infer<typeof DiscoveryResultSchema>;
 
 export interface CapabilityContext {
   llm: LLMClientInterface;
@@ -53,16 +90,6 @@ export interface ToolRegistry {
   get(name: string): ToolDefinition | undefined;
   list(): ToolDefinition[];
   call(name: string, input: unknown): Promise<unknown>;
-}
-
-export interface ToolDefinition<I = unknown, O = unknown> {
-  name: string;
-  description: string;
-  inputSchema: I;
-  handler: (input: unknown, ctx: unknown) => Promise<O>;
-  isReadOnly?: boolean;
-  isConcurrencySafe?: boolean;
-  resourceKeys?: string[];
 }
 
 export interface MemoryCore {
@@ -106,34 +133,6 @@ export interface CapabilityPlugin<T = unknown> {
   onAfterActivate?(): Promise<void>;
   onBeforeDeactivate?(): Promise<void>;
   onAfterDeactivate?(): Promise<void>;
-}
-
-export interface CapabilityInfo {
-  name: string;
-  version: string;
-  type: CapabilityType;
-  status: CapabilityStatus;
-  description: string;
-  source: string;
-  enabled: boolean;
-}
-
-export interface CapabilitySource {
-  type: "filesystem" | "npm" | "remote" | "builtin";
-  path?: string;
-  url?: string;
-  packages?: string[];
-}
-
-export interface DiscoveryResult {
-  plugins: CapabilityPlugin[];
-  errors: DiscoveryError[];
-}
-
-export interface DiscoveryError {
-  source: string;
-  message: string;
-  path?: string;
 }
 
 export interface CapabilityEventMap {

@@ -1,65 +1,81 @@
 import type { Message, ContentBlock } from "../session/types.js";
-import type { LLMClient, LLMMessage, LLMToolDefinition, StreamCallbacks, CompletionResult, LLMToolCall } from "../llm/index.js";
+import type { LLMClient, LLMMessage, LLMToolDefinition, StreamCallbacks, LLMToolCall } from "../llm/index.js";
 import type { SessionManager } from "../session/session.js";
-import { compactMessages, shouldCompact, estimateTokenCount, tier1MicroCompaction, COMPACT_TOKEN_BUDGET, estimateCost, buildTier3SummaryPrompt, formatTier3Summary, cacheAwareTier1Compaction, cacheAwareCompaction, type CacheEditResult, type Tier3Summary } from "../compaction/index.js";
+import { compactMessages, estimateTokenCount, tier1MicroCompaction, estimateCost, buildTier3SummaryPrompt, formatTier3Summary, cacheAwareTier1Compaction, cacheAwareCompaction, type CacheEditResult, type Tier3Summary } from "../compaction/index.js";
 import { FourteenStepGovernancePipeline, type GovernanceContext, type GovernanceHooks } from "../governance/index.js";
-import { HookSystem, type HookContext, type HookResult, type HookEvent } from "../hooks/index.js";
+import { HookSystem, type HookContext, type HookEvent } from "../hooks/index.js";
 import type { EnhancedMemoryCore } from "../memory/enhanced-memory-core.js";
-import type { IntentRecognitionResult, SafetyLevel } from "../memory/intent-recognizer.js";
+import { IntentRecognitionResult, SafetyLevel } from "../memory/intent-recognizer.js";
 import type { PermissionSystem } from "../permissions/index.js";
 import { PermissionDecision } from "../permissions/index.js";
 import type { PromptCacheMonitor } from "../prompts/cache-monitor.js";
+import { z } from "zod";
 
-export interface QueryInput {
-  message: string;
-  threadId?: string;
-  model?: string;
-  tools?: LLMToolDefinition[];
-  systemPrompt?: string;
-}
+export const QueryInputSchema = z.object({
+  message: z.string(),
+  threadId: z.string().optional(),
+  model: z.string().optional(),
+  tools: z.array(z.object({
+    name: z.string(),
+    description: z.string().optional(),
+    parameters: z.record(z.string(), z.unknown()),
+  })).optional(),
+  systemPrompt: z.string().optional(),
+});
 
-export interface QueryConfig {
-  apiKey: string;
-  provider?: string;
-  baseUrl?: string;
-  model: string;
-  maxTokens: number;
-  maxTurns: number;
-  tokenBudget: number;
-  moneyBudgetUsd?: number;
-  compactionThreshold: number;
-  maxCompactionFailures: number;
-  permissionMode?: "readonly" | "auto" | "default";
-}
+export type QueryInput = z.infer<typeof QueryInputSchema>;
 
-export interface QueryState {
-  turn: number;
-  messages: Message[];
-  model: string;
-  compactionFailures: number;
-  compactionCircuitOpen: boolean;
-  usage: { inputTokens: number; outputTokens: number; totalTokens: number };
-  threadId: string;
-  retryAttempt: number;
-}
+export const QueryConfigSchema = z.object({
+  apiKey: z.string(),
+  provider: z.string().optional(),
+  baseUrl: z.string().optional(),
+  model: z.string(),
+  maxTokens: z.number(),
+  maxTurns: z.number(),
+  tokenBudget: z.number(),
+  moneyBudgetUsd: z.number().optional(),
+  compactionThreshold: z.number(),
+  maxCompactionFailures: z.number(),
+  permissionMode: z.enum(["readonly", "auto", "default"]).optional(),
+});
 
-export interface QueryResult {
-  threadId: string;
-  turn: number;
-  content: string;
-  toolCalls: LLMToolCall[];
-  usage: { inputTokens: number; outputTokens: number; totalTokens: number };
-  stopReason: string;
-}
+export type QueryConfig = z.infer<typeof QueryConfigSchema>;
 
-export type StreamEvent =
-  | { kind: "assistant_text_delta"; text: string }
-  | { kind: "tool_input_delta"; partialJson: string }
-  | { kind: "thinking_delta"; thinking: string }
-  | { kind: "tool_call"; toolCall: LLMToolCall }
-  | { kind: "tool_result"; toolName: string; result: string }
-  | { kind: "completion"; text: string }
-  | { kind: "error"; error: string };
+export const QueryStateSchema = z.object({
+  turn: z.number(),
+  messages: z.array(z.any()),
+  model: z.string(),
+  compactionFailures: z.number(),
+  compactionCircuitOpen: z.boolean(),
+  usage: z.object({ inputTokens: z.number(), outputTokens: z.number(), totalTokens: z.number() }),
+  threadId: z.string(),
+  retryAttempt: z.number(),
+});
+
+export type QueryState = z.infer<typeof QueryStateSchema>;
+
+export const QueryResultSchema = z.object({
+  threadId: z.string(),
+  turn: z.number(),
+  content: z.string(),
+  toolCalls: z.array(z.any()),
+  usage: z.object({ inputTokens: z.number(), outputTokens: z.number(), totalTokens: z.number() }),
+  stopReason: z.string(),
+});
+
+export type QueryResult = z.infer<typeof QueryResultSchema>;
+
+export const StreamEventSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("assistant_text_delta"), text: z.string() }),
+  z.object({ kind: z.literal("tool_input_delta"), partialJson: z.string() }),
+  z.object({ kind: z.literal("thinking_delta"), thinking: z.string() }),
+  z.object({ kind: z.literal("tool_call"), toolCall: z.any() }),
+  z.object({ kind: z.literal("tool_result"), toolName: z.string(), result: z.string() }),
+  z.object({ kind: z.literal("completion"), text: z.string() }),
+  z.object({ kind: z.literal("error"), error: z.string() }),
+]);
+
+export type StreamEvent = z.infer<typeof StreamEventSchema>;
 
 export interface QueryToolDefinition {
   name: string;
@@ -132,7 +148,12 @@ export async function* query(
   }
 
   try {
-    const result = yield* queryLoop(initialState, ctx, input.tools, input.systemPrompt, intentResult);
+    const llmTools = input.tools?.map(t => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+    }));
+    const result = yield* queryLoop(initialState, ctx, llmTools, input.systemPrompt, intentResult);
     await ctx.session.saveSession(threadId, initialState.messages);
     return result;
   } catch (error) {
@@ -332,7 +353,7 @@ async function runTier3Compaction(messages: Message[], ctx: QueryContext): Promi
     const completionResult = await ctx.llmClient.complete([
       ...recentMessages.map((m) => ({
         role: m.role as "user" | "assistant",
-        content: typeof m.content === "string" ? m.content : m.content.find((c) => c.type === "text")?.text || "",
+        content: typeof m.content === "string" ? m.content : m.content.find((c: ContentBlock) => c.type === "text")?.text || "",
       })),
       { role: "user" as const, content: tier3Prompt },
     ]);
@@ -379,7 +400,7 @@ async function collectAssistantMessage(
       if (typeof m.content === "string") {
         return { role: m.role as "user" | "assistant" | "tool", content: m.content };
       }
-      const text = m.content.find((c) => c.type === "text")?.text || "";
+      const text = m.content.find((c: ContentBlock) => c.type === "text")?.text || "";
       return { role: m.role as "user" | "assistant" | "tool", content: text };
     });
 

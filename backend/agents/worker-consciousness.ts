@@ -1,9 +1,13 @@
-export interface WorkerConsciousnessConfig {
-  enableAntiDelegation: boolean;
-  enableAntiQuestioning: boolean;
-  maxClarificationQuestions: number;
-  enableActionBias: boolean;
-}
+import { z } from "zod";
+
+export const WorkerConsciousnessConfigSchema = z.object({
+  enableAntiDelegation: z.boolean(),
+  enableAntiQuestioning: z.boolean(),
+  maxClarificationQuestions: z.number(),
+  enableActionBias: z.boolean(),
+});
+
+export type WorkerConsciousnessConfig = z.infer<typeof WorkerConsciousnessConfigSchema>;
 
 const DEFAULT_CONFIG: WorkerConsciousnessConfig = {
   enableAntiDelegation: true,

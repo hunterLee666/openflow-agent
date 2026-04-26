@@ -1,15 +1,22 @@
 import { randomBytes } from "node:crypto";
+import { z } from "zod";
 
-export enum CheckpointType {
-  SESSION = "ses",
-  FILE = "file",
-}
+export const CheckpointType = {
+  SESSION: "ses",
+  FILE: "file",
+} as const;
 
-export interface CheckpointIdParts {
-  type: CheckpointType;
-  timestamp: number;
-  nonce: string;
-}
+export const CheckpointTypeSchema = z.enum(["ses", "file"]);
+
+export type CheckpointType = z.infer<typeof CheckpointTypeSchema>;
+
+export const CheckpointIdPartsSchema = z.object({
+  type: CheckpointTypeSchema,
+  timestamp: z.number(),
+  nonce: z.string(),
+});
+
+export type CheckpointIdParts = z.infer<typeof CheckpointIdPartsSchema>;
 
 export function generateCheckpointId(
   type: CheckpointType,

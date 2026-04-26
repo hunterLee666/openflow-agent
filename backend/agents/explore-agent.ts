@@ -1,30 +1,35 @@
 import type { ToolDefinition } from "../types/index.js";
+import { z } from "zod";
 
-export interface ExploreAgentConfig {
-  maxSearchResults: number;
-  maxDepth: number;
-  enableSymbolSearch: boolean;
-  enableCallChainAnalysis: boolean;
-  maxTokens: number;
-}
+export const ExploreAgentConfigSchema = z.object({
+  maxSearchResults: z.number(),
+  maxDepth: z.number(),
+  enableSymbolSearch: z.boolean(),
+  enableCallChainAnalysis: z.boolean(),
+  maxTokens: z.number(),
+});
 
-export interface ExploreResult {
-  files: string[];
-  symbols: ExploreSymbol[];
-  directoryStructure: string[];
-  gitStatus?: string;
-  summary: string;
-  evidence: string[];
-  openQuestions: string[];
-}
+export const ExploreSymbolSchema = z.object({
+  name: z.string(),
+  type: z.enum(["function", "class", "variable", "import", "export"]),
+  file: z.string(),
+  line: z.number().optional(),
+  usageCount: z.number().optional(),
+});
 
-export interface ExploreSymbol {
-  name: string;
-  type: "function" | "class" | "variable" | "import" | "export";
-  file: string;
-  line?: number;
-  usageCount?: number;
-}
+export const ExploreResultSchema = z.object({
+  files: z.array(z.string()),
+  symbols: z.array(ExploreSymbolSchema),
+  directoryStructure: z.array(z.string()),
+  gitStatus: z.string().optional(),
+  summary: z.string(),
+  evidence: z.array(z.string()),
+  openQuestions: z.array(z.string()),
+});
+
+export type ExploreAgentConfig = z.infer<typeof ExploreAgentConfigSchema>;
+export type ExploreSymbol = z.infer<typeof ExploreSymbolSchema>;
+export type ExploreResult = z.infer<typeof ExploreResultSchema>;
 
 const DEFAULT_CONFIG: ExploreAgentConfig = {
   maxSearchResults: 50,

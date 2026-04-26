@@ -2,21 +2,26 @@ import { FSWatcher, watch, existsSync, statSync, mkdirSync } from "fs";
 import { join, dirname, resolve } from "path";
 import { EventEmitter } from "events";
 import { readFile } from "fs/promises";
+import { z } from "zod";
 
-export interface PluginChangeEvent {
-  type: "added" | "removed" | "changed" | "error";
-  pluginName: string;
-  pluginPath: string;
-  timestamp: number;
-  error?: Error;
-}
+export const PluginChangeEventSchema = z.object({
+  type: z.enum(["added", "removed", "changed", "error"]),
+  pluginName: z.string(),
+  pluginPath: z.string(),
+  timestamp: z.number(),
+  error: z.instanceof(Error).optional(),
+});
 
-export interface HotReloadConfig {
-  debounceMs: number;
-  maxRetries: number;
-  retryDelayMs: number;
-  watchInterval?: number;
-}
+export type PluginChangeEvent = z.infer<typeof PluginChangeEventSchema>;
+
+export const HotReloadConfigSchema = z.object({
+  debounceMs: z.number(),
+  maxRetries: z.number(),
+  retryDelayMs: z.number(),
+  watchInterval: z.number().optional(),
+});
+
+export type HotReloadConfig = z.infer<typeof HotReloadConfigSchema>;
 
 const DEFAULT_CONFIG: HotReloadConfig = {
   debounceMs: 300,

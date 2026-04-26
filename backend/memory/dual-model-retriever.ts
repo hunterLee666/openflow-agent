@@ -1,24 +1,32 @@
-export interface MemoryCard {
-  id: string;
-  title: string;
-  description: string;
-  scope: string;
-  createdAt: string;
-  confidence: number;
-  tags?: string[];
-}
+import { z } from "zod";
 
-export interface MemoryRetrievalResult {
-  cards: MemoryCard[];
-  scores: number[];
-  totalCandidates: number;
-}
+export const MemoryCardSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+  scope: z.string(),
+  createdAt: z.string(),
+  confidence: z.number(),
+  tags: z.array(z.string()).optional(),
+});
 
-export interface DualModelRetrieverConfig {
-  maxInject: number;
-  precisionThreshold: number;
-  fastModel?: string;
-}
+export type MemoryCard = z.infer<typeof MemoryCardSchema>;
+
+export const MemoryRetrievalResultSchema = z.object({
+  cards: z.array(MemoryCardSchema),
+  scores: z.array(z.number()),
+  totalCandidates: z.number(),
+});
+
+export type MemoryRetrievalResult = z.infer<typeof MemoryRetrievalResultSchema>;
+
+export const DualModelRetrieverConfigSchema = z.object({
+  maxInject: z.number(),
+  precisionThreshold: z.number(),
+  fastModel: z.string().optional(),
+});
+
+export type DualModelRetrieverConfig = z.infer<typeof DualModelRetrieverConfigSchema>;
 
 const DEFAULT_CONFIG: DualModelRetrieverConfig = {
   maxInject: 5,

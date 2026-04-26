@@ -1,22 +1,30 @@
-export type LogLevel = "debug" | "info" | "warn" | "error";
+import { z } from "zod";
 
-export interface LogEntry {
-  timestamp: number;
-  level: LogLevel;
-  module: string;
-  message: string;
-  metadata?: Record<string, unknown>;
-  traceId?: string;
-  spanId?: string;
-}
+export const LogLevelSchema = z.enum(["debug", "info", "warn", "error"]);
 
-export interface LoggerConfig {
-  minLevel: LogLevel;
-  enableConsole: boolean;
-  enableFile: boolean;
-  filePath?: string;
-  enableTelemetry: boolean;
-}
+export type LogLevel = z.infer<typeof LogLevelSchema>;
+
+export const LogEntrySchema = z.object({
+  timestamp: z.number(),
+  level: LogLevelSchema,
+  module: z.string(),
+  message: z.string(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  traceId: z.string().optional(),
+  spanId: z.string().optional(),
+});
+
+export type LogEntry = z.infer<typeof LogEntrySchema>;
+
+export const LoggerConfigSchema = z.object({
+  minLevel: LogLevelSchema,
+  enableConsole: z.boolean(),
+  enableFile: z.boolean(),
+  filePath: z.string().optional(),
+  enableTelemetry: z.boolean(),
+});
+
+export type LoggerConfig = z.infer<typeof LoggerConfigSchema>;
 
 export interface Logger {
   debug(message: string, metadata?: Record<string, unknown>): void;

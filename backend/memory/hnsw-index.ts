@@ -1,4 +1,5 @@
 import { DistanceMetric, createDistanceFunction } from "./hnsw-metrics.js";
+import { z } from "zod";
 
 export interface HNSWNode {
   id: string;
@@ -7,19 +8,23 @@ export interface HNSWNode {
   deleted: boolean;
 }
 
-export interface HNSWConfig {
-  dimensions: number;
-  M: number;
-  efConstruction: number;
-  efSearch: number;
-  metric: DistanceMetric;
-  seed: number;
-}
+export const HNSWConfigSchema = z.object({
+  dimensions: z.number(),
+  M: z.number(),
+  efConstruction: z.number(),
+  efSearch: z.number(),
+  metric: z.enum(["euclidean", "cosine", "inner_product"]),
+  seed: z.number(),
+});
 
-export interface SearchResult {
-  id: string;
-  distance: number;
-}
+export type HNSWConfig = z.infer<typeof HNSWConfigSchema>;
+
+export const SearchResultSchema = z.object({
+  id: z.string(),
+  distance: z.number(),
+});
+
+export type SearchResult = z.infer<typeof SearchResultSchema>;
 
 export const DEFAULT_HNSW_CONFIG: HNSWConfig = {
   dimensions: 384,

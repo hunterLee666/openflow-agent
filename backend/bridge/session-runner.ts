@@ -1,37 +1,42 @@
 import { EventEmitter } from 'node:events';
 import { BoundedUUIDSet } from './bounded-set.js';
+import { z } from 'zod';
 
-export interface Session {
-  id: string;
-  abort: AbortController;
-  createdAt: number;
-  lastActiveAt: number;
-  state: 'active' | 'idle' | 'closed' | 'error';
-  metadata: Map<string, unknown>;
-}
+export const SessionSchema = z.object({
+  id: z.string(),
+  abort: z.any(),
+  createdAt: z.number(),
+  lastActiveAt: z.number(),
+  state: z.enum(['active', 'idle', 'closed', 'error']),
+  metadata: z.any(),
+});
 
-export interface SessionRunnerConfig {
-  maxSessions?: number;
-  idleTtlMs?: number;
-  sweepIntervalMs?: number;
-  maxConcurrentPerSession?: number;
-}
+export const SessionRunnerConfigSchema = z.object({
+  maxSessions: z.number().optional(),
+  idleTtlMs: z.number().optional(),
+  sweepIntervalMs: z.number().optional(),
+  maxConcurrentPerSession: z.number().optional(),
+});
 
-export const DEFAULT_SESSION_RUNNER_CONFIG: SessionRunnerConfig = {
+export const SessionRunnerMetricsSchema = z.object({
+  activeSessions: z.number(),
+  totalCreated: z.number(),
+  totalDisposed: z.number(),
+  totalErrors: z.number(),
+  oldestSessionAge: z.number(),
+  averageSessionAge: z.number(),
+});
+
+export type Session = z.infer<typeof SessionSchema>;
+export type SessionRunnerConfig = z.infer<typeof SessionRunnerConfigSchema>;
+export type SessionRunnerMetrics = z.infer<typeof SessionRunnerMetricsSchema>;
+
+export const DEFAULT_SESSION_RUNNER_CONFIG: Required<SessionRunnerConfig> = {
   maxSessions: 100,
   idleTtlMs: 30 * 60 * 1000,
   sweepIntervalMs: 60 * 1000,
   maxConcurrentPerSession: 1,
 };
-
-export interface SessionRunnerMetrics {
-  activeSessions: number;
-  totalCreated: number;
-  totalDisposed: number;
-  totalErrors: number;
-  oldestSessionAge: number;
-  averageSessionAge: number;
-}
 
 export class SessionRunner extends EventEmitter {
   private sessions = new Map<string, Session>();

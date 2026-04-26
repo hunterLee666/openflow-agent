@@ -1,20 +1,23 @@
 import { readFile, stat } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export interface ToolManualEntry {
-  name: string;
-  description: string;
-  usage: string;
-  examples: string[];
-  safetyNotes?: string[];
-  concurrencyInfo?: {
-    isSafe: boolean;
-    resourceKeys?: string[];
-  };
-}
+export const ToolManualEntrySchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  usage: z.string(),
+  examples: z.array(z.string()),
+  safetyNotes: z.array(z.string()).optional(),
+  concurrencyInfo: z.object({
+    isSafe: z.boolean(),
+    resourceKeys: z.array(z.string()).optional(),
+  }).optional(),
+});
+
+export type ToolManualEntry = z.infer<typeof ToolManualEntrySchema>;
 
 export interface ToolManualIndex {
   tools: Map<string, ToolManualEntry>;

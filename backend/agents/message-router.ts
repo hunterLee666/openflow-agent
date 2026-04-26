@@ -1,17 +1,23 @@
-export interface StructuredMessage {
-  summary: string;
-  evidence: string[];
-  touchedFiles: string[];
-  commandsRun: string[];
-  openQuestions: string[];
-  verdict?: "PASS" | "FAIL" | "PARTIAL";
-}
+import { z } from "zod";
 
-export interface MessageRouteConfig {
-  maxEvidenceLength: number;
-  maxFilesCount: number;
-  enableSanitization: boolean;
-}
+export const StructuredMessageSchema = z.object({
+  summary: z.string(),
+  evidence: z.array(z.string()),
+  touchedFiles: z.array(z.string()),
+  commandsRun: z.array(z.string()),
+  openQuestions: z.array(z.string()),
+  verdict: z.enum(["PASS", "FAIL", "PARTIAL"]).optional(),
+});
+
+export type StructuredMessage = z.infer<typeof StructuredMessageSchema>;
+
+export const MessageRouteConfigSchema = z.object({
+  maxEvidenceLength: z.number(),
+  maxFilesCount: z.number(),
+  enableSanitization: z.boolean(),
+});
+
+export type MessageRouteConfig = z.infer<typeof MessageRouteConfigSchema>;
 
 const DEFAULT_CONFIG: MessageRouteConfig = {
   maxEvidenceLength: 2000,

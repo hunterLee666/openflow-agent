@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { CapabilityPlugin, CapabilityContext, ToolDefinition } from "../types/index.js";
-import { CapabilityType } from "../types/index.js";
-import { SwarmMode, type SwarmAgent } from "../agents/swarm-mode.js";
+import type { SwarmAgent } from "../agents/agent-types.js";
+import { SwarmMode } from "../agents/swarm-mode.js";
 import { CoordinatorMode, type WorkerAgent } from "../agents/coordinator-mode.js";
 import { ModeSelector, type AgentMode } from "../agents/mode-selector.js";
 import type { SubAgentTask, SubAgentContext, SubAgentResult } from "../agents/sub-agent-system.js";
@@ -281,7 +281,7 @@ export function createAgentTool(manifest: AgentToolManifest): CapabilityPlugin {
     manifest: {
       name: manifest.name,
       version: manifest.version,
-      type: CapabilityType.AGENT,
+      type: "agent" as const,
       description: manifest.description,
       triggers: manifest.triggers,
       allowedTools: manifest.allowedTools,

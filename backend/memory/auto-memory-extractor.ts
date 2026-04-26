@@ -1,27 +1,32 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
+import { z } from "zod";
 
-export interface MemoryObservation {
-  id: string;
-  type: "preference" | "habit" | "pain_point" | "project_fact";
-  content: string;
-  scope: string;
-  confidence: number;
-  occurrenceCount: number;
-  firstObserved: number;
-  lastObserved: number;
-  isOneOff: boolean;
-  containsSecret: boolean;
-}
+export const MemoryObservationSchema = z.object({
+  id: z.string(),
+  type: z.enum(["preference", "habit", "pain_point", "project_fact"]),
+  content: z.string(),
+  scope: z.string(),
+  confidence: z.number(),
+  occurrenceCount: z.number(),
+  firstObserved: z.number(),
+  lastObserved: z.number(),
+  isOneOff: z.boolean(),
+  containsSecret: z.boolean(),
+});
 
-export interface AutoMemoryConfig {
-  memoryDir: string;
-  minConfidence: number;
-  minOccurrences: number;
-  throttleIntervalMs: number;
-  enableAutoWrite: boolean;
-}
+export type MemoryObservation = z.infer<typeof MemoryObservationSchema>;
+
+export const AutoMemoryConfigSchema = z.object({
+  memoryDir: z.string(),
+  minConfidence: z.number(),
+  minOccurrences: z.number(),
+  throttleIntervalMs: z.number(),
+  enableAutoWrite: z.boolean(),
+});
+
+export type AutoMemoryConfig = z.infer<typeof AutoMemoryConfigSchema>;
 
 const DEFAULT_CONFIG: AutoMemoryConfig = {
   memoryDir: ".openflow/memory/auto",

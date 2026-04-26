@@ -2,21 +2,46 @@ import type { SubAgentMessage, SubAgentTask, SubAgentResult, SubAgentContext } f
 import type { ToolDefinition } from "../types/index.js";
 import type { SwarmAgent } from "./agent-types.js";
 import { MessageRouter } from "./message-router.js";
+import { z } from "zod";
 
-export interface SwarmConfig {
-  maxIterations: number;
-  maxAgentsPerTask: number;
-  enableParallelExecution: boolean;
-  parallelLimit: number;
-}
+export const SwarmConfigSchema = z.object({
+  maxIterations: z.number(),
+  maxAgentsPerTask: z.number(),
+  enableParallelExecution: z.boolean(),
+  parallelLimit: z.number(),
+});
 
-export interface SwarmContext {
-  agents: Map<string, SwarmAgent>;
-  currentAgentId: string;
-  conversationHistory: SubAgentMessage[];
-  sharedMemory: Map<string, unknown>;
-  iterationCount: number;
-}
+export type SwarmConfig = z.infer<typeof SwarmConfigSchema>;
+
+export const SwarmConversationMessageSchema = z.object({
+  role: z.enum(["system", "user", "assistant", "tool"]),
+  content: z.string(),
+  toolCalls: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    arguments: z.record(z.string(), z.unknown()),
+  })).optional(),
+  toolCallId: z.string().optional(),
+});
+
+export type SwarmConversationMessage = z.infer<typeof SwarmConversationMessageSchema>;
+
+export const SwarmContextSchema = z.object({
+  agents: z.custom<Map<string, SwarmAgent>>(),
+  currentAgentId: z.string(),
+  conversationHistory: z.array(SwarmConversationMessageSchema),
+  sharedMemory: z.custom<Map<string, unknown>>(),
+  iterationCount: z.number(),
+});
+
+export type SwarmContext = z.infer<typeof SwarmContextSchema>;
+
+export const HandoffInputSchema = z.object({
+  reason: z.string(),
+  context: z.string().optional(),
+});
+
+export type HandoffInput = z.infer<typeof HandoffInputSchema>;
 
 export class SwarmMode {
   private config: SwarmConfig;
@@ -221,7 +246,7 @@ export class SwarmMode {
             required: ["reason"],
           },
           handler: async (input: unknown) => {
-            const typed = input as Record<string, unknown>;
+            const typed = HandoffInputSchema.parse(input);
             return {
               success: true,
               targetAgent: handoffId,

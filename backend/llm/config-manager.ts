@@ -1,33 +1,40 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
+import { z } from "zod";
 import { OpenflowConfigAdapter, loadOpenflowConfig } from "../adapters/openflow-config-adapter.js";
-import type { ProviderConfig } from "./types.js";
+import { ProviderConfigSchema } from "./types.js";
 
-export interface LLMConfig {
-  providers: Record<string, ProviderConfig>;
-  defaultProvider: string;
-  defaultModel: string;
-  fallbackProviders: string[];
-  budgetUsd?: number;
-  maxLatencyMs?: number;
-  modelAliases?: Record<string, string>;
-  modelOverrides?: Record<string, string>;
-  availableModels?: string[];
-}
+export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
 
-export interface LLMConfigFile {
-  version: string;
-  providers: Record<string, Omit<ProviderConfig, "name">>;
-  defaultProvider: string;
-  defaultModel: string;
-  fallbackProviders: string[];
-  budgetUsd?: number;
-  maxLatencyMs?: number;
-  modelAliases?: Record<string, string>;
-  modelOverrides?: Record<string, string>;
-  availableModels?: string[];
-}
+export const LLMConfigSchema = z.object({
+  providers: z.record(z.string(), ProviderConfigSchema),
+  defaultProvider: z.string(),
+  defaultModel: z.string(),
+  fallbackProviders: z.array(z.string()),
+  budgetUsd: z.number().optional(),
+  maxLatencyMs: z.number().optional(),
+  modelAliases: z.record(z.string(), z.string()).optional(),
+  modelOverrides: z.record(z.string(), z.string()).optional(),
+  availableModels: z.array(z.string()).optional(),
+});
+
+export type LLMConfig = z.infer<typeof LLMConfigSchema>;
+
+export const LLMConfigFileSchema = z.object({
+  version: z.string(),
+  providers: z.record(z.string(), ProviderConfigSchema.omit({ name: true })),
+  defaultProvider: z.string(),
+  defaultModel: z.string(),
+  fallbackProviders: z.array(z.string()),
+  budgetUsd: z.number().optional(),
+  maxLatencyMs: z.number().optional(),
+  modelAliases: z.record(z.string(), z.string()).optional(),
+  modelOverrides: z.record(z.string(), z.string()).optional(),
+  availableModels: z.array(z.string()).optional(),
+});
+
+export type LLMConfigFile = z.infer<typeof LLMConfigFileSchema>;
 
 const DEFAULT_CONFIG_FILE = "llm-config.json";
 

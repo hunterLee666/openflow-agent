@@ -1,30 +1,33 @@
 import type { CapabilityPlugin, CapabilityContext } from "../types/index.js";
-import { CapabilityType } from "../types/index.js";
+import { z } from "zod";
 
-export interface LegacySkill {
-  id: string;
-  name: string;
-  description: string;
-  triggers: string[];
-  steps: SkillStep[];
-  allowedTools?: string[];
-  markdown?: string;
-}
+export const SkillStepSchema = z.object({
+  type: z.enum(["prompt", "tool", "condition"]),
+  content: z.string().optional(),
+  tool: z.string().optional(),
+  input: z.record(z.string(), z.unknown()).optional(),
+  condition: z.string().optional(),
+});
 
-export interface SkillStep {
-  type: "prompt" | "tool" | "condition";
-  content?: string;
-  tool?: string;
-  input?: Record<string, unknown>;
-  condition?: string;
-}
+export const LegacySkillSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  triggers: z.array(z.string()),
+  steps: z.array(SkillStepSchema),
+  allowedTools: z.array(z.string()).optional(),
+  markdown: z.string().optional(),
+});
+
+export type LegacySkill = z.infer<typeof LegacySkillSchema>;
+export type SkillStep = z.infer<typeof SkillStepSchema>;
 
 export function adaptSkillToPlugin(skill: LegacySkill): CapabilityPlugin {
   return {
     manifest: {
       name: skill.name,
       version: "1.0.0",
-      type: CapabilityType.SKILL,
+      type: "skill" as const,
       description: skill.description,
       triggers: skill.triggers,
       allowedTools: skill.allowedTools,

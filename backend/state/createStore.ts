@@ -1,8 +1,22 @@
-export type Action = { type: string; payload?: unknown };
+import { z } from "zod";
+
+export const ActionSchema = z.object({
+  type: z.string(),
+  payload: z.unknown().optional(),
+});
+
+export type Action = z.infer<typeof ActionSchema>;
 
 export type Reducer<S> = (state: S | undefined, action: Action) => S;
 
 export type Listener = () => void;
+
+export const StoreInterfaceSchema = z.object({
+  getState: z.function().returns(z.unknown()),
+  dispatch: z.function().args(ActionSchema).returns(ActionSchema),
+  subscribe: z.function().args(z.function().returns(z.void())).returns(z.function().returns(z.void())),
+  replaceReducer: z.function().args(z.function()),
+});
 
 export interface Store<S> {
   getState: () => S;
@@ -74,8 +88,8 @@ export function combineReducers<S extends Record<string, unknown>>(
 export function composeReducers<S>(
   ...reducers: Reducer<S>[]
 ): Reducer<S> {
-  return (state, action) => {
-    return reducers.reduce((s, r) => r(s, action), state);
+  return (state: S | undefined, action: Action): S => {
+    return reducers.reduce((s, r) => r(s, action), state) as S;
   };
 }
 

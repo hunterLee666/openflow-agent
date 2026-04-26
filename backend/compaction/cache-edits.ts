@@ -1,26 +1,31 @@
 import { createHash } from "node:crypto";
 import type { Message, ContentBlock } from "../session/types.js";
+import { z } from "zod";
 
-export interface CacheEdit {
-  messageIndex: number;
-  oldHash: string;
-  newContent: string | ContentBlock[];
-  reason?: string;
-}
+export const CacheEditSchema = z.object({
+  messageIndex: z.number(),
+  oldHash: z.string(),
+  newContent: z.union([z.string(), z.any() as z.ZodType<ContentBlock[]>]),
+  reason: z.string().optional(),
+});
 
-export interface CacheEditResult {
-  messages: Message[];
-  editsApplied: number;
-  conflicts: number;
-  prefixStable: boolean;
-}
+export const CacheEditResultSchema = z.object({
+  messages: z.any() as z.ZodType<Message[]>,
+  editsApplied: z.number(),
+  conflicts: z.number(),
+  prefixStable: z.boolean(),
+});
 
-export interface CacheAwareConfig {
-  enableCacheEdits: boolean;
-  preserveSystemPrefix: boolean;
-  elideThreshold: number;
-  maxElidedBytes: number;
-}
+export const CacheAwareConfigSchema = z.object({
+  enableCacheEdits: z.boolean(),
+  preserveSystemPrefix: z.boolean(),
+  elideThreshold: z.number(),
+  maxElidedBytes: z.number(),
+});
+
+export type CacheEdit = z.infer<typeof CacheEditSchema>;
+export type CacheEditResult = z.infer<typeof CacheEditResultSchema>;
+export type CacheAwareConfig = z.infer<typeof CacheAwareConfigSchema>;
 
 const DEFAULT_CONFIG: CacheAwareConfig = {
   enableCacheEdits: true,

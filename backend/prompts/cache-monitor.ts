@@ -1,33 +1,44 @@
 import { createHash } from "node:crypto";
+import { z } from "zod";
 
-export interface CacheInvalidationEvent {
-  timestamp: number;
-  layerName: string;
-  reason: string;
-  oldHash: string | null;
-  newHash: string;
-  contentLength: number;
-  severity: "info" | "warning" | "critical";
-}
+export const CacheInvalidationEventSchema = z.object({
+  timestamp: z.number(),
+  layerName: z.string(),
+  reason: z.string(),
+  oldHash: z.string().nullable(),
+  newHash: z.string(),
+  contentLength: z.number(),
+  severity: z.enum(["info", "warning", "critical"]),
+});
 
-export interface CacheHealthReport {
-  totalInvalidations: number;
-  invalidationRate: number;
-  averageContentLength: number;
-  topInvalidationReasons: Array<{ reason: string; count: number }>;
-  layerHealth: Map<string, { invalidations: number; lastInvalidation: number; stability: "stable" | "volatile" | "critical" }>;
-  recommendations: string[];
-  contextUsageRatio?: number;
-  contextWarning?: string;
-}
+export type CacheInvalidationEvent = z.infer<typeof CacheInvalidationEventSchema>;
 
-export interface CacheMonitorConfig {
-  windowMs?: number;
-  warningThreshold?: number;
-  criticalThreshold?: number;
-  maxHistorySize?: number;
-  contextWarningThreshold?: number;
-}
+export const CacheHealthReportSchema = z.object({
+  totalInvalidations: z.number(),
+  invalidationRate: z.number(),
+  averageContentLength: z.number(),
+  topInvalidationReasons: z.array(z.object({ reason: z.string(), count: z.number() })),
+  layerHealth: z.map(z.string(), z.object({
+    invalidations: z.number(),
+    lastInvalidation: z.number(),
+    stability: z.enum(["stable", "volatile", "critical"]),
+  })),
+  recommendations: z.array(z.string()),
+  contextUsageRatio: z.number().optional(),
+  contextWarning: z.string().optional(),
+});
+
+export type CacheHealthReport = z.infer<typeof CacheHealthReportSchema>;
+
+export const CacheMonitorConfigSchema = z.object({
+  windowMs: z.number().optional(),
+  warningThreshold: z.number().optional(),
+  criticalThreshold: z.number().optional(),
+  maxHistorySize: z.number().optional(),
+  contextWarningThreshold: z.number().optional(),
+});
+
+export type CacheMonitorConfig = z.infer<typeof CacheMonitorConfigSchema>;
 
 const DEFAULT_CONFIG: Required<CacheMonitorConfig> = {
   windowMs: 300_000,

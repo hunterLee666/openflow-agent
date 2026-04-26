@@ -1,10 +1,13 @@
 import type { MemoryUnit } from './semantic-compressor.js';
+import { z } from 'zod';
 
-export interface SynthesisConfig {
-  similarityThreshold: number;
-  maxMergeUnits: number;
-  enableAutoSynthesis: boolean;
-}
+export const SynthesisConfigSchema = z.object({
+  similarityThreshold: z.number(),
+  maxMergeUnits: z.number(),
+  enableAutoSynthesis: z.boolean(),
+});
+
+export type SynthesisConfig = z.infer<typeof SynthesisConfigSchema>;
 
 const DEFAULT_CONFIG: SynthesisConfig = {
   similarityThreshold: 0.7,

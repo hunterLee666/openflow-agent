@@ -1,20 +1,26 @@
 import { readFile, stat } from "node:fs/promises";
 import { join, dirname, resolve } from "node:path";
+import { z } from "zod";
 
-export interface ContextFile {
-  name: string;
-  path: string;
-  content: string;
-  type: ContextFileType;
-  priority: number;
-}
+export const ContextFileTypeSchema = z.enum(["instructions", "rules", "system-prompt", "memory", "custom"]);
 
-export type ContextFileType =
-  | "instructions"
-  | "rules"
-  | "system-prompt"
-  | "memory"
-  | "custom";
+export const ContextFileSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  content: z.string(),
+  type: ContextFileTypeSchema,
+  priority: z.number(),
+});
+
+export const ContextFileDefSchema = z.object({
+  name: z.string(),
+  type: ContextFileTypeSchema,
+  priority: z.number(),
+});
+
+export type ContextFile = z.infer<typeof ContextFileSchema>;
+export type ContextFileDef = z.infer<typeof ContextFileDefSchema>;
+export type ContextFileType = z.infer<typeof ContextFileTypeSchema>;
 
 export const CONTEXT_FILE_DEFS: Array<{
   name: string;

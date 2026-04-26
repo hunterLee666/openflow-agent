@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-import type { ProviderConfig } from "./model-router.js";
+import { z } from "zod";
+import type { ProviderConfig } from "./types.js";
 import type {
   LLMMessage,
   LLMToolDefinition,
@@ -12,29 +13,36 @@ import type {
   LLMClientConfig,
   LLMError,
 } from "./types.js";
-import { DEFAULT_RETRY_CONFIG } from "./types.js";
+import { DEFAULT_RETRY_CONFIG, ProviderConfigSchema } from "./types.js";
 import { getCompactionHeaders } from "../compaction/compaction-headers.js";
 import { CircuitBreaker, CircuitBreakerError } from "../utils/circuit-breaker.js";
 import { TranscriptStore, createErrorEvent, createAssistantMessageEvent } from "../utils/transcript.js";
 import { retryWithBackoff, DEFAULT_BACKOFF_CONFIG } from "../utils/retry-with-backoff.js";
 import { DegradationLadder } from "../utils/degradation-ladder.js";
 
-export interface LLMClientExtendedConfig {
-  providerConfig: ProviderConfig;
-  provider?: string;
-  baseUrl?: string;
-  model?: string;
-  maxTokens?: number;
-  temperature?: number;
-  timeout?: number;
-  retryConfig?: Partial<RetryConfig>;
-  compactionHeaders?: Record<string, string>;
-  apiKey?: string;
-  enableCircuitBreaker?: boolean;
-  enableTranscript?: boolean;
-  enableDegradation?: boolean;
-  sessionId?: string;
-}
+export const LLMClientExtendedConfigSchema = z.object({
+  providerConfig: ProviderConfigSchema,
+  provider: z.string().optional(),
+  baseUrl: z.string().optional(),
+  model: z.string().optional(),
+  maxTokens: z.number().optional(),
+  temperature: z.number().optional(),
+  timeout: z.number().optional(),
+  retryConfig: z.object({
+    maxRetries: z.number().optional(),
+    initialDelayMs: z.number().optional(),
+    maxDelayMs: z.number().optional(),
+    backoffMultiplier: z.number().optional(),
+  }).optional(),
+  compactionHeaders: z.record(z.string(), z.string()).optional(),
+  apiKey: z.string().optional(),
+  enableCircuitBreaker: z.boolean().optional(),
+  enableTranscript: z.boolean().optional(),
+  enableDegradation: z.boolean().optional(),
+  sessionId: z.string().optional(),
+});
+
+export type LLMClientExtendedConfig = z.infer<typeof LLMClientExtendedConfigSchema>;
 
 export class LLMClient {
   private anthropicClient: Anthropic | null = null;

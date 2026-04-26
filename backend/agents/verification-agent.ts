@@ -1,50 +1,53 @@
 import type { ToolDefinition } from "../types/index.js";
+import { z } from "zod";
 
-export enum VerificationVerdict {
-  PASS = "PASS",
-  FAIL = "FAIL",
-  PARTIAL = "PARTIAL",
-}
+export const VerificationVerdictSchema = z.enum(["PASS", "FAIL", "PARTIAL"]);
 
-export interface VerificationCheck {
-  name: string;
-  command: string;
-  exitCode: number;
-  output: string;
-  passed: boolean;
-  category: "build" | "test" | "lint" | "runtime" | "adversarial";
-}
+export const VerificationCheckSchema = z.object({
+  name: z.string(),
+  command: z.string(),
+  exitCode: z.number(),
+  output: z.string(),
+  passed: z.boolean(),
+  category: z.enum(["build", "test", "lint", "runtime", "adversarial"]),
+});
 
-export interface AdversarialProbe {
-  description: string;
-  command: string;
-  expectedStatus: number;
-  actualStatus?: number;
-  passed: boolean;
-}
+export const AdversarialProbeSchema = z.object({
+  description: z.string(),
+  command: z.string(),
+  expectedStatus: z.number(),
+  actualStatus: z.number().optional(),
+  passed: z.boolean(),
+});
 
-export interface VerificationResult {
-  verdict: VerificationVerdict;
-  checks: VerificationCheck[];
-  adversarialProbes: AdversarialProbe[];
-  environment: string;
-  summary: string;
-  evidence: string[];
-  touchedFiles: string[];
-  openQuestions: string[];
-  recommendations: string[];
-  duration: number;
-}
+export const VerificationResultSchema = z.object({
+  verdict: VerificationVerdictSchema,
+  checks: z.array(VerificationCheckSchema),
+  adversarialProbes: z.array(AdversarialProbeSchema),
+  environment: z.string(),
+  summary: z.string(),
+  evidence: z.array(z.string()),
+  touchedFiles: z.array(z.string()),
+  openQuestions: z.array(z.string()),
+  recommendations: z.array(z.string()),
+  duration: z.number(),
+});
 
-export interface VerificationAgentConfig {
-  enableBuildCheck: boolean;
-  enableTestCheck: boolean;
-  enableLintCheck: boolean;
-  enableRuntimeCheck: boolean;
-  enableAdversarialProbes: boolean;
-  timeoutMs: number;
-  maxChecks: number;
-}
+export const VerificationAgentConfigSchema = z.object({
+  enableBuildCheck: z.boolean(),
+  enableTestCheck: z.boolean(),
+  enableLintCheck: z.boolean(),
+  enableRuntimeCheck: z.boolean(),
+  enableAdversarialProbes: z.boolean(),
+  timeoutMs: z.number(),
+  maxChecks: z.number(),
+});
+
+export type VerificationVerdict = z.infer<typeof VerificationVerdictSchema>;
+export type VerificationCheck = z.infer<typeof VerificationCheckSchema>;
+export type AdversarialProbe = z.infer<typeof AdversarialProbeSchema>;
+export type VerificationResult = z.infer<typeof VerificationResultSchema>;
+export type VerificationAgentConfig = z.infer<typeof VerificationAgentConfigSchema>;
 
 const DEFAULT_CONFIG: VerificationAgentConfig = {
   enableBuildCheck: true,
@@ -190,7 +193,7 @@ ${context.endpoints ? `Endpoints to test: ${context.endpoints.join(", ")}` : ""}
     const recommendations: string[] = [];
     const touchedFiles: string[] = [];
 
-    let verdict = VerificationVerdict.FAIL;
+    let verdict: VerificationVerdict = "FAIL";
     const verdictMatch = content.match(/###\s*Verdict:\s*(PASS|FAIL|PARTIAL)/i);
     if (verdictMatch) {
       verdict = verdictMatch[1].toUpperCase() as VerificationVerdict;

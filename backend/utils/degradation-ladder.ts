@@ -1,20 +1,26 @@
-export interface DegradationLevel {
-  level: number;
-  name: string;
-  description: string;
-  features: string[];
-  disabledFeatures: string[];
-  triggers: string[];
-  recoveryCondition?: string;
-}
+import { z } from "zod";
 
-export interface DegradationConfig {
-  levels: DegradationLevel[];
-  autoRecovery: boolean;
-  recoveryCheckIntervalMs?: number;
-  onDegradation?: (level: number, previousLevel: number) => void;
-  onRecovery?: (level: number, previousLevel: number) => void;
-}
+export const DegradationLevelSchema = z.object({
+  level: z.number(),
+  name: z.string(),
+  description: z.string(),
+  features: z.array(z.string()),
+  disabledFeatures: z.array(z.string()),
+  triggers: z.array(z.string()),
+  recoveryCondition: z.string().optional(),
+});
+
+export type DegradationLevel = z.infer<typeof DegradationLevelSchema>;
+
+export const DegradationConfigSchema = z.object({
+  levels: z.array(DegradationLevelSchema),
+  autoRecovery: z.boolean(),
+  recoveryCheckIntervalMs: z.number().optional(),
+  onDegradation: z.function().args(z.number(), z.number()).returns(z.void()).optional(),
+  onRecovery: z.function().args(z.number(), z.number()).returns(z.void()).optional(),
+});
+
+export type DegradationConfig = z.infer<typeof DegradationConfigSchema>;
 
 export const DEFAULT_DEGRADATION_LEVELS: DegradationLevel[] = [
   {

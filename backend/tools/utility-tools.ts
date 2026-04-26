@@ -54,6 +54,12 @@ interface TodoState {
   updatedAt: number;
 }
 
+export type TodoItem = z.infer<typeof TodoItemSchema>;
+export type TodoWriteInput = z.infer<typeof TodoWriteInputSchema>;
+export type ExitPlanModeInput = z.infer<typeof ExitPlanModeInputSchema>;
+export type SlashCommandInput = z.infer<typeof SlashCommandInputSchema>;
+export type TaskInput = z.infer<typeof TaskInputSchema>;
+
 let todoState: TodoState = { todos: [], updatedAt: 0 };
 
 export function createUtilityTools(commandRegistry?: CommandRegistry): ToolDefinition[] {

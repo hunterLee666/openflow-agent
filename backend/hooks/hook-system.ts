@@ -1,87 +1,109 @@
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { z } from "zod";
 
-export type HookEvent =
-  | "SessionStart"
-  | "SessionEnd"
-  | "UserPromptSubmit"
-  | "AssistantResponseComplete"
-  | "PreToolUse"
-  | "PostToolUse"
-  | "Stop"
-  | "SubagentStop"
-  | "PreCompact"
-  | "PostCompact"
-  | "Notification"
-  | "StopFailure"
-  | "Elicitation"
-  | "ElicitationResult"
-  | "PermissionRequest"
-  | "Error"
-  | "BudgetWarning";
+export const HookEventSchema = z.enum([
+  "SessionStart",
+  "SessionEnd",
+  "UserPromptSubmit",
+  "AssistantResponseComplete",
+  "PreToolUse",
+  "PostToolUse",
+  "Stop",
+  "SubagentStop",
+  "PreCompact",
+  "PostCompact",
+  "Notification",
+  "StopFailure",
+  "Elicitation",
+  "ElicitationResult",
+  "PermissionRequest",
+  "Error",
+  "BudgetWarning",
+]);
 
-export type HookType = "command" | "prompt";
+export type HookEvent = z.infer<typeof HookEventSchema>;
 
-export interface HookContext {
-  sessionId: string;
-  timestamp: number;
-  event?: HookEvent;
-  toolName?: string;
-  toolCall?: Record<string, unknown>;
-  toolOutput?: unknown;
-  metadata?: Record<string, unknown>;
-  projectDir?: string;
-  conversationId?: string;
-}
+export const HookTypeSchema = z.enum(["command", "prompt"]);
 
-export interface HookResult {
-  decision?: "approve" | "deny";
-  action?: "allow" | "block" | "modify";
-  reason?: string;
-  message?: string;
-  updatedInput?: Record<string, unknown>;
-  additionalContext?: string;
-  data?: Record<string, unknown>;
-  hookSpecificOutput?: Record<string, unknown>;
-}
+export type HookType = z.infer<typeof HookTypeSchema>;
 
-export interface CommandHookConfig {
-  matcher: string;
-  event: HookEvent;
-  type: "command";
-  command: string;
-  timeout?: number;
-}
+export const HookContextSchema = z.object({
+  sessionId: z.string(),
+  timestamp: z.number(),
+  event: HookEventSchema.optional(),
+  toolName: z.string().optional(),
+  toolCall: z.record(z.string(), z.unknown()).optional(),
+  toolOutput: z.unknown().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  projectDir: z.string().optional(),
+  conversationId: z.string().optional(),
+});
 
-export interface PromptHookConfig {
-  matcher: string;
-  event: HookEvent;
-  type: "prompt";
-  prompt: string;
-}
+export type HookContext = z.infer<typeof HookContextSchema>;
 
-export interface HookDefinition {
-  name: string;
-  event: HookEvent;
-  type?: HookType;
-  handler: (ctx: HookContext) => Promise<HookResult>;
-  priority?: number;
-  matcher?: string;
-}
+export const HookResultSchema = z.object({
+  decision: z.enum(["approve", "deny"]).optional(),
+  action: z.enum(["allow", "block", "modify"]).optional(),
+  reason: z.string().optional(),
+  message: z.string().optional(),
+  updatedInput: z.record(z.string(), z.unknown()).optional(),
+  additionalContext: z.string().optional(),
+  data: z.record(z.string(), z.unknown()).optional(),
+  hookSpecificOutput: z.record(z.string(), z.unknown()).optional(),
+});
 
-export interface AsyncHookConfig {
-  event: HookEvent;
-  command: string;
-  timeout?: number;
-}
+export type HookResult = z.infer<typeof HookResultSchema>;
 
-export interface HttpHookConfig {
-  event: HookEvent;
-  url: string;
-  method?: string;
-  headers?: Record<string, string>;
-  timeout?: number;
-}
+export const CommandHookConfigSchema = z.object({
+  matcher: z.string(),
+  event: HookEventSchema,
+  type: z.literal("command"),
+  command: z.string(),
+  timeout: z.number().optional(),
+});
+
+export type CommandHookConfig = z.infer<typeof CommandHookConfigSchema>;
+
+export const PromptHookConfigSchema = z.object({
+  matcher: z.string(),
+  event: HookEventSchema,
+  type: z.literal("prompt"),
+  prompt: z.string(),
+});
+
+export type PromptHookConfig = z.infer<typeof PromptHookConfigSchema>;
+
+export const HookDefinitionSchema = z.object({
+  name: z.string(),
+  event: HookEventSchema,
+  type: HookTypeSchema.optional(),
+  handler: z.function()
+    .args(HookContextSchema)
+    .returns(z.promise(HookResultSchema)),
+  priority: z.number().optional(),
+  matcher: z.string().optional(),
+});
+
+export type HookDefinition = z.infer<typeof HookDefinitionSchema>;
+
+export const AsyncHookConfigSchema = z.object({
+  event: HookEventSchema,
+  command: z.string(),
+  timeout: z.number().optional(),
+});
+
+export type AsyncHookConfig = z.infer<typeof AsyncHookConfigSchema>;
+
+export const HttpHookConfigSchema = z.object({
+  event: HookEventSchema,
+  url: z.string(),
+  method: z.string().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+  timeout: z.number().optional(),
+});
+
+export type HttpHookConfig = z.infer<typeof HttpHookConfigSchema>;
 
 export class HookSystem extends EventEmitter {
   private hooks: Map<HookEvent, HookDefinition[]> = new Map();

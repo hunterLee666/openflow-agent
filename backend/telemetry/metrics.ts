@@ -1,10 +1,14 @@
-export interface MetricData {
-  name: string;
-  value: number;
-  timestamp: number;
-  tags?: Record<string, string>;
-  traceId?: string;
-}
+import { z } from "zod";
+
+export const MetricDataSchema = z.object({
+  name: z.string(),
+  value: z.number(),
+  timestamp: z.number(),
+  tags: z.record(z.string(), z.string()).optional(),
+  traceId: z.string().optional(),
+});
+
+export type MetricData = z.infer<typeof MetricDataSchema>;
 
 export interface MetricsCollector {
   record(metric: MetricData): void;

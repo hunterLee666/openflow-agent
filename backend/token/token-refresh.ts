@@ -1,7 +1,11 @@
-export interface TokenRefreshConfig {
-  refreshBeforeExpiryMs: number;
-  defaultExpiryMs: number;
-}
+import { z } from "zod";
+
+export const TokenRefreshConfigSchema = z.object({
+  refreshBeforeExpiryMs: z.number(),
+  defaultExpiryMs: z.number(),
+});
+
+export type TokenRefreshConfig = z.infer<typeof TokenRefreshConfigSchema>;
 
 export const DEFAULT_TOKEN_REFRESH_CONFIG: TokenRefreshConfig = {
   refreshBeforeExpiryMs: 5 * 60 * 1000,

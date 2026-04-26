@@ -1,30 +1,38 @@
-export interface ConfidenceConfig {
-  initialConfidence: number;
-  decayRate: number;
-  decayHalfLifeDays: number;
-  boostOnAccess: number;
-  boostOnValidation: number;
-  penaltyOnContradiction: number;
-  minConfidence: number;
-  maxConfidence: number;
-}
+import { z } from "zod";
 
-export interface ConfidenceScore {
-  value: number;
-  lastAccessed: number;
-  lastValidated: number;
-  accessCount: number;
-  validationCount: number;
-  contradictionCount: number;
-  createdAt: number;
-  updatedAt: number;
-}
+export const ConfidenceConfigSchema = z.object({
+  initialConfidence: z.number(),
+  decayRate: z.number(),
+  decayHalfLifeDays: z.number(),
+  boostOnAccess: z.number(),
+  boostOnValidation: z.number(),
+  penaltyOnContradiction: z.number(),
+  minConfidence: z.number(),
+  maxConfidence: z.number(),
+});
 
-export interface ConfidenceFeedback {
-  type: "positive" | "negative" | "neutral";
-  strength?: number;
-  timestamp?: number;
-}
+export type ConfidenceConfig = z.infer<typeof ConfidenceConfigSchema>;
+
+export const ConfidenceScoreSchema = z.object({
+  value: z.number(),
+  lastAccessed: z.number(),
+  lastValidated: z.number(),
+  accessCount: z.number(),
+  validationCount: z.number(),
+  contradictionCount: z.number(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+export type ConfidenceScore = z.infer<typeof ConfidenceScoreSchema>;
+
+export const ConfidenceFeedbackSchema = z.object({
+  type: z.enum(["positive", "negative", "neutral"]),
+  strength: z.number().optional(),
+  timestamp: z.number().optional(),
+});
+
+export type ConfidenceFeedback = z.infer<typeof ConfidenceFeedbackSchema>;
 
 const DEFAULT_CONFIG: ConfidenceConfig = {
   initialConfidence: 0.8,

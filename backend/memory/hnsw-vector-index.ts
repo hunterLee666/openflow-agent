@@ -1,41 +1,52 @@
-import { HNSWIndex, HNSWConfig, SearchResult, DEFAULT_HNSW_CONFIG } from "./hnsw-index.js";
+import { HNSWIndex, SearchResult as HNSWSearchResultBase, DEFAULT_HNSW_CONFIG } from "./hnsw-index.js";
 import { FileSystemStorage, StorageBackend } from "./hnsw-storage.js";
 import { DistanceMetric } from "./hnsw-metrics.js";
 import { existsSync, mkdirSync } from "node:fs";
+import { z } from "zod";
 
-export type { DistanceMetric as HNSWMetric } from "./hnsw-metrics.js";
+export const HNSWMetricSchema = z.enum(["euclidean", "cosine", "inner_product"]);
 
-export interface HNSWConfig {
-  dimensions: number;
-  M: number;
-  efConstruction: number;
-  efSearch: number;
-  metric: DistanceMetric;
-  storagePath: string;
-  maxVectorsPerShard: number;
-  maxLoadedShards: number;
-}
+export type HNSWMetric = z.infer<typeof HNSWMetricSchema>;
 
-export interface HNSWEntry {
-  id: string;
-  vector: number[] | Float32Array;
-  metadata?: Record<string, unknown>;
-}
+export const HNSWVectorConfigSchema = z.object({
+  dimensions: z.number(),
+  M: z.number(),
+  efConstruction: z.number(),
+  efSearch: z.number(),
+  metric: HNSWMetricSchema,
+  storagePath: z.string(),
+  maxVectorsPerShard: z.number(),
+  maxLoadedShards: z.number(),
+});
 
-export interface HNSWSearchResult {
-  id: string;
-  distance: number;
-  metadata?: Record<string, unknown>;
-}
+export type HNSWVectorConfig = z.infer<typeof HNSWVectorConfigSchema>;
 
-export interface HNSWStats {
-  totalVectors: number;
-  dimensions: number;
-  metric: DistanceMetric;
-  memoryUsage: number;
-}
+export const HNSWEntrySchema = z.object({
+  id: z.string(),
+  vector: z.union([z.array(z.number()), z.instanceof(Float32Array)]),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
 
-const DEFAULT_CONFIG: HNSWConfig = {
+export type HNSWEntry = z.infer<typeof HNSWEntrySchema>;
+
+export const HNSWVectorSearchResultSchema = z.object({
+  id: z.string(),
+  distance: z.number(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type HNSWVectorSearchResult = z.infer<typeof HNSWVectorSearchResultSchema>;
+
+export const HNSWStatsSchema = z.object({
+  totalVectors: z.number(),
+  dimensions: z.number(),
+  metric: HNSWMetricSchema,
+  memoryUsage: z.number(),
+});
+
+export type HNSWStats = z.infer<typeof HNSWStatsSchema>;
+
+const DEFAULT_CONFIG: HNSWVectorConfig = {
   dimensions: 384,
   M: 16,
   efConstruction: 200,
@@ -47,13 +58,13 @@ const DEFAULT_CONFIG: HNSWConfig = {
 };
 
 export class HNSWVectorIndex {
-  private config: HNSWConfig;
+  private config: HNSWVectorConfig;
   private index: HNSWIndex | null = null;
   private storage: StorageBackend | null = null;
   private metadataMap = new Map<string, Record<string, unknown>>();
   private initialized = false;
 
-  constructor(config?: Partial<HNSWConfig>) {
+  constructor(config?: Partial<HNSWVectorConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
@@ -136,7 +147,7 @@ export class HNSWVectorIndex {
       efSearch?: number;
       filter?: (id: string) => boolean;
     }
-  ): Promise<HNSWSearchResult[]> {
+  ): Promise<HNSWVectorSearchResult[]> {
     if (!this.index || !this.initialized) {
       throw new Error("HNSW index not initialized");
     }
@@ -216,7 +227,7 @@ export class HNSWVectorIndex {
   }
 }
 
-export function createHNSWVectorIndex(config?: Partial<HNSWConfig>): HNSWVectorIndex {
+export function createHNSWVectorIndex(config?: Partial<HNSWVectorConfig>): HNSWVectorIndex {
   return new HNSWVectorIndex(config);
 }
 

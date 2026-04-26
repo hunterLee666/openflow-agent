@@ -1,32 +1,37 @@
 import type { ToolDefinition } from "../types/index.js";
+import { z } from "zod";
 
-export interface PlanAgentConfig {
-  maxPhases: number;
-  enableRiskAnalysis: boolean;
-  enableRollbackStrategy: boolean;
-  maxTokens: number;
-}
+export const PlanAgentConfigSchema = z.object({
+  maxPhases: z.number(),
+  enableRiskAnalysis: z.boolean(),
+  enableRollbackStrategy: z.boolean(),
+  maxTokens: z.number(),
+});
 
-export interface PlanPhase {
-  order: number;
-  name: string;
-  description: string;
-  files: string[];
-  estimatedComplexity: "low" | "medium" | "high";
-  dependencies: string[];
-  risks: string[];
-  rollbackStrategy: string;
-}
+export const PlanPhaseSchema = z.object({
+  order: z.number(),
+  name: z.string(),
+  description: z.string(),
+  files: z.array(z.string()),
+  estimatedComplexity: z.enum(["low", "medium", "high"]),
+  dependencies: z.array(z.string()),
+  risks: z.array(z.string()),
+  rollbackStrategy: z.string(),
+});
 
-export interface PlanResult {
-  phases: PlanPhase[];
-  risks: string[];
-  testChecklist: string[];
-  summary: string;
-  evidence: string[];
-  openQuestions: string[];
-  recommendedAgents: string[];
-}
+export const PlanResultSchema = z.object({
+  phases: z.array(PlanPhaseSchema),
+  risks: z.array(z.string()),
+  testChecklist: z.array(z.string()),
+  summary: z.string(),
+  evidence: z.array(z.string()),
+  openQuestions: z.array(z.string()),
+  recommendedAgents: z.array(z.string()),
+});
+
+export type PlanAgentConfig = z.infer<typeof PlanAgentConfigSchema>;
+export type PlanPhase = z.infer<typeof PlanPhaseSchema>;
+export type PlanResult = z.infer<typeof PlanResultSchema>;
 
 const DEFAULT_CONFIG: PlanAgentConfig = {
   maxPhases: 5,

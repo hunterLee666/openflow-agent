@@ -8,76 +8,91 @@ import { ForkPrefixOptimizer } from "./fork-prefix.js";
 import { MessageRouter } from "./message-router.js";
 import { WorkerConsciousnessInjector } from "./worker-consciousness.js";
 import { BUILTIN_AGENT_TYPES, TOOL_GROUPS, resolveAllowedTools, buildSystemPromptForType } from "./agent-types.js";
+import { z } from "zod";
 export { BUILTIN_AGENT_TYPES, TOOL_GROUPS } from "./agent-types.js";
 export type { AgentTypeDefinition, WorkerAgent, SwarmAgent } from "./agent-types.js";
 
-export interface SubAgentContext {
-  sessionId: string;
-  parentSessionId?: string;
-  projectDir: string;
-  conversationHistory: SubAgentMessage[];
-  availableTools: ToolDefinition[];
-  metadata: Record<string, unknown>;
-  depth?: number;
-  agentType?: string;
-}
+export const SubAgentToolCallSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  arguments: z.record(z.string(), z.unknown()),
+});
 
-export interface SubAgentMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string;
-  toolCalls?: SubAgentToolCall[];
-  toolCallId?: string;
-}
+export type SubAgentToolCall = z.infer<typeof SubAgentToolCallSchema>;
 
-export interface SubAgentToolCall {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-}
+export const SubAgentMessageSchema = z.object({
+  role: z.enum(["system", "user", "assistant", "tool"]),
+  content: z.string(),
+  toolCalls: z.array(SubAgentToolCallSchema).optional(),
+  toolCallId: z.string().optional(),
+});
 
-export interface SubAgentTask {
-  id: string;
-  type: string;
-  description: string;
-  prompt: string;
-  context?: Record<string, unknown>;
-  allowedTools?: string[];
-  systemPrompt?: string;
-  timeout?: number;
-  maxTurns?: number;
-  mode?: "single" | "swarm" | "coordinator";
-}
+export type SubAgentMessage = z.infer<typeof SubAgentMessageSchema>;
 
-export interface SubAgentResult {
-  taskId: string;
-  output: string;
-  duration: number;
-  status: "success" | "error" | "timeout" | "cancelled";
-  turns: number;
-  toolCalls: number;
-  error?: string;
-  metadata?: Record<string, unknown>;
-}
+export const SubAgentTaskSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  description: z.string(),
+  prompt: z.string(),
+  context: z.record(z.string(), z.unknown()).optional(),
+  allowedTools: z.array(z.string()).optional(),
+  systemPrompt: z.string().optional(),
+  timeout: z.number().optional(),
+  maxTurns: z.number().optional(),
+  mode: z.enum(["single", "swarm", "coordinator"]).optional(),
+});
 
-export interface SubAgentConfig {
-  maxConcurrency: number;
-  defaultTimeout: number;
-  defaultMaxTurns: number;
-  isolationLevel: "full" | "tools" | "context";
-  enableAntiRecursion: boolean;
-  enableForkPrefix: boolean;
-  enableWorkerConsciousness: boolean;
-  enableStructuredRouting: boolean;
-}
+export type SubAgentTask = z.infer<typeof SubAgentTaskSchema>;
 
-export interface SubAgentStatus {
-  id: string;
-  type: string;
-  status: "idle" | "running" | "completed" | "error" | "cancelled";
-  startedAt?: number;
-  completedAt?: number;
-  progress?: string;
-}
+export const SubAgentResultSchema = z.object({
+  taskId: z.string(),
+  output: z.string(),
+  duration: z.number(),
+  status: z.enum(["success", "error", "timeout", "cancelled"]),
+  turns: z.number(),
+  toolCalls: z.number(),
+  error: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type SubAgentResult = z.infer<typeof SubAgentResultSchema>;
+
+export const SubAgentConfigSchema = z.object({
+  maxConcurrency: z.number(),
+  defaultTimeout: z.number(),
+  defaultMaxTurns: z.number(),
+  isolationLevel: z.enum(["full", "tools", "context"]),
+  enableAntiRecursion: z.boolean(),
+  enableForkPrefix: z.boolean(),
+  enableWorkerConsciousness: z.boolean(),
+  enableStructuredRouting: z.boolean(),
+});
+
+export type SubAgentConfig = z.infer<typeof SubAgentConfigSchema>;
+
+export const SubAgentStatusSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  status: z.enum(["idle", "running", "completed", "error", "cancelled"]),
+  startedAt: z.number().optional(),
+  completedAt: z.number().optional(),
+  progress: z.string().optional(),
+});
+
+export type SubAgentStatus = z.infer<typeof SubAgentStatusSchema>;
+
+export const SubAgentContextSchema = z.object({
+  sessionId: z.string(),
+  parentSessionId: z.string().optional(),
+  projectDir: z.string(),
+  conversationHistory: z.array(SubAgentMessageSchema),
+  availableTools: z.array(z.any()),
+  metadata: z.record(z.string(), z.unknown()),
+  depth: z.number().optional(),
+  agentType: z.string().optional(),
+});
+
+export type SubAgentContext = z.infer<typeof SubAgentContextSchema>;
 
 export class SubAgentSystem extends EventEmitter {
   private agents: Map<string, SubAgentContext> = new Map();
@@ -636,7 +651,7 @@ Rules:
       this.forkPrefixOptimizer.trackPrefix(task.description);
     }
 
-    const typeDef = BUILTIN_AGENT_TYPES[context.agentType];
+    const typeDef = context.agentType ? BUILTIN_AGENT_TYPES[context.agentType] : undefined;
     if (this.config.enableWorkerConsciousness && typeDef?.canSpawnSubagents === false) {
       systemPrompt = this.workerConsciousness.inject(systemPrompt);
     }
@@ -715,7 +730,7 @@ Rules:
             output = this.forkPrefixOptimizer.formatCompletion(output);
           }
 
-          const currentTypeDef = BUILTIN_AGENT_TYPES[context.agentType];
+          const currentTypeDef = context.agentType ? BUILTIN_AGENT_TYPES[context.agentType] : undefined;
           if (this.config.enableWorkerConsciousness && currentTypeDef?.canSpawnSubagents === false) {
             const validation = this.workerConsciousness.validateResponse(output);
             if (!validation.valid) {

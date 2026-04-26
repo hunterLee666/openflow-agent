@@ -1,28 +1,35 @@
 import type { McpComponent } from "./plugin-types.js";
 import { EventEmitter } from "node:events";
 import { spawn, ChildProcess } from "node:child_process";
+import { z } from "zod";
 
-export interface McpServerConnection {
-  name: string;
-  process: ChildProcess | null;
-  status: "connecting" | "connected" | "disconnected" | "error";
-  tools: McpToolDefinition[];
-  resources: McpResourceDefinition[];
-  lastError?: string;
-}
+export const McpToolDefinitionSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  inputSchema: z.record(z.string(), z.unknown()),
+});
 
-export interface McpToolDefinition {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-}
+export type McpToolDefinition = z.infer<typeof McpToolDefinitionSchema>;
 
-export interface McpResourceDefinition {
-  uri: string;
-  name: string;
-  description?: string;
-  mimeType?: string;
-}
+export const McpResourceDefinitionSchema = z.object({
+  uri: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  mimeType: z.string().optional(),
+});
+
+export type McpResourceDefinition = z.infer<typeof McpResourceDefinitionSchema>;
+
+export const McpServerConnectionSchema = z.object({
+  name: z.string(),
+  process: z.instanceof(ChildProcess).nullable(),
+  status: z.enum(["connecting", "connected", "disconnected", "error"]),
+  tools: z.array(McpToolDefinitionSchema),
+  resources: z.array(McpResourceDefinitionSchema),
+  lastError: z.string().optional(),
+});
+
+export type McpServerConnection = z.infer<typeof McpServerConnectionSchema>;
 
 export class McpServerManager extends EventEmitter {
   private connections: Map<string, McpServerConnection> = new Map();

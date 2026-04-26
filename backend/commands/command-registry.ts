@@ -1,11 +1,19 @@
-export type CommandHandler = (args: string) => Promise<string>;
+import { z } from "zod";
 
-export interface CommandDefinition {
-  name: string;
-  description: string;
-  handler: CommandHandler;
-  aliases?: string[];
-}
+export const CommandHandlerSchema = z.function()
+  .args(z.string())
+  .returns(z.promise(z.string()));
+
+export type CommandHandler = z.infer<typeof CommandHandlerSchema>;
+
+export const CommandDefinitionSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  handler: CommandHandlerSchema,
+  aliases: z.array(z.string()).optional(),
+});
+
+export type CommandDefinition = z.infer<typeof CommandDefinitionSchema>;
 
 export class CommandRegistry {
   private commands: Map<string, CommandDefinition> = new Map();

@@ -1,185 +1,298 @@
-export interface IntentRecognitionResult {
-  primaryIntent: IntentType;
-  confidence: number;
-  subIntents: SubIntent[];
-  goalDescription: string;
-  safetyLevel: SafetyLevel;
-  safetyFlags: SafetyFlag[];
-  requiresClarification: boolean;
-  clarificationQuestion?: string;
-  metadata: IntentMetadata;
-  workflowPlan?: WorkflowPlan;
-  taskNorms?: TaskNorms;
-}
+import { z } from "zod";
 
-export interface WorkflowPlan {
-  recommendedWorkflow: string;
-  recommendedTools: string[];
-  toolGapAnalysis: ToolGap[];
-  needsWebSearch: boolean;
-  webSearchQueries: string[];
-  steps: WorkflowStep[];
-  reasoning: string;
-}
+export const IntentType = {
+  CODE_GENERATION: "code_generation",
+  CODE_REVIEW: "code_review",
+  DEBUGGING: "debugging",
+  REFACTORING: "refactoring",
+  EXPLORATION: "exploration",
+  DOCUMENTATION: "documentation",
+  DEPLOYMENT: "deployment",
+  TESTING: "testing",
+  CONFIGURATION: "configuration",
+  MEMORY_QUERY: "memory_query",
+  MEMORY_WRITE: "memory_write",
+  TASK_PLANNING: "task_planning",
+  CONVERSATION: "conversation",
+  FILE_OPERATION: "file_operation",
+  SYSTEM_OPERATION: "system_operation",
+  CUSTOM: "custom",
+} as const;
 
-export interface ToolGap {
-  missingTool: string;
-  purpose: string;
-  alternative: string;
-  searchQuery: string;
-}
+export const IntentTypeSchema = z.enum([
+  "code_generation",
+  "code_review",
+  "debugging",
+  "refactoring",
+  "exploration",
+  "documentation",
+  "deployment",
+  "testing",
+  "configuration",
+  "memory_query",
+  "memory_write",
+  "task_planning",
+  "conversation",
+  "file_operation",
+  "system_operation",
+  "custom",
+]);
 
-export interface WorkflowStep {
-  order: number;
-  action: string;
-  tool: string;
-  description: string;
-}
+export type IntentType = (typeof IntentType)[keyof typeof IntentType];
 
-export interface TaskNorms {
-  mustDo: string[];
-  mustNotDo: string[];
-  bestPractices: string[];
-  isExploratory: boolean;
-}
+export const SafetyLevel = {
+  SAFE: "safe",
+  CAUTION: "caution",
+  DANGEROUS: "dangerous",
+  BLOCKED: "blocked",
+} as const;
 
-export enum IntentType {
-  CODE_GENERATION = "code_generation",
-  CODE_REVIEW = "code_review",
-  DEBUGGING = "debugging",
-  REFACTORING = "refactoring",
-  EXPLORATION = "exploration",
-  DOCUMENTATION = "documentation",
-  DEPLOYMENT = "deployment",
-  TESTING = "testing",
-  CONFIGURATION = "configuration",
-  MEMORY_QUERY = "memory_query",
-  MEMORY_WRITE = "memory_write",
-  TASK_PLANNING = "task_planning",
-  CONVERSATION = "conversation",
-  FILE_OPERATION = "file_operation",
-  SYSTEM_OPERATION = "system_operation",
-  CUSTOM = "custom",
-}
+export const SafetyLevelSchema = z.enum(["safe", "caution", "dangerous", "blocked"]);
 
-export interface SubIntent {
-  type: string;
-  confidence: number;
-  description: string;
-}
+export type SafetyLevel = (typeof SafetyLevel)[keyof typeof SafetyLevel];
 
-export enum SafetyLevel {
-  SAFE = "safe",
-  CAUTION = "caution",
-  DANGEROUS = "dangerous",
-  BLOCKED = "blocked",
-}
+export const SafetyFlag = {
+  NONE: "none",
+  DESTRUCTIVE_OPERATION: "destructive_operation",
+  SENSITIVE_DATA_ACCESS: "sensitive_data_access",
+  EXTERNAL_COMMUNICATION: "external_communication",
+  PRIVILEGE_ESCALATION: "privilege_escalation",
+  MASS_DELETION: "mass_deletion",
+  SYSTEM_MODIFICATION: "system_modification",
+  CREDENTIAL_MANIPULATION: "credential_manipulation",
+} as const;
 
-export enum SafetyFlag {
-  NONE = "none",
-  DESTRUCTIVE_OPERATION = "destructive_operation",
-  SENSITIVE_DATA_ACCESS = "sensitive_data_access",
-  EXTERNAL_COMMUNICATION = "external_communication",
-  PRIVILEGE_ESCALATION = "privilege_escalation",
-  MASS_DELETION = "mass_deletion",
-  SYSTEM_MODIFICATION = "system_modification",
-  CREDENTIAL_MANIPULATION = "credential_manipulation",
-}
+export const SafetyFlagSchema = z.enum([
+  "none",
+  "destructive_operation",
+  "sensitive_data_access",
+  "external_communication",
+  "privilege_escalation",
+  "mass_deletion",
+  "system_modification",
+  "credential_manipulation",
+]);
 
-export interface IntentMetadata {
-  entities: Entity[];
-  timeReferences: TimeReference[];
-  contextRequirements: string[];
-  expectedOutputType: OutputType;
-  complexity: IntentComplexity;
-  language: string;
-  sentiment: SentimentType;
-}
+export type SafetyFlag = (typeof SafetyFlag)[keyof typeof SafetyFlag];
 
-export interface Entity {
-  name: string;
-  type: EntityType;
-  confidence: number;
-}
+export const EntityType = {
+  FILE: "file",
+  DIRECTORY: "directory",
+  FUNCTION: "function",
+  CLASS: "class",
+  VARIABLE: "variable",
+  PROJECT: "project",
+  TOOL: "tool",
+  PERSON: "person",
+  CONCEPT: "concept",
+  URL: "url",
+} as const;
 
-export enum EntityType {
-  FILE = "file",
-  DIRECTORY = "directory",
-  FUNCTION = "function",
-  CLASS = "class",
-  VARIABLE = "variable",
-  PROJECT = "project",
-  TOOL = "tool",
-  PERSON = "person",
-  CONCEPT = "concept",
-  URL = "url",
-}
+export const EntityTypeSchema = z.enum([
+  "file",
+  "directory",
+  "function",
+  "class",
+  "variable",
+  "project",
+  "tool",
+  "person",
+  "concept",
+  "url",
+]);
 
-export interface TimeReference {
-  expression: string;
-  resolved?: string;
-  type: "absolute" | "relative";
-}
+export type EntityType = (typeof EntityType)[keyof typeof EntityType];
 
-export enum OutputType {
-  CODE = "code",
-  TEXT = "text",
-  FILE = "file",
-  COMMAND = "command",
-  ANALYSIS = "analysis",
-  SUMMARY = "summary",
-  LIST = "list",
-  NONE = "none",
-}
+export const OutputType = {
+  CODE: "code",
+  TEXT: "text",
+  FILE: "file",
+  COMMAND: "command",
+  ANALYSIS: "analysis",
+  SUMMARY: "summary",
+  LIST: "list",
+  NONE: "none",
+} as const;
 
-export enum IntentComplexity {
-  SIMPLE = "simple",
-  MODERATE = "moderate",
-  COMPLEX = "complex",
-  MULTI_STEP = "multi_step",
-}
+export const OutputTypeSchema = z.enum([
+  "code",
+  "text",
+  "file",
+  "command",
+  "analysis",
+  "summary",
+  "list",
+  "none",
+]);
 
-export enum SentimentType {
-  NEUTRAL = "neutral",
-  URGENT = "urgent",
-  FRUSTRATED = "frustrated",
-  EXPLORATORY = "exploratory",
-  CONFIRMING = "confirming",
-}
+export type OutputType = (typeof OutputType)[keyof typeof OutputType];
 
-export interface ConversationContext {
-  sessionId: string;
-  currentGoal: string;
-  goalHistory: GoalEntry[];
-  recentMessages: ConversationMessage[];
-  turnCount: number;
-  lastIntent?: IntentRecognitionResult;
-}
+export const IntentComplexity = {
+  SIMPLE: "simple",
+  MODERATE: "moderate",
+  COMPLEX: "complex",
+  MULTI_STEP: "multi_step",
+} as const;
 
-export interface GoalEntry {
-  goal: string;
-  timestamp: number;
-  confidence: number;
-  isActive: boolean;
-}
+export const IntentComplexitySchema = z.enum([
+  "simple",
+  "moderate",
+  "complex",
+  "multi_step",
+]);
 
-export interface ConversationMessage {
-  role: "user" | "assistant" | "system";
-  content: string;
-  timestamp: number;
-}
+export type IntentComplexity = (typeof IntentComplexity)[keyof typeof IntentComplexity];
 
-export interface IntentRecognitionConfig {
-  enableLLM: boolean;
-  enableSafetyCheck: boolean;
-  enableGoalTracking: boolean;
-  enableWorkflowPlanning: boolean;
-  enableEnvironmentContext: boolean;
-  goalPersistenceWeight: number;
-  maxGoalHistory: number;
-  safetyThreshold: SafetyLevel;
-  language: string;
-}
+export const SentimentType = {
+  NEUTRAL: "neutral",
+  URGENT: "urgent",
+  FRUSTRATED: "frustrated",
+  EXPLORATORY: "exploratory",
+  CONFIRMING: "confirming",
+} as const;
+
+export const SentimentTypeSchema = z.enum([
+  "neutral",
+  "urgent",
+  "frustrated",
+  "exploratory",
+  "confirming",
+]);
+
+export type SentimentType = (typeof SentimentType)[keyof typeof SentimentType];
+
+export const EntitySchema = z.object({
+  name: z.string(),
+  type: EntityTypeSchema,
+  confidence: z.number(),
+});
+
+export type Entity = z.infer<typeof EntitySchema>;
+
+export const TimeReferenceSchema = z.object({
+  expression: z.string(),
+  resolved: z.string().optional(),
+  type: z.enum(["absolute", "relative"]),
+});
+
+export type TimeReference = z.infer<typeof TimeReferenceSchema>;
+
+export const IntentMetadataSchema = z.object({
+  entities: z.array(EntitySchema),
+  timeReferences: z.array(TimeReferenceSchema),
+  contextRequirements: z.array(z.string()),
+  expectedOutputType: OutputTypeSchema,
+  complexity: IntentComplexitySchema,
+  language: z.string(),
+  sentiment: SentimentTypeSchema,
+});
+
+export type IntentMetadata = z.infer<typeof IntentMetadataSchema>;
+
+export const SubIntentSchema = z.object({
+  type: z.string(),
+  confidence: z.number(),
+  description: z.string(),
+});
+
+export type SubIntent = z.infer<typeof SubIntentSchema>;
+
+export const ToolGapSchema = z.object({
+  missingTool: z.string(),
+  purpose: z.string(),
+  alternative: z.string(),
+  searchQuery: z.string(),
+});
+
+export type ToolGap = z.infer<typeof ToolGapSchema>;
+
+export const WorkflowStepSchema = z.object({
+  order: z.number(),
+  action: z.string(),
+  tool: z.string(),
+  description: z.string(),
+});
+
+export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;
+
+export const WorkflowPlanSchema = z.object({
+  recommendedWorkflow: z.string(),
+  recommendedTools: z.array(z.string()),
+  toolGapAnalysis: z.array(ToolGapSchema),
+  needsWebSearch: z.boolean(),
+  webSearchQueries: z.array(z.string()),
+  steps: z.array(WorkflowStepSchema),
+  reasoning: z.string(),
+});
+
+export type WorkflowPlan = z.infer<typeof WorkflowPlanSchema>;
+
+export const TaskNormsSchema = z.object({
+  mustDo: z.array(z.string()),
+  mustNotDo: z.array(z.string()),
+  bestPractices: z.array(z.string()),
+  isExploratory: z.boolean(),
+});
+
+export type TaskNorms = z.infer<typeof TaskNormsSchema>;
+
+export const IntentRecognitionResultSchema = z.object({
+  primaryIntent: IntentTypeSchema,
+  confidence: z.number(),
+  subIntents: z.array(SubIntentSchema),
+  goalDescription: z.string(),
+  safetyLevel: SafetyLevelSchema,
+  safetyFlags: z.array(SafetyFlagSchema),
+  requiresClarification: z.boolean(),
+  clarificationQuestion: z.string().optional(),
+  metadata: IntentMetadataSchema,
+  workflowPlan: WorkflowPlanSchema.optional(),
+  taskNorms: TaskNormsSchema.optional(),
+});
+
+export type IntentRecognitionResult = z.infer<typeof IntentRecognitionResultSchema>;
+
+export const GoalEntrySchema = z.object({
+  goal: z.string(),
+  timestamp: z.number(),
+  confidence: z.number(),
+  isActive: z.boolean(),
+});
+
+export type GoalEntry = z.infer<typeof GoalEntrySchema>;
+
+export const ConversationMessageSchema = z.object({
+  role: z.enum(["user", "assistant", "system"]),
+  content: z.string(),
+  timestamp: z.number(),
+});
+
+export type ConversationMessage = z.infer<typeof ConversationMessageSchema>;
+
+export const ConversationContextSchema = z.object({
+  sessionId: z.string(),
+  currentGoal: z.string(),
+  goalHistory: z.array(GoalEntrySchema),
+  recentMessages: z.array(ConversationMessageSchema),
+  turnCount: z.number(),
+  lastIntent: IntentRecognitionResultSchema.optional(),
+});
+
+export type ConversationContext = z.infer<typeof ConversationContextSchema>;
+
+export const IntentRecognitionConfigSchema = z.object({
+  enableLLM: z.boolean(),
+  enableSafetyCheck: z.boolean(),
+  enableGoalTracking: z.boolean(),
+  enableWorkflowPlanning: z.boolean(),
+  enableEnvironmentContext: z.boolean(),
+  goalPersistenceWeight: z.number(),
+  maxGoalHistory: z.number(),
+  safetyThreshold: SafetyLevelSchema,
+  language: z.string(),
+});
+
+export type IntentRecognitionConfig = z.infer<typeof IntentRecognitionConfigSchema>;
 
 const DEFAULT_CONFIG: IntentRecognitionConfig = {
   enableLLM: true,
@@ -511,7 +624,7 @@ ${envSection}${toolsSection}${skillsSection}
   ): IntentRecognitionResult {
     const lowerInput = userInput.toLowerCase();
 
-    let primaryIntent = IntentType.CONVERSATION;
+    let primaryIntent: IntentType = IntentType.CONVERSATION;
     let confidence = 0.5;
 
     if (lowerInput.includes("文档") || lowerInput.includes("doc") || lowerInput.includes("说明")) {

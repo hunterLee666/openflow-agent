@@ -1,43 +1,47 @@
+import { z } from "zod";
+
+export type SimpleCommand = {
+  kind: "simple";
+  argv: string[];
+  assignments: Record<string, string>;
+};
+
+export type PipelineCommand = {
+  kind: "pipeline";
+  commands: BashNode[];
+};
+
+export type ListCommand = {
+  kind: "list";
+  op: "&&" | "||" | ";";
+  left: BashNode;
+  right: BashNode;
+};
+
+export type CommandSubstitution = {
+  kind: "command_substitution";
+  command: BashNode;
+  style: "$()" | "backtick";
+};
+
 export type BashNode =
   | SimpleCommand
   | PipelineCommand
   | ListCommand
   | CommandSubstitution;
 
-export interface SimpleCommand {
-  kind: "simple";
-  argv: string[];
-  assignments: Record<string, string>;
-}
+export const BashAnalysisResultSchema = z.object({
+  isDangerous: z.boolean(),
+  dangerousReason: z.string().optional(),
+  requiresConfirmation: z.boolean(),
+  confirmationPrompt: z.string().optional(),
+  simpleCommands: z.array(z.string()),
+  hasCommandSubstitution: z.boolean(),
+  hasPipe: z.boolean(),
+  hasNetworkAccess: z.boolean(),
+});
 
-export interface PipelineCommand {
-  kind: "pipeline";
-  commands: BashNode[];
-}
-
-export interface ListCommand {
-  kind: "list";
-  op: "&&" | "||" | ";";
-  left: BashNode;
-  right: BashNode;
-}
-
-export interface CommandSubstitution {
-  kind: "command_substitution";
-  command: BashNode;
-  style: "$()" | "backtick";
-}
-
-export interface BashAnalysisResult {
-  isDangerous: boolean;
-  dangerousReason?: string;
-  requiresConfirmation: boolean;
-  confirmationPrompt?: string;
-  simpleCommands: string[];
-  hasCommandSubstitution: boolean;
-  hasPipe: boolean;
-  hasNetworkAccess: boolean;
-}
+export type BashAnalysisResult = z.infer<typeof BashAnalysisResultSchema>;
 
 const DANGEROUS_COMMANDS = new Set([
   "rm", "dd", "mkfs", "fork", "exec", "eval",

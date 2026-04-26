@@ -1,13 +1,17 @@
-export interface RetryWithBackoffConfig {
-  maxRetries: number;
-  baseDelayMs: number;
-  maxDelayMs: number;
-  jitterMs?: number;
-  jitterFactor?: number;
-  backoffMultiplier?: number;
-  retryableErrors?: string[];
-  onRetry?: (attempt: number, error: Error, delay: number) => void;
-}
+import { z } from "zod";
+
+export const RetryWithBackoffConfigSchema = z.object({
+  maxRetries: z.number(),
+  baseDelayMs: z.number(),
+  maxDelayMs: z.number(),
+  jitterMs: z.number().optional(),
+  jitterFactor: z.number().optional(),
+  backoffMultiplier: z.number().optional(),
+  retryableErrors: z.array(z.string()).optional(),
+  onRetry: z.function().args(z.number(), z.instanceof(Error), z.number()).returns(z.void()).optional(),
+});
+
+export type RetryWithBackoffConfig = z.infer<typeof RetryWithBackoffConfigSchema>;
 
 export const DEFAULT_BACKOFF_CONFIG: RetryWithBackoffConfig = {
   maxRetries: 3,
@@ -17,22 +21,26 @@ export const DEFAULT_BACKOFF_CONFIG: RetryWithBackoffConfig = {
   backoffMultiplier: 2,
 };
 
-export interface RetryAttempt {
-  attempt: number;
-  maxRetries: number;
-  delay: number;
-  error: Error;
-  timestamp: number;
-}
+export const RetryAttemptSchema = z.object({
+  attempt: z.number(),
+  maxRetries: z.number(),
+  delay: z.number(),
+  error: z.instanceof(Error),
+  timestamp: z.number(),
+});
 
-export interface RetryResult<T> {
-  success: boolean;
-  value?: T;
-  error?: Error;
-  attempts: number;
-  totalDelay: number;
-  retries: RetryAttempt[];
-}
+export type RetryAttempt = z.infer<typeof RetryAttemptSchema>;
+
+export const RetryResultSchema: z.ZodType<any> = z.object({
+  success: z.boolean(),
+  value: z.unknown().optional(),
+  error: z.instanceof(Error).optional(),
+  attempts: z.number(),
+  totalDelay: z.number(),
+  retries: z.array(RetryAttemptSchema),
+});
+
+export type RetryResult<T> = z.infer<typeof RetryResultSchema>;
 
 export function calculateExponentialBackoff(
   attempt: number,

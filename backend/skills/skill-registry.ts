@@ -1,36 +1,43 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
+import { z } from "zod";
 
-export interface SkillManifest {
-  name: string;
-  version: string;
-  description: string;
-  trigger?: string[];
-  allowedTools?: string[];
-  metadata?: Record<string, unknown>;
-  agentskillsIo?: {
-    name: string;
-    version: string;
-    description: string;
-    triggers?: string[];
-  };
-}
+export const SkillManifestSchema = z.object({
+  name: z.string(),
+  version: z.string(),
+  description: z.string(),
+  trigger: z.array(z.string()).optional(),
+  allowedTools: z.array(z.string()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  agentskillsIo: z.object({
+    name: z.string(),
+    version: z.string(),
+    description: z.string(),
+    triggers: z.array(z.string()).optional(),
+  }).optional(),
+});
 
-export interface SkillDefinition {
-  manifest: SkillManifest;
-  content: string;
-  path: string;
-  isMarkdown: boolean;
-  metadata: Record<string, unknown>;
-}
+export type SkillManifest = z.infer<typeof SkillManifestSchema>;
 
-export interface SkillRegistryEntry {
-  skill: SkillDefinition;
-  enabled: boolean;
-  loadedAt: number;
-  lastUsed?: number;
-  usageCount: number;
-}
+export const SkillDefinitionSchema: z.ZodType<any> = z.object({
+  manifest: SkillManifestSchema,
+  content: z.string(),
+  path: z.string(),
+  isMarkdown: z.boolean(),
+  metadata: z.record(z.string(), z.unknown()),
+});
+
+export type SkillDefinition = z.infer<typeof SkillDefinitionSchema>;
+
+export const SkillRegistryEntrySchema: z.ZodType<any> = z.object({
+  skill: SkillDefinitionSchema,
+  enabled: z.boolean(),
+  loadedAt: z.number(),
+  lastUsed: z.number().optional(),
+  usageCount: z.number(),
+});
+
+export type SkillRegistryEntry = z.infer<typeof SkillRegistryEntrySchema>;
 
 export const SKILL_FILE_NAMES = [
   "SKILL.md",

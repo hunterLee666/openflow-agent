@@ -37,23 +37,41 @@ export {
 } from "./tools/index.js";
 export type {
   AgentToolManifest,
-  GlobToolInput,
-  GrepToolInput,
-  BashToolInput,
-  BashOutputInput,
-  KillShellInput,
-  WebFetchInput,
-  WebSearchInput,
   TodoItem,
-  TodoWriteInput,
-  ExitPlanModeInput,
-  SlashCommandInput,
-  TaskInput,
   MediaAnalysisResult,
 } from "./tools/index.js";
-export * from "./commands/index.js";
-export { MemoryCore, PersistentMemory, createPersistentMemory } from "./memory/index.js";
-export type { SkillDocument, MemoryNudgeConfig, TaskResult, MemoryEntry, SessionMemory, MemoryQuery } from "./memory/index.js";
+export {
+  createPluginCommands,
+  createAgentCommands,
+  createDevCommands,
+  CommandRegistry,
+  createCommandRegistry,
+  reviewCode,
+  formatReviewResults,
+  analyzeProject,
+  formatProjectAnalysis,
+  initializeProject,
+  createCheckpoint,
+  listCheckpoints,
+  undoToCheckpoint,
+  undoLastChange,
+  getDiff,
+  getStagedDiff,
+  formatCheckpoints,
+} from "./commands/index.js";
+export type {
+  CommandHandler,
+  CommandDefinition as CommandDefinitionFromCommands,
+  ReviewResult,
+  CodeIssue,
+  ReviewConfig,
+  ProjectAnalysis,
+  InitConfig,
+  CheckpointInfo,
+  UndoResult,
+} from "./commands/index.js";
+export { EnhancedMemoryCore, createEnhancedMemoryCore } from "./memory/index.js";
+export type { EnhancedMemoryConfig, MemoryAddResult, MemorySearchResult, SkillDocument, MemoryNudgeConfig, TaskResult, MemoryEntry, MemoryQuery } from "./memory/index.js";
 export { GEPASelfEvolution, createGEPASkillPlugin } from "./evolution/gepa-evolution.js";
 export type { GEPAConfig, TaskTrace } from "./evolution/gepa-evolution.js";
 export { SubAgentSystem, BUILTIN_AGENT_TYPES } from "./agents/index.js";

@@ -1,63 +1,98 @@
 import { spawn, ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { Readable, Writable } from "node:stream";
+import { z } from "zod";
 
-export interface LspCapabilities {
-  textDocumentSync?: number | { save?: boolean; change?: number };
-  completionProvider?: { resolveProvider?: boolean; triggerCharacters?: string[] };
-  hoverProvider?: boolean;
-  definitionProvider?: boolean;
-  referencesProvider?: boolean;
-  documentSymbolProvider?: boolean;
-  workspaceSymbolProvider?: boolean;
-  publishDiagnostics?: boolean;
-}
+export const LspCapabilitiesSchema = z.object({
+  textDocumentSync: z.union([z.number(), z.object({ save: z.boolean().optional(), change: z.number().optional() })]).optional(),
+  completionProvider: z.object({ resolveProvider: z.boolean().optional(), triggerCharacters: z.array(z.string()).optional() }).optional(),
+  hoverProvider: z.boolean().optional(),
+  definitionProvider: z.boolean().optional(),
+  referencesProvider: z.boolean().optional(),
+  documentSymbolProvider: z.boolean().optional(),
+  workspaceSymbolProvider: z.boolean().optional(),
+  publishDiagnostics: z.boolean().optional(),
+});
 
-export interface LspInitializeParams {
-  processId: number;
-  rootUri: string | null;
-  capabilities: {
-    textDocument: {
-      completion: { dynamicRegistration: boolean };
-      publishDiagnostics: { relatedInformation: boolean };
-    };
-  };
-  clientInfo: { name: string; version: string };
-}
+export type LspCapabilities = z.infer<typeof LspCapabilitiesSchema>;
 
-export interface LspInitializeResult {
-  capabilities: LspCapabilities;
-  serverInfo?: { name: string; version: string };
-}
+export const LspInitializeParamsSchema = z.object({
+  processId: z.number(),
+  rootUri: z.string().nullable(),
+  capabilities: z.object({
+    textDocument: z.object({
+      completion: z.object({ dynamicRegistration: z.boolean() }),
+      publishDiagnostics: z.object({ relatedInformation: z.boolean() }),
+    }),
+  }),
+  clientInfo: z.object({ name: z.string(), version: z.string() }),
+});
 
-export interface LspDiagnostic {
-  range: { start: { line: number; character: number }; end: { line: number; character: number } };
-  severity: number;
-  code?: string | number;
-  source?: string;
-  message: string;
-}
+export type LspInitializeParams = z.infer<typeof LspInitializeParamsSchema>;
 
-export interface LspHoverResult {
-  contents: { kind: string; value: string } | string;
-  range?: { start: { line: number; character: number }; end: { line: number; character: number } };
-}
+export const LspInitializeResultSchema = z.object({
+  capabilities: LspCapabilitiesSchema,
+  serverInfo: z.object({ name: z.string(), version: z.string() }).optional(),
+});
 
-export interface LspDefinitionResult {
-  uri: string;
-  range: { start: { line: number; character: number }; end: { line: number; character: number } };
-}
+export type LspInitializeResult = z.infer<typeof LspInitializeResultSchema>;
 
-export interface LspSymbolResult {
-  name: string;
-  kind: number;
-  location: { uri: string; range: unknown };
-}
+export const LspDiagnosticSchema = z.object({
+  range: z.object({
+    start: z.object({ line: z.number(), character: z.number() }),
+    end: z.object({ line: z.number(), character: z.number() }),
+  }),
+  severity: z.number(),
+  code: z.union([z.string(), z.number()]).optional(),
+  source: z.string().optional(),
+  message: z.string(),
+});
 
-export interface LspDiagnosticEvent {
-  uri: string;
-  diagnostics: LspDiagnostic[];
-}
+export type LspDiagnostic = z.infer<typeof LspDiagnosticSchema>;
+
+export const LspHoverResultSchema = z.object({
+  contents: z.union([z.object({ kind: z.string(), value: z.string() }), z.string()]),
+  range: z.object({
+    start: z.object({ line: z.number(), character: z.number() }),
+    end: z.object({ line: z.number(), character: z.number() }),
+  }).optional(),
+});
+
+export type LspHoverResult = z.infer<typeof LspHoverResultSchema>;
+
+export const LspDefinitionResultSchema = z.object({
+  uri: z.string(),
+  range: z.object({
+    start: z.object({ line: z.number(), character: z.number() }),
+    end: z.object({ line: z.number(), character: z.number() }),
+  }),
+});
+
+export type LspDefinitionResult = z.infer<typeof LspDefinitionResultSchema>;
+
+export const LspSymbolResultSchema = z.object({
+  name: z.string(),
+  kind: z.number(),
+  location: z.object({ uri: z.string(), range: z.unknown() }),
+});
+
+export type LspSymbolResult = z.infer<typeof LspSymbolResultSchema>;
+
+export const LspDiagnosticEventSchema = z.object({
+  uri: z.string(),
+  diagnostics: z.array(LspDiagnosticSchema),
+});
+
+export type LspDiagnosticEvent = z.infer<typeof LspDiagnosticEventSchema>;
+
+export const LspServerConfigSchema = z.object({
+  command: z.string(),
+  args: z.array(z.string()).optional(),
+  languageId: z.string(),
+  fileExtensions: z.array(z.string()),
+});
+
+export type LspServerConfig = z.infer<typeof LspServerConfigSchema>;
 
 export class LspClient extends EventEmitter {
   private process: ChildProcess | null = null;
@@ -272,7 +307,7 @@ export class LspClient extends EventEmitter {
   private request<T>(method: string, params: unknown): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const id = this.nextId++;
-      this.pending.set(id, { resolve, reject });
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
 
       const message = {
         jsonrpc: "2.0",
@@ -332,13 +367,6 @@ export class LspClient extends EventEmitter {
   private pathToUri(path: string): string {
     return `file://${path}`;
   }
-}
-
-export interface LspServerConfig {
-  command: string;
-  args?: string[];
-  languageId: string;
-  fileExtensions: string[];
 }
 
 export const BUILTIN_LSP_SERVERS: Record<string, LspServerConfig> = {

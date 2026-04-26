@@ -98,14 +98,14 @@ export class MessagingGateway {
 
   async sendTypingIndicator(platform: PlatformType, chatId: string): Promise<void> {
     const adapter = this.adapters.get(platform);
-    if (!adapter) return;
+    if (!adapter || !adapter.sendTypingIndicator) return;
     await adapter.sendTypingIndicator(chatId);
   }
 
   async markAsRead(platform: PlatformType, messageId: string, chatId: string): Promise<void> {
     const adapter = this.adapters.get(platform);
-    if (!adapter) return;
-    await adapter.markAsRead(messageId, chatId);
+    if (!adapter || !adapter.markAsRead) return;
+    await adapter.markAsRead(chatId, messageId);
   }
 
   onMessage(callback: (message: PlatformMessage, platform: PlatformType) => void): void {

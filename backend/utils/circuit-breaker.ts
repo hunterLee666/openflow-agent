@@ -1,11 +1,17 @@
-export type CircuitState = "CLOSED" | "OPEN" | "HALF_OPEN";
+import { z } from "zod";
 
-export interface CircuitBreakerConfig {
-  failureThreshold: number;
-  successThreshold: number;
-  timeoutMs: number;
-  monitorIntervalMs?: number;
-}
+export const CircuitStateSchema = z.enum(["CLOSED", "OPEN", "HALF_OPEN"]);
+
+export type CircuitState = z.infer<typeof CircuitStateSchema>;
+
+export const CircuitBreakerConfigSchema = z.object({
+  failureThreshold: z.number(),
+  successThreshold: z.number(),
+  timeoutMs: z.number(),
+  monitorIntervalMs: z.number().optional(),
+});
+
+export type CircuitBreakerConfig = z.infer<typeof CircuitBreakerConfigSchema>;
 
 export const DEFAULT_CIRCUIT_BREAKER_CONFIG: CircuitBreakerConfig = {
   failureThreshold: 3,
@@ -14,24 +20,28 @@ export const DEFAULT_CIRCUIT_BREAKER_CONFIG: CircuitBreakerConfig = {
   monitorIntervalMs: 10000,
 };
 
-export interface CircuitBreakerEvent {
-  type: "success" | "failure" | "state_change" | "half_open_test";
-  timestamp: number;
-  state: CircuitState;
-  metadata?: Record<string, unknown>;
-}
+export const CircuitBreakerEventSchema: z.ZodType<any> = z.object({
+  type: z.enum(["success", "failure", "state_change", "half_open_test"]),
+  timestamp: z.number(),
+  state: CircuitStateSchema,
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
 
-export interface CircuitBreakerStats {
-  state: CircuitState;
-  failureCount: number;
-  successCount: number;
-  lastFailureTime: number | null;
-  lastSuccessTime: number | null;
-  lastStateChangeTime: number;
-  totalCalls: number;
-  totalFailures: number;
-  totalSuccesses: number;
-}
+export type CircuitBreakerEvent = z.infer<typeof CircuitBreakerEventSchema>;
+
+export const CircuitBreakerStatsSchema = z.object({
+  state: CircuitStateSchema,
+  failureCount: z.number(),
+  successCount: z.number(),
+  lastFailureTime: z.number().nullable(),
+  lastSuccessTime: z.number().nullable(),
+  lastStateChangeTime: z.number(),
+  totalCalls: z.number(),
+  totalFailures: z.number(),
+  totalSuccesses: z.number(),
+});
+
+export type CircuitBreakerStats = z.infer<typeof CircuitBreakerStatsSchema>;
 
 export class CircuitBreakerError extends Error {
   constructor(

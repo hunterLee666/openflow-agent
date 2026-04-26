@@ -2,40 +2,47 @@ import { EventEmitter } from "node:events";
 import { spawn } from "node:child_process";
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { z } from "zod";
 
-export interface ScheduledTask {
-  id: string;
-  name: string;
-  description: string;
-  cronExpression: string;
-  command: string;
-  args?: string[];
-  cwd?: string;
-  env?: Record<string, string>;
-  enabled: boolean;
-  lastRun?: number;
-  nextRun?: number;
-  runCount: number;
-  lastResult?: TaskExecutionResult;
-  metadata?: Record<string, unknown>;
-}
+export const ScheduledTaskSchema: z.ZodType<any> = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  cronExpression: z.string(),
+  command: z.string(),
+  args: z.array(z.string()).optional(),
+  cwd: z.string().optional(),
+  env: z.record(z.string(), z.string()).optional(),
+  enabled: z.boolean(),
+  lastRun: z.number().optional(),
+  nextRun: z.number().optional(),
+  runCount: z.number(),
+  lastResult: z.lazy(() => TaskExecutionResultSchema.optional()),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
 
-export interface TaskExecutionResult {
-  taskId: string;
-  startTime: number;
-  endTime: number;
-  duration: number;
-  exitCode: number | null;
-  stdout: string;
-  stderr: string;
-  error?: string;
-}
+export type ScheduledTask = z.infer<typeof ScheduledTaskSchema>;
 
-export interface TaskSchedulerConfig {
-  dataDir: string;
-  maxHistory: number;
-  maxConcurrent: number;
-}
+export const TaskExecutionResultSchema = z.object({
+  taskId: z.string(),
+  startTime: z.number(),
+  endTime: z.number(),
+  duration: z.number(),
+  exitCode: z.number().nullable(),
+  stdout: z.string(),
+  stderr: z.string(),
+  error: z.string().optional(),
+});
+
+export type TaskExecutionResult = z.infer<typeof TaskExecutionResultSchema>;
+
+export const TaskSchedulerConfigSchema = z.object({
+  dataDir: z.string(),
+  maxHistory: z.number(),
+  maxConcurrent: z.number(),
+});
+
+export type TaskSchedulerConfig = z.infer<typeof TaskSchedulerConfigSchema>;
 
 const DEFAULT_CONFIG: TaskSchedulerConfig = {
   dataDir: process.env.HOME ? `${process.env.HOME}/.openflow/tasks` : ".openflow/tasks",

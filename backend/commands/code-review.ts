@@ -1,27 +1,35 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
 
-export interface ReviewResult {
-  file: string;
-  issues: CodeIssue[];
-  summary: string;
-  score: number;
-}
+export const CodeIssueSeveritySchema = z.enum(["critical", "warning", "info"]);
+export const CodeIssueCategorySchema = z.enum(["security", "performance", "style", "bug", "maintainability"]);
 
-export interface CodeIssue {
-  line: number;
-  severity: "critical" | "warning" | "info";
-  category: "security" | "performance" | "style" | "bug" | "maintainability";
-  message: string;
-  suggestion?: string;
-}
+export const CodeIssueSchema = z.object({
+  line: z.number(),
+  severity: CodeIssueSeveritySchema,
+  category: CodeIssueCategorySchema,
+  message: z.string(),
+  suggestion: z.string().optional(),
+});
 
-export interface ReviewConfig {
-  maxFiles?: number;
-  maxLinesPerFile?: number;
-  categories?: Array<"security" | "performance" | "style" | "bug" | "maintainability">;
-  ignorePatterns?: string[];
-}
+export const ReviewConfigSchema = z.object({
+  maxFiles: z.number().optional(),
+  maxLinesPerFile: z.number().optional(),
+  categories: z.array(CodeIssueCategorySchema).optional(),
+  ignorePatterns: z.array(z.string()).optional(),
+});
+
+export const ReviewResultSchema = z.object({
+  file: z.string(),
+  issues: z.array(CodeIssueSchema),
+  summary: z.string(),
+  score: z.number(),
+});
+
+export type CodeIssue = z.infer<typeof CodeIssueSchema>;
+export type ReviewConfig = z.infer<typeof ReviewConfigSchema>;
+export type ReviewResult = z.infer<typeof ReviewResultSchema>;
 
 const DEFAULT_CONFIG: Required<ReviewConfig> = {
   maxFiles: 50,

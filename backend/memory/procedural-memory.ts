@@ -1,31 +1,39 @@
-export interface ProceduralMemoryEntry {
-  id: string;
-  skillName: string;
-  description: string;
-  steps: ProceduralStep[];
-  successCount: number;
-  failureCount: number;
-  lastUsedAt: number;
-  createdAt: number;
-  version: number;
-  confidence: number;
-}
+import { z } from "zod";
 
-export interface ProceduralStep {
-  order: number;
-  action: string;
-  parameters?: Record<string, unknown>;
-  expectedOutput?: string;
-  tools?: string[];
-}
+export const ProceduralStepSchema = z.object({
+  order: z.number(),
+  action: z.string(),
+  parameters: z.record(z.string(), z.unknown()).optional(),
+  expectedOutput: z.string().optional(),
+  tools: z.array(z.string()).optional(),
+});
 
-export interface SkillExecutionRecord {
-  skillName: string;
-  success: boolean;
-  duration: number;
-  timestamp: number;
-  feedback?: string;
-}
+export type ProceduralStep = z.infer<typeof ProceduralStepSchema>;
+
+export const ProceduralMemoryEntrySchema = z.object({
+  id: z.string(),
+  skillName: z.string(),
+  description: z.string(),
+  steps: z.array(ProceduralStepSchema),
+  successCount: z.number(),
+  failureCount: z.number(),
+  lastUsedAt: z.number(),
+  createdAt: z.number(),
+  version: z.number(),
+  confidence: z.number(),
+});
+
+export type ProceduralMemoryEntry = z.infer<typeof ProceduralMemoryEntrySchema>;
+
+export const SkillExecutionRecordSchema = z.object({
+  skillName: z.string(),
+  success: z.boolean(),
+  duration: z.number(),
+  timestamp: z.number(),
+  feedback: z.string().optional(),
+});
+
+export type SkillExecutionRecord = z.infer<typeof SkillExecutionRecordSchema>;
 
 export class ProceduralMemory {
   private skills: Map<string, ProceduralMemoryEntry>;

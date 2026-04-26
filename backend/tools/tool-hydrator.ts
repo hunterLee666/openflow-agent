@@ -1,16 +1,21 @@
 import type { ToolManualEntry } from "./tool-manual-registry.js";
+import { z } from "zod";
 
-export interface ToolStub {
-  name: string;
-  description: string;
-  isReadOnly?: boolean;
-}
+export const ToolStubSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  isReadOnly: z.boolean().optional(),
+});
 
-export interface ToolHydrationResult {
-  name: string;
-  manual: ToolManualEntry | null;
-  hydratedAt: number;
-}
+export type ToolStub = z.infer<typeof ToolStubSchema>;
+
+export const ToolHydrationResultSchema = z.object({
+  name: z.string(),
+  manual: z.any().nullable(),
+  hydratedAt: z.number(),
+});
+
+export type ToolHydrationResult = z.infer<typeof ToolHydrationResultSchema>;
 
 export interface ToolLoader {
   loadTool(name: string): Promise<ToolManualEntry | null>;

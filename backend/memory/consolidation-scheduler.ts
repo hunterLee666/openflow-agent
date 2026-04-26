@@ -1,29 +1,37 @@
-export interface ConsolidationConfig {
-  intervalMs: number;
-  batchSize: number;
-  similarityThreshold: number;
-  maxConsolidationTimeMs: number;
-  enableAutoPruning: boolean;
-  pruningConfidenceThreshold: number;
-  offPeakHours: [number, number];
-}
+import { z } from 'zod';
 
-export interface ConsolidationStats {
-  totalConsolidations: number;
-  lastConsolidation: number | null;
-  totalMemoriesConsolidated: number;
-  totalMemoriesPruned: number;
-  averageConsolidationTimeMs: number;
-  lastRunDurationMs: number | null;
-}
+export const ConsolidationConfigSchema = z.object({
+  intervalMs: z.number(),
+  batchSize: z.number(),
+  similarityThreshold: z.number(),
+  maxConsolidationTimeMs: z.number(),
+  enableAutoPruning: z.boolean(),
+  pruningConfidenceThreshold: z.number(),
+  offPeakHours: z.tuple([z.number(), z.number()]),
+});
 
-export interface ConsolidationResult {
-  consolidated: number;
-  pruned: number;
-  merged: number;
-  durationMs: number;
-  timestamp: number;
-}
+export type ConsolidationConfig = z.infer<typeof ConsolidationConfigSchema>;
+
+export const ConsolidationStatsSchema = z.object({
+  totalConsolidations: z.number(),
+  lastConsolidation: z.number().nullable(),
+  totalMemoriesConsolidated: z.number(),
+  totalMemoriesPruned: z.number(),
+  averageConsolidationTimeMs: z.number(),
+  lastRunDurationMs: z.number().nullable(),
+});
+
+export type ConsolidationStats = z.infer<typeof ConsolidationStatsSchema>;
+
+export const ConsolidationResultSchema = z.object({
+  consolidated: z.number(),
+  pruned: z.number(),
+  merged: z.number(),
+  durationMs: z.number(),
+  timestamp: z.number(),
+});
+
+export type ConsolidationResult = z.infer<typeof ConsolidationResultSchema>;
 
 type ConsolidationCallback = (result: ConsolidationResult) => void;
 

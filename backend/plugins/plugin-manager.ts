@@ -13,6 +13,7 @@ import type {
   McpComponent,
 } from "./plugin-types.js";
 import { PluginLoader } from "./plugin-loader.js";
+import { z } from "zod";
 
 export enum PluginStatus {
   LOADED = "loaded",
@@ -21,7 +22,34 @@ export enum PluginStatus {
   ERROR = "error",
 }
 
+export const PluginStatusSchema = z.nativeEnum(PluginStatus);
+
 export type PluginComponentType = "command" | "agent" | "skill" | "hook" | "mcp";
+export const PluginComponentTypeSchema = z.enum(["command", "agent", "skill", "hook", "mcp"]);
+
+export type PluginEventType = "registered" | "unregistered" | "enabled" | "disabled" | "reloaded" | "activated" | "deactivated" | "error";
+export const PluginEventTypeSchema = z.enum([
+  "registered",
+  "unregistered",
+  "enabled",
+  "disabled",
+  "reloaded",
+  "activated",
+  "deactivated",
+  "error",
+]);
+
+export interface PluginEvent {
+  type: PluginEventType;
+  pluginName: string;
+  timestamp: number;
+}
+
+export const PluginEventSchema = z.object({
+  type: PluginEventTypeSchema,
+  pluginName: z.string(),
+  timestamp: z.number(),
+});
 
 export interface PluginRegistryEntry {
   manifest: PluginManifest;
@@ -30,14 +58,6 @@ export interface PluginRegistryEntry {
   instance: unknown;
   activatedAt?: number;
   source: string;
-}
-
-export type PluginEventType = "registered" | "unregistered" | "enabled" | "disabled" | "reloaded" | "activated" | "deactivated" | "error";
-
-export interface PluginEvent {
-  type: PluginEventType;
-  pluginName: string;
-  timestamp: number;
 }
 
 export interface PluginModule {
@@ -120,7 +140,7 @@ export class PluginManager extends EventEmitter {
 
     try {
       for (const component of entry.info.components) {
-        if (component.entry) {
+        if ("entry" in component && component.entry) {
           const module = (await this.loader.loadComponentModule(component.entry)) as PluginModule;
           if (module.onBeforeActivate) {
             await module.onBeforeActivate();
@@ -132,7 +152,7 @@ export class PluginManager extends EventEmitter {
       entry.activatedAt = Date.now();
 
       for (const component of entry.info.components) {
-        if (component.entry) {
+        if ("entry" in component && component.entry) {
           const module = (await this.loader.loadComponentModule(component.entry)) as PluginModule;
           if (module.onAfterActivate) {
             await module.onAfterActivate();
@@ -170,7 +190,7 @@ export class PluginManager extends EventEmitter {
 
     try {
       for (const component of entry.info.components) {
-        if (component.entry) {
+        if ("entry" in component && component.entry) {
           const module = (await this.loader.loadComponentModule(component.entry)) as PluginModule;
           if (module.onBeforeDeactivate) {
             await module.onBeforeDeactivate();
@@ -179,7 +199,7 @@ export class PluginManager extends EventEmitter {
       }
 
       for (const component of entry.info.components) {
-        if (component.entry) {
+        if ("entry" in component && component.entry) {
           const module = (await this.loader.loadComponentModule(component.entry)) as PluginModule;
           if (module.deactivate) {
             await module.deactivate();
@@ -191,7 +211,7 @@ export class PluginManager extends EventEmitter {
       entry.instance = undefined;
 
       for (const component of entry.info.components) {
-        if (component.entry) {
+        if ("entry" in component && component.entry) {
           const module = (await this.loader.loadComponentModule(component.entry)) as PluginModule;
           if (module.onAfterDeactivate) {
             await module.onAfterDeactivate();
@@ -370,8 +390,8 @@ export class PluginManager extends EventEmitter {
       if (entry.status !== PluginStatus.ACTIVATED) continue;
 
       for (const component of entry.info.components) {
-        if (component.type === "skill" || component.type === "command") {
-          const triggers = (component.config?.trigger as string[]) || [];
+        if (component.type === "skill") {
+          const triggers = component.config.trigger || [];
           if (triggers.some((t: string) => lower.includes(t.toLowerCase()))) {
             return component;
           }
@@ -403,7 +423,7 @@ export class PluginManager extends EventEmitter {
 
       let healthy = true;
       for (const component of entry.info.components) {
-        if (component.entry) {
+        if ("entry" in component && component.entry) {
           try {
             const module = (await this.loader.loadComponentModule(component.entry)) as PluginModule;
             if (module.healthCheck) {

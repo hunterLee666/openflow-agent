@@ -1,33 +1,43 @@
-export interface DialogueTurn {
-  speaker: string;
-  content: string;
-  timestamp?: string;
-}
+import { z } from "zod";
 
-export interface DialogueWindow {
-  turns: DialogueTurn[];
-  startTime?: string;
-  endTime?: string;
-}
+export const DialogueTurnSchema = z.object({
+  speaker: z.string(),
+  content: z.string(),
+  timestamp: z.string().optional(),
+});
 
-export interface MemoryUnit {
-  id: string;
-  content: string;
-  entities: string[];
-  timestamp: string;
-  salience: number;
-  sourceType: 'dialogue' | 'observation' | 'fact';
-  originalText?: string;
-  metadata?: Record<string, unknown>;
-}
+export type DialogueTurn = z.infer<typeof DialogueTurnSchema>;
 
-export interface CompressionConfig {
-  windowSize: number;
-  entropyThreshold: number;
-  minSalience: number;
-  enableCoreferenceResolution: boolean;
-  enableTimestampAnchoring: boolean;
-}
+export const DialogueWindowSchema = z.object({
+  turns: z.array(DialogueTurnSchema),
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+});
+
+export type DialogueWindow = z.infer<typeof DialogueWindowSchema>;
+
+export const MemoryUnitSchema = z.object({
+  id: z.string(),
+  content: z.string(),
+  entities: z.array(z.string()),
+  timestamp: z.string(),
+  salience: z.number(),
+  sourceType: z.enum(['dialogue', 'observation', 'fact']),
+  originalText: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type MemoryUnit = z.infer<typeof MemoryUnitSchema>;
+
+export const CompressionConfigSchema = z.object({
+  windowSize: z.number(),
+  entropyThreshold: z.number(),
+  minSalience: z.number(),
+  enableCoreferenceResolution: z.boolean(),
+  enableTimestampAnchoring: z.boolean(),
+});
+
+export type CompressionConfig = z.infer<typeof CompressionConfigSchema>;
 
 const DEFAULT_CONFIG: CompressionConfig = {
   windowSize: 5,

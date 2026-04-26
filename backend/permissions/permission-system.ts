@@ -4,20 +4,25 @@ import { createPermissionPipeline } from "./permission-pipeline.js";
 import { mergeRules, createDefaultRules, createEnterpriseRules, type RuleLayer } from "./rule-merger.js";
 import { createSandboxExecutor, type SandboxConfig } from "./sandbox-executor.js";
 import type { OpenFlowSettings } from "../runtime/layered-config.js";
+import { z } from "zod";
 
-export interface PermissionSystemConfig {
-  mode: PermissionMode;
-  rules?: PermissionRule[];
-  preapprovedCommands?: string[];
-  sandbox?: SandboxConfig;
-  projectRoot: string;
-  sessionId?: string;
-}
+export const PermissionSystemConfigSchema = z.object({
+  mode: z.nativeEnum(PermissionMode),
+  rules: z.array(z.custom<PermissionRule>()).optional(),
+  preapprovedCommands: z.array(z.string()).optional(),
+  sandbox: z.custom<SandboxConfig>().optional(),
+  projectRoot: z.string(),
+  sessionId: z.string().optional(),
+});
 
-export interface PermissionCheckInput {
-  toolName: string;
-  input: unknown;
-}
+export type PermissionSystemConfig = z.infer<typeof PermissionSystemConfigSchema>;
+
+export const PermissionCheckInputSchema = z.object({
+  toolName: z.string(),
+  input: z.unknown(),
+});
+
+export type PermissionCheckInput = z.infer<typeof PermissionCheckInputSchema>;
 
 export class PermissionSystem {
   private pipeline = createPermissionPipeline();

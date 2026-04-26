@@ -2,16 +2,20 @@ import type { PermissionRule } from "./types.js";
 import { PermissionRuleSchema } from "./types.js";
 import { z } from "zod";
 
-export interface RuleLayer {
-  name: string;
-  rules: PermissionRule[];
-  priority: number;
-}
+export const RuleLayerSchema = z.object({
+  name: z.string(),
+  rules: z.array(PermissionRuleSchema),
+  priority: z.number(),
+});
 
-export interface MergedRules {
-  rules: PermissionRule[];
-  warnings: string[];
-}
+export type RuleLayer = z.infer<typeof RuleLayerSchema>;
+
+export const MergedRulesSchema = z.object({
+  rules: z.array(PermissionRuleSchema),
+  warnings: z.array(z.string()),
+});
+
+export type MergedRules = z.infer<typeof MergedRulesSchema>;
 
 export const RuleConfigSchema = z.object({
   version: z.number().optional(),

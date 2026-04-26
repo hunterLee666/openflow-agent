@@ -177,16 +177,7 @@ export class EnhancedMemoryCore {
       this.confidenceScorer = createConfidenceScorer();
     }
 
-    this.tripleIndex = createTripleIndex(
-      this.hnswIndex
-        ? {
-            vectorConfig: {
-              backend: "hnsw",
-              hnswIndex: this.hnswIndex,
-            },
-          }
-        : undefined
-    );
+    this.tripleIndex = createTripleIndex();
 
     if (this.config.enableConsolidationScheduler) {
       this.consolidationScheduler = createConsolidationScheduler({

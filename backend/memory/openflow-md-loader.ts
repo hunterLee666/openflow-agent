@@ -2,19 +2,24 @@ import { readFile, stat } from "node:fs/promises";
 import { join, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { existsSync } from "node:fs";
+import { z } from "zod";
 
-export interface OpenflowMdLayer {
-  source: "global" | "project" | "directory" | "local";
-  path: string;
-  content: string;
-  lineCount: number;
-}
+export const OpenflowMdLayerSchema = z.object({
+  source: z.enum(["global", "project", "directory", "local"]),
+  path: z.string(),
+  content: z.string(),
+  lineCount: z.number(),
+});
 
-export interface OpenflowMdStackResult {
-  layers: OpenflowMdLayer[];
-  mergedContent: string;
-  warnings: string[];
-}
+export type OpenflowMdLayer = z.infer<typeof OpenflowMdLayerSchema>;
+
+export const OpenflowMdStackResultSchema = z.object({
+  layers: z.array(OpenflowMdLayerSchema),
+  mergedContent: z.string(),
+  warnings: z.array(z.string()),
+});
+
+export type OpenflowMdStackResult = z.infer<typeof OpenflowMdStackResultSchema>;
 
 const GLOBAL_OPENFLOW_MD = join(homedir(), ".openflow", "OPENFLOW.md");
 const LOCAL_OPENFLOW_MD = ".openflow/OPENFLOW.local.md";

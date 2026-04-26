@@ -1,29 +1,34 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
+import { z } from "zod";
 
-export interface ModelPricing {
-  model: string;
-  provider: string;
-  providerId: string;
-  modelId: string;
-  inputCostPerMTok: number;
-  outputCostPerMTok: number;
-  cacheReadCostPerMTok?: number;
-  cacheWriteCostPerMTok?: number;
-  contextLimit?: number;
-  outputLimit?: number;
-  supportsToolCall?: boolean;
-  supportsReasoning?: boolean;
-  lastUpdated: string;
-}
+export const ModelPricingSchema = z.object({
+  model: z.string(),
+  provider: z.string(),
+  providerId: z.string(),
+  modelId: z.string(),
+  inputCostPerMTok: z.number(),
+  outputCostPerMTok: z.number(),
+  cacheReadCostPerMTok: z.number().optional(),
+  cacheWriteCostPerMTok: z.number().optional(),
+  contextLimit: z.number().optional(),
+  outputLimit: z.number().optional(),
+  supportsToolCall: z.boolean().optional(),
+  supportsReasoning: z.boolean().optional(),
+  lastUpdated: z.string(),
+});
 
-export interface PricingCache {
-  models: Record<string, ModelPricing>;
-  lastFetchTime: string;
-  source: string;
-  totalModels: number;
-}
+export type ModelPricing = z.infer<typeof ModelPricingSchema>;
+
+export const PricingCacheSchema = z.object({
+  models: z.record(z.string(), ModelPricingSchema),
+  lastFetchTime: z.string(),
+  source: z.string(),
+  totalModels: z.number(),
+});
+
+export type PricingCache = z.infer<typeof PricingCacheSchema>;
 
 const PRICING_CACHE_FILE = ".openflow/pricing-cache.json";
 const MODELS_DEV_API = "https://models.dev/api.json";

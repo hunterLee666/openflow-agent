@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { z } from "zod";
 
 export enum WorkflowStepType {
   TEXT = "text",
@@ -11,11 +12,15 @@ export enum WorkflowStepType {
   VISUALIZATION = "visualization",
 }
 
+export const WorkflowStepTypeSchema = z.nativeEnum(WorkflowStepType);
+
 export enum WorkflowMode {
   SEQUENTIAL = "sequential",
   PARALLEL = "parallel",
   DAG = "dag",
 }
+
+export const WorkflowModeSchema = z.nativeEnum(WorkflowMode);
 
 export interface WorkflowStep {
   id: string;
@@ -43,6 +48,32 @@ export interface WorkflowStep {
   output?: string;
 }
 
+export const WorkflowStepSchema: z.ZodType<WorkflowStep> = z.object({
+  id: z.string(),
+  type: WorkflowStepTypeSchema,
+  description: z.string().optional(),
+  prompt: z.string().optional(),
+  script: z.string().optional(),
+  agent: z.string().optional(),
+  condition: z.string().optional(),
+  loop: z.object({
+    items: z.string(),
+    variable: z.string(),
+  }).optional(),
+  visualization: z.object({
+    type: z.enum(["html", "chart", "animation"]),
+    title: z.string().optional(),
+    config: z.record(z.string(), z.unknown()).optional(),
+    content: z.string().optional(),
+  }).optional(),
+  needs: z.array(z.string()).optional(),
+  timeout: z.number().optional(),
+  retry: z.number().optional(),
+  onError: z.enum(["abort", "continue", "skip_dependent"]).optional(),
+  variables: z.record(z.string(), z.string()).optional(),
+  output: z.string().optional(),
+});
+
 export interface WorkflowDefinition {
   name: string;
   description: string;
@@ -54,6 +85,17 @@ export interface WorkflowDefinition {
   onError?: "abort" | "continue";
 }
 
+export const WorkflowDefinitionSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  mode: WorkflowModeSchema,
+  steps: z.array(WorkflowStepSchema),
+  variables: z.record(z.string(), z.string()).optional(),
+  timeout: z.number().optional(),
+  maxConcurrency: z.number().optional(),
+  onError: z.enum(["abort", "continue"]).optional(),
+});
+
 export enum WorkflowStatus {
   PENDING = "pending",
   RUNNING = "running",
@@ -62,6 +104,8 @@ export enum WorkflowStatus {
   CANCELLED = "cancelled",
 }
 
+export const WorkflowStatusSchema = z.nativeEnum(WorkflowStatus);
+
 export enum StepStatus {
   PENDING = "pending",
   RUNNING = "running",
@@ -69,6 +113,8 @@ export enum StepStatus {
   FAILED = "failed",
   SKIPPED = "skipped",
 }
+
+export const StepStatusSchema = z.nativeEnum(StepStatus);
 
 export interface StepResult {
   stepId: string;
@@ -79,6 +125,15 @@ export interface StepResult {
   variables: Record<string, unknown>;
 }
 
+export const StepResultSchema: z.ZodType<StepResult> = z.object({
+  stepId: z.string(),
+  status: StepStatusSchema,
+  output: z.string().optional(),
+  error: z.string().optional(),
+  duration: z.number(),
+  variables: z.record(z.string(), z.unknown()),
+});
+
 export interface WorkflowResult {
   workflowId: string;
   status: WorkflowStatus;
@@ -87,6 +142,15 @@ export interface WorkflowResult {
   duration: number;
   error?: string;
 }
+
+export const WorkflowResultSchema: z.ZodType<WorkflowResult> = z.object({
+  workflowId: z.string(),
+  status: WorkflowStatusSchema,
+  stepResults: z.array(StepResultSchema),
+  variables: z.record(z.string(), z.unknown()),
+  duration: z.number(),
+  error: z.string().optional(),
+});
 
 export class WorkflowEngine extends EventEmitter {
   private context: Record<string, unknown> = {};

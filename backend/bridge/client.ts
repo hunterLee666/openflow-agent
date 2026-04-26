@@ -15,20 +15,23 @@ import {
   createRpcNotification,
   isRpcResponse,
 } from './protocol.js';
+import { z } from 'zod';
 
-interface PendingRequest {
-  resolve: (value: unknown) => void;
+interface PendingRequest<T = unknown> {
+  resolve: (value: T) => void;
   reject: (reason: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
 }
 
-export interface BridgeClientOptions {
-  transportConfig: TransportConfig;
-  jwtToken?: string;
-  defaultTimeout?: number;
-  sessionId?: string;
-  autoHandshake?: boolean;
-}
+export const BridgeClientOptionsSchema = z.object({
+  transportConfig: z.any(),
+  jwtToken: z.string().optional(),
+  defaultTimeout: z.number().optional(),
+  sessionId: z.string().optional(),
+  autoHandshake: z.boolean().optional(),
+});
+
+export type BridgeClientOptions = z.infer<typeof BridgeClientOptionsSchema>;
 
 export const DEFAULT_CLIENT_OPTIONS: Partial<BridgeClientOptions> = {
   defaultTimeout: 30000,
@@ -37,7 +40,7 @@ export const DEFAULT_CLIENT_OPTIONS: Partial<BridgeClientOptions> = {
 
 export class BridgeClient extends EventEmitter {
   private transport: Transport | null = null;
-  private pendingRequests = new Map<string, PendingRequest>();
+  private pendingRequests = new Map<string, PendingRequest<unknown>>();
   private jwtToken: string | undefined;
   private sessionId: string | undefined;
   private defaultTimeout: number;
@@ -114,7 +117,7 @@ export class BridgeClient extends EventEmitter {
       }, timeout ?? this.defaultTimeout);
 
       this.pendingRequests.set(id, {
-        resolve,
+        resolve: resolve as (value: unknown) => void,
         reject,
         timeout: requestTimeout,
       });

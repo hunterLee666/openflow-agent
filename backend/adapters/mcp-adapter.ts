@@ -1,40 +1,47 @@
 import type { CapabilityPlugin, CapabilityContext, ToolDefinition } from "../types/index.js";
-import { CapabilityType } from "../types/index.js";
+import { z } from "zod";
 
-export interface MCPServerConfig {
-  command: string;
-  args: string[];
-  env?: Record<string, string>;
-  timeout?: number;
-}
+export const MCPServerConfigSchema = z.object({
+  command: z.string(),
+  args: z.array(z.string()),
+  env: z.record(z.string(), z.string()).optional(),
+  timeout: z.number().optional(),
+});
 
-export interface MCPToolInfo {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-}
+export type MCPServerConfig = z.infer<typeof MCPServerConfigSchema>;
 
-export interface MCPServerManifest {
-  name: string;
-  version: string;
-  description: string;
-  servers: MCPServerConfig[];
-  toolFilter?: string[];
-}
+export const MCPToolInfoSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  inputSchema: z.record(z.string(), z.unknown()),
+});
+
+export type MCPToolInfo = z.infer<typeof MCPToolInfoSchema>;
+
+export const MCPServerManifestSchema = z.object({
+  name: z.string(),
+  version: z.string(),
+  description: z.string(),
+  servers: z.array(MCPServerConfigSchema),
+  toolFilter: z.array(z.string()).optional(),
+});
+
+export type MCPServerManifest = z.infer<typeof MCPServerManifestSchema>;
 
 export class MCPPluginAdapter implements CapabilityPlugin {
   private serverConfigs: MCPServerConfig[];
   private toolFilter?: string[];
 
   constructor(manifest: MCPServerManifest) {
-    this.serverConfigs = manifest.servers;
-    this.toolFilter = manifest.toolFilter;
+    const validated = MCPServerManifestSchema.parse(manifest);
+    this.serverConfigs = validated.servers;
+    this.toolFilter = validated.toolFilter;
   }
 
   manifest = {
     name: "mcp-server",
     version: "1.0.0",
-    type: CapabilityType.TOOL as CapabilityType,
+    type: "tool" as const,
     description: "MCP server plugin for extended tool capabilities",
     triggers: ["mcp"],
   };

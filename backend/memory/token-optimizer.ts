@@ -1,40 +1,52 @@
-export interface TokenCount {
-  text: string;
-  tokenCount: number;
-  characterCount: number;
-  wordCount: number;
-}
+import { z } from "zod";
 
-export interface CompressionStats {
-  originalTokens: number;
-  compressedTokens: number;
-  compressionRatio: number;
-  tokenSavings: number;
-}
+export const TokenCountSchema = z.object({
+  text: z.string(),
+  tokenCount: z.number(),
+  characterCount: z.number(),
+  wordCount: z.number(),
+});
 
-export interface TokenBudget {
-  maxTokens: number;
-  usedTokens: number;
-  remainingTokens: number;
-  utilizationRate: number;
-}
+export type TokenCount = z.infer<typeof TokenCountSchema>;
 
-export interface OptimizedMemory {
-  content: string;
-  tokenCount: number;
-  importance: number;
-  source: string;
-  timestamp: string;
-}
+export const CompressionStatsSchema = z.object({
+  originalTokens: z.number(),
+  compressedTokens: z.number(),
+  compressionRatio: z.number(),
+  tokenSavings: z.number(),
+});
 
-export interface TokenOptimizerConfig {
-  maxContextTokens: number;
-  maxMemoryTokens: number;
-  maxSingleMemoryTokens: number;
-  compressionThreshold: number;
-  enableSmartTruncation: boolean;
-  enablePriorityRanking: boolean;
-}
+export type CompressionStats = z.infer<typeof CompressionStatsSchema>;
+
+export const TokenBudgetSchema = z.object({
+  maxTokens: z.number(),
+  usedTokens: z.number(),
+  remainingTokens: z.number(),
+  utilizationRate: z.number(),
+});
+
+export type TokenBudget = z.infer<typeof TokenBudgetSchema>;
+
+export const OptimizedMemorySchema = z.object({
+  content: z.string(),
+  tokenCount: z.number(),
+  importance: z.number(),
+  source: z.string(),
+  timestamp: z.string(),
+});
+
+export type OptimizedMemory = z.infer<typeof OptimizedMemorySchema>;
+
+export const TokenOptimizerConfigSchema = z.object({
+  maxContextTokens: z.number(),
+  maxMemoryTokens: z.number(),
+  maxSingleMemoryTokens: z.number(),
+  compressionThreshold: z.number(),
+  enableSmartTruncation: z.boolean(),
+  enablePriorityRanking: z.boolean(),
+});
+
+export type TokenOptimizerConfig = z.infer<typeof TokenOptimizerConfigSchema>;
 
 const DEFAULT_CONFIG: TokenOptimizerConfig = {
   maxContextTokens: 4000,

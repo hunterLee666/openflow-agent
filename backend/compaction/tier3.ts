@@ -1,14 +1,38 @@
-export interface Tier3Summary {
-  intent: string;
-  concepts: string[];
-  files: { path: string; note: string }[];
-  errors: { title: string; repro: string }[];
-  messageHighlights: string[];
-  tasks: { id: string; done: boolean; text: string }[];
-  currentFocus: string;
-  environment: string;
-  strippedCoT: { keptConclusions: string[] };
-}
+import { z } from "zod";
+
+export const Tier3FileSchema = z.object({
+  path: z.string(),
+  note: z.string(),
+});
+
+export const Tier3ErrorSchema = z.object({
+  title: z.string(),
+  repro: z.string(),
+});
+
+export const Tier3TaskSchema = z.object({
+  id: z.string(),
+  done: z.boolean(),
+  text: z.string(),
+});
+
+export const StrippedCoTSchema = z.object({
+  keptConclusions: z.array(z.string()),
+});
+
+export const Tier3SummarySchema = z.object({
+  intent: z.string(),
+  concepts: z.array(z.string()),
+  files: z.array(Tier3FileSchema),
+  errors: z.array(Tier3ErrorSchema),
+  messageHighlights: z.array(z.string()),
+  tasks: z.array(Tier3TaskSchema),
+  currentFocus: z.string(),
+  environment: z.string(),
+  strippedCoT: StrippedCoTSchema,
+});
+
+export type Tier3Summary = z.infer<typeof Tier3SummarySchema>;
 
 export function buildTier3SummaryPrompt(messages: Array<{ role: string; content: unknown }>): string {
   const conversationText = messages

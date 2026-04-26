@@ -1,51 +1,64 @@
 import { readFile, writeFile, mkdir, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
+import { z } from "zod";
 
-export interface SessionEvent {
-  type: 'message' | 'tool_use' | 'file_change' | 'observation';
-  content: string;
-  timestamp: number;
-  metadata?: Record<string, unknown>;
-}
+export const SessionEventSchema = z.object({
+  type: z.enum(['message', 'tool_use', 'file_change', 'observation']),
+  content: z.string(),
+  timestamp: z.number(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
 
-export interface SessionObservation {
-  type: 'decision' | 'discovery' | 'learning' | 'preference';
-  content: string;
-  evidence: string;
-  timestamp: number;
-}
+export type SessionEvent = z.infer<typeof SessionEventSchema>;
 
-export interface SessionRecord {
-  sessionId: string;
-  startedAt: number;
-  endedAt?: number;
-  events: SessionEvent[];
-  observations: SessionObservation[];
-  summary?: string;
-  metadata: Record<string, unknown>;
-}
+export const SessionObservationSchema = z.object({
+  type: z.enum(['decision', 'discovery', 'learning', 'preference']),
+  content: z.string(),
+  evidence: z.string(),
+  timestamp: z.number(),
+});
 
-export interface ContextBundle {
-  sessionId: string;
-  memorySessionId: string;
-  context: string;
-  relevantMemories: Array<{ content: string; source: string }>;
-}
+export type SessionObservation = z.infer<typeof SessionObservationSchema>;
 
-export interface SessionReport {
-  sessionId: string;
-  entriesStored: number;
-  observationsExtracted: number;
-  summary: string;
-}
+export const SessionRecordSchema = z.object({
+  sessionId: z.string(),
+  startedAt: z.number(),
+  endedAt: z.number().optional(),
+  events: z.array(SessionEventSchema),
+  observations: z.array(SessionObservationSchema),
+  summary: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()),
+});
 
-export interface SessionManagerConfig {
-  sessionDir: string;
-  maxSessions: number;
-  maxEventsPerSession: number;
-  enableAutoExtraction: boolean;
-}
+export type SessionRecord = z.infer<typeof SessionRecordSchema>;
+
+export const ContextBundleSchema = z.object({
+  sessionId: z.string(),
+  memorySessionId: z.string(),
+  context: z.string(),
+  relevantMemories: z.array(z.object({ content: z.string(), source: z.string() })),
+});
+
+export type ContextBundle = z.infer<typeof ContextBundleSchema>;
+
+export const SessionReportSchema = z.object({
+  sessionId: z.string(),
+  entriesStored: z.number(),
+  observationsExtracted: z.number(),
+  summary: z.string(),
+});
+
+export type SessionReport = z.infer<typeof SessionReportSchema>;
+
+export const SessionManagerConfigSchema = z.object({
+  sessionDir: z.string(),
+  maxSessions: z.number(),
+  maxEventsPerSession: z.number(),
+  enableAutoExtraction: z.boolean(),
+});
+
+export type SessionManagerConfig = z.infer<typeof SessionManagerConfigSchema>;
 
 const DEFAULT_CONFIG: SessionManagerConfig = {
   sessionDir: '.openflow/sessions',

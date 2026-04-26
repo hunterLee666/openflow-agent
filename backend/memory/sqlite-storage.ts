@@ -1,32 +1,37 @@
 import { mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
 
-export interface MemoryEntry {
-  id: string;
-  type: string;
-  content: string;
-  tags: string[];
-  importance: number;
-  createdAt: number;
-  updatedAt: number;
-  sessionId?: string;
-  metadata?: Record<string, unknown>;
-}
+export const MemoryEntrySchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  content: z.string(),
+  tags: z.array(z.string()),
+  importance: z.number(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  sessionId: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
 
-export interface MemoryQuery {
-  type?: string;
-  tags?: string[];
-  minImportance?: number;
-  sessionId?: string;
-  limit?: number;
-  offset?: number;
-}
+export type MemoryEntry = z.infer<typeof MemoryEntrySchema>;
+
+export const MemoryQuerySchema = z.object({
+  type: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  minImportance: z.number().optional(),
+  sessionId: z.string().optional(),
+  limit: z.number().optional(),
+  offset: z.number().optional(),
+});
+
+export type MemoryQuery = z.infer<typeof MemoryQuerySchema>;
 
 interface Database {
   prepare(sql: string): Statement;
   exec(sql: string): void;
   close(): void;
-  transaction(fn: () => void): void;
+  transaction<T>(fn: () => T): () => T;
 }
 
 interface Statement {
@@ -111,7 +116,7 @@ export class SQLiteStorage {
       'DELETE FROM memory_tags WHERE memory_id = ?'
     );
 
-    this.db.transaction(() => {
+    const runTransaction = this.db.transaction(() => {
       deleteTags.run(entry.id);
       insertMemory.run(
         entry.id,
@@ -127,17 +132,19 @@ export class SQLiteStorage {
       for (const tag of entry.tags) {
         insertTag.run(entry.id, tag);
       }
-    })();
+    });
+    runTransaction();
   }
 
   async batchInsert(entries: MemoryEntry[]): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
-    this.db.transaction(() => {
+    const runBatch = this.db.transaction(() => {
       for (const entry of entries) {
         this.insertSync(entry);
       }
-    })();
+    });
+    runBatch();
   }
 
   async query(query: MemoryQuery): Promise<MemoryEntry[]> {
@@ -298,7 +305,8 @@ export class SQLiteStorage {
   async transaction(fn: () => Promise<void>): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
-    this.db.transaction(() => fn())();
+    const runTransaction = this.db.transaction(() => fn());
+    runTransaction();
   }
 
   async close(): Promise<void> {

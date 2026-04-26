@@ -61,7 +61,7 @@ export abstract class BasePlatformAdapter implements PlatformAdapter {
   }
 
   protected log(level: "debug" | "info" | "warn" | "error", message: string, data?: unknown): void {
-    if (!this.config.enableLogging && level === "debug") {
+    if (level === "debug") {
       return;
     }
     const prefix = `[${this.platform.toUpperCase()}]`;

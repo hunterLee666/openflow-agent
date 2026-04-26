@@ -1,18 +1,22 @@
 import type { SubAgentTask, SubAgentResult, SubAgentContext } from "./sub-agent-system.js";
+import { z } from "zod";
 
-export interface AntiRecursionConfig {
-  maxDepth: number;
-  enableStrictMode: boolean;
-  enableLogging: boolean;
-}
+export const AntiRecursionConfigSchema = z.object({
+  maxDepth: z.number(),
+  enableStrictMode: z.boolean(),
+  enableLogging: z.boolean(),
+});
 
-export interface RecursionViolation {
-  taskId: string;
-  agentId: string;
-  depth: number;
-  attemptedAction: string;
-  timestamp: number;
-}
+export const RecursionViolationSchema = z.object({
+  taskId: z.string(),
+  agentId: z.string(),
+  depth: z.number(),
+  attemptedAction: z.string(),
+  timestamp: z.number(),
+});
+
+export type AntiRecursionConfig = z.infer<typeof AntiRecursionConfigSchema>;
+export type RecursionViolation = z.infer<typeof RecursionViolationSchema>;
 
 export interface DepthTracker {
   getDepth(sessionId: string): number;

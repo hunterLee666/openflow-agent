@@ -1,25 +1,27 @@
 import type { CapabilityPlugin, CapabilityContext, ToolDefinition } from "../types/index.js";
-import { CapabilityType } from "../types/index.js";
+import { z } from "zod";
 
-export interface LegacyToolDefinition {
-  name: string;
-  description: string;
-  inputSchema: unknown;
-  outputSchema?: unknown;
-  isConcurrencySafe: boolean;
-  isReadOnly: boolean;
-  isDestructive?: boolean;
-  handler: (input: unknown, ctx: unknown) => Promise<unknown>;
-  validateInput?: (input: unknown, ctx: unknown) => Promise<{ result: boolean; message?: string }>;
-  maxResultSizeChars?: number;
-}
+export const LegacyToolDefinitionSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  inputSchema: z.unknown(),
+  outputSchema: z.unknown().optional(),
+  isConcurrencySafe: z.boolean(),
+  isReadOnly: z.boolean(),
+  isDestructive: z.boolean().optional(),
+  handler: z.any(),
+  validateInput: z.any().optional(),
+  maxResultSizeChars: z.number().optional(),
+});
+
+export type LegacyToolDefinition = z.infer<typeof LegacyToolDefinitionSchema>;
 
 export function adaptToolToPlugin(tool: LegacyToolDefinition): CapabilityPlugin {
   return {
     manifest: {
       name: tool.name,
       version: "1.0.0",
-      type: CapabilityType.TOOL,
+      type: "tool" as const,
       description: tool.description,
       triggers: [tool.name],
     },

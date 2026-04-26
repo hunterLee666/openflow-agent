@@ -1,14 +1,20 @@
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { analyzeProject, formatProjectAnalysis } from "./dev-commands.js";
+import { z } from "zod";
 
-export interface InitConfig {
-  workspaceRoot: string;
-  projectName?: string;
-  description?: string;
-  conventions?: string[];
-  commands?: Array<{ name: string; description: string }>;
-}
+export const InitConfigSchema = z.object({
+  workspaceRoot: z.string(),
+  projectName: z.string().optional(),
+  description: z.string().optional(),
+  conventions: z.array(z.string()).optional(),
+  commands: z.array(z.object({
+    name: z.string(),
+    description: z.string(),
+  })).optional(),
+});
+
+export type InitConfig = z.infer<typeof InitConfigSchema>;
 
 export async function initializeProject(config: InitConfig): Promise<string> {
   const openflowDir = join(config.workspaceRoot, ".openflow");

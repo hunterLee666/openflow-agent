@@ -1,59 +1,80 @@
-import { createHmac, createPublicKey, createVerify } from 'node:crypto';
-import { RpcErrorCode, type RpcError } from './protocol.js';
+import { createHmac, createPublicKey, createVerify } from "node:crypto";
+import { RpcErrorCode, type RpcError } from "./protocol.js";
+import { z } from "zod";
 
-export interface JwtClaims {
-  iss?: string;
-  sub?: string;
-  aud?: string | string[];
-  exp?: number;
-  nbf?: number;
-  iat?: number;
-  jti?: string;
-  [key: string]: unknown;
-}
+export const JwtClaimsSchema = z.object({
+  iss: z.string().optional(),
+  sub: z.string().optional(),
+  aud: z.union([z.string(), z.array(z.string())]).optional(),
+  exp: z.number().optional(),
+  nbf: z.number().optional(),
+  iat: z.number().optional(),
+  jti: z.string().optional(),
+}).passthrough();
 
-export interface JwtVerifyOptions {
-  audience?: string;
-  issuer?: string;
-  algorithms?: string[];
-  clockTolerance?: number;
-  maxTokenAge?: number;
-}
+export type JwtClaims = z.infer<typeof JwtClaimsSchema>;
 
-export type JwtVerifyResult = 
-  | {
-      ok: true;
-      claims: JwtClaims;
-    }
-  | {
-      ok: false;
-      reason: string;
-      code: number;
-    };
+export const JwtVerifyOptionsSchema = z.object({
+  audience: z.string().optional(),
+  issuer: z.string().optional(),
+  algorithms: z.array(z.string()).optional(),
+  clockTolerance: z.number().optional(),
+  maxTokenAge: z.number().optional(),
+});
 
-export interface JwtSignOptions {
-  algorithm?: 'HS256' | 'HS384' | 'HS512';
-  expiresIn?: number;
-  notBefore?: number;
-  issuer?: string;
-  audience?: string;
-  subject?: string;
-  jwtid?: string;
-}
+export type JwtVerifyOptions = z.infer<typeof JwtVerifyOptionsSchema>;
 
-const ALLOWED_ALGORITHMS = ['HS256', 'HS384', 'HS512', 'RS256', 'ES256'];
+export const JwtVerifyResultSchema = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    claims: JwtClaimsSchema,
+  }),
+  z.object({
+    ok: z.literal(false),
+    reason: z.string(),
+    code: z.number(),
+  }),
+]);
+
+export type JwtVerifyResult = z.infer<typeof JwtVerifyResultSchema>;
+
+export const JwtSignOptionsSchema = z.object({
+  algorithm: z.enum(["HS256", "HS384", "HS512"]).optional(),
+  expiresIn: z.number().optional(),
+  notBefore: z.number().optional(),
+  issuer: z.string().optional(),
+  audience: z.string().optional(),
+  subject: z.string().optional(),
+  jwtid: z.string().optional(),
+});
+
+export type JwtSignOptions = z.infer<typeof JwtSignOptionsSchema>;
+
+export const JwtKeyRotationConfigSchema = z.object({
+  keys: z.array(z.object({
+    kid: z.string(),
+    secret: z.string(),
+    createdAt: z.number(),
+  })),
+  maxKeyAgeMs: z.number(),
+  gracePeriodMs: z.number(),
+});
+
+export type JwtKeyRotationConfig = z.infer<typeof JwtKeyRotationConfigSchema>;
+
+const ALLOWED_ALGORITHMS = ["HS256", "HS384", "HS512", "RS256", "ES256"];
 
 function base64UrlEncode(data: string): string {
   return Buffer.from(data)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
 }
 
 function base64UrlDecode(data: string): string {
-  return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64')
-    .toString('utf-8');
+  return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64")
+    .toString("utf-8");
 }
 
 export function signJwt(
@@ -62,11 +83,11 @@ export function signJwt(
   options: JwtSignOptions = {}
 ): string {
   const now = Math.floor(Date.now() / 1000);
-  const algorithm = options.algorithm || 'HS256';
+  const algorithm = options.algorithm || "HS256";
 
   const header = {
     alg: algorithm,
-    typ: 'JWT',
+    typ: "JWT",
     kid: options.jwtid || undefined,
   };
 
@@ -86,13 +107,13 @@ export function signJwt(
   const signingInput = `${headerEncoded}.${payloadEncoded}`;
 
   let signature: string;
-  if (algorithm.startsWith('HS')) {
+  if (algorithm.startsWith("HS")) {
     signature = createHmac(algorithm.toLowerCase(), secretOrKey)
       .update(signingInput)
-      .digest('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
+      .digest("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
   } else {
     throw new Error(`Asymmetric signing not implemented: ${algorithm}`);
   }
@@ -106,9 +127,9 @@ export function verifyJwt(
   options: JwtVerifyOptions = {}
 ): JwtVerifyResult {
   try {
-    const parts = token.split('.');
+    const parts = token.split(".");
     if (parts.length !== 3) {
-      return { ok: false, reason: 'invalid token format', code: RpcErrorCode.AUTH_INVALID_SIGNATURE };
+      return { ok: false, reason: "invalid token format", code: RpcErrorCode.AUTH_INVALID_SIGNATURE };
     }
 
     const [headerEncoded, payloadEncoded, signatureEncoded] = parts;
@@ -119,20 +140,20 @@ export function verifyJwt(
       return { ok: false, reason: `disallowed algorithm: ${header.alg}`, code: RpcErrorCode.AUTH_INVALID_SIGNATURE };
     }
 
-    if (header.alg === 'none') {
-      return { ok: false, reason: 'none algorithm not allowed', code: RpcErrorCode.AUTH_INVALID_SIGNATURE };
+    if (header.alg === "none") {
+      return { ok: false, reason: "none algorithm not allowed", code: RpcErrorCode.AUTH_INVALID_SIGNATURE };
     }
 
     const signingInput = `${headerEncoded}.${payloadEncoded}`;
 
     let isValid = false;
-    if (header.alg.startsWith('HS')) {
+    if (header.alg.startsWith("HS")) {
       const expectedSignature = createHmac(header.alg.toLowerCase(), secretOrKey)
         .update(signingInput)
-        .digest('base64')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
+        .digest("base64")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=/g, "");
 
       isValid = signatureEncoded === expectedSignature;
     } else {
@@ -140,7 +161,7 @@ export function verifyJwt(
     }
 
     if (!isValid) {
-      return { ok: false, reason: 'invalid signature', code: RpcErrorCode.AUTH_INVALID_SIGNATURE };
+      return { ok: false, reason: "invalid signature", code: RpcErrorCode.AUTH_INVALID_SIGNATURE };
     }
 
     const claims = JSON.parse(base64UrlDecode(payloadEncoded)) as JwtClaims;
@@ -149,32 +170,32 @@ export function verifyJwt(
     const clockTolerance = options.clockTolerance ?? 0;
 
     if (claims.exp && now > claims.exp + clockTolerance) {
-      return { ok: false, reason: 'token expired', code: RpcErrorCode.AUTH_EXPIRED };
+      return { ok: false, reason: "token expired", code: RpcErrorCode.AUTH_EXPIRED };
     }
 
     if (claims.nbf && now < claims.nbf - clockTolerance) {
-      return { ok: false, reason: 'token not yet valid', code: RpcErrorCode.AUTH_EXPIRED };
+      return { ok: false, reason: "token not yet valid", code: RpcErrorCode.AUTH_EXPIRED };
     }
 
     if (options.audience) {
       const aud = claims.aud;
       if (Array.isArray(aud)) {
         if (!aud.includes(options.audience)) {
-          return { ok: false, reason: 'invalid audience', code: RpcErrorCode.AUTH_INVALID_AUDIENCE };
+          return { ok: false, reason: "invalid audience", code: RpcErrorCode.AUTH_INVALID_AUDIENCE };
         }
       } else if (aud !== options.audience) {
-        return { ok: false, reason: 'invalid audience', code: RpcErrorCode.AUTH_INVALID_AUDIENCE };
+        return { ok: false, reason: "invalid audience", code: RpcErrorCode.AUTH_INVALID_AUDIENCE };
       }
     }
 
     if (options.issuer && claims.iss !== options.issuer) {
-      return { ok: false, reason: 'invalid issuer', code: RpcErrorCode.AUTH_INVALID_SIGNATURE };
+      return { ok: false, reason: "invalid issuer", code: RpcErrorCode.AUTH_INVALID_SIGNATURE };
     }
 
     if (options.maxTokenAge && claims.iat) {
       const age = now - claims.iat;
       if (age > options.maxTokenAge) {
-        return { ok: false, reason: 'token too old', code: RpcErrorCode.AUTH_EXPIRED };
+        return { ok: false, reason: "token too old", code: RpcErrorCode.AUTH_EXPIRED };
       }
     }
 
@@ -190,18 +211,12 @@ export function verifyJwt(
 
 export function decodeJwtPayload(token: string): JwtClaims | null {
   try {
-    const parts = token.split('.');
+    const parts = token.split(".");
     if (parts.length !== 3) return null;
     return JSON.parse(base64UrlDecode(parts[1])) as JwtClaims;
   } catch {
     return null;
   }
-}
-
-export interface JwtKeyRotationConfig {
-  keys: Array<{ kid: string; secret: string; createdAt: number }>;
-  maxKeyAgeMs: number;
-  gracePeriodMs: number;
 }
 
 export class JwtKeyRotator {
@@ -246,7 +261,7 @@ export class JwtKeyRotator {
 
     return {
       ok: false,
-      reason: 'no valid key found for token',
+      reason: "no valid key found for token",
       code: RpcErrorCode.AUTH_INVALID_SIGNATURE,
     };
   }

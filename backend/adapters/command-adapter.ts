@@ -1,21 +1,24 @@
 import type { CapabilityPlugin, CapabilityContext } from "../types/index.js";
-import { CapabilityType } from "../types/index.js";
+import { z } from "zod";
 
-export interface LegacySlashCommand {
-  name: string;
-  aliases: string[];
-  description: string;
-  hidden?: boolean;
-  handler: (args: string, ctx: unknown) => Promise<string>;
-  template?: string;
-}
+export const LegacyCommandContextSchema = z.object({
+  cwd: z.string().optional(),
+  memory: z.unknown().optional(),
+  config: z.unknown().optional(),
+  sessionId: z.string().optional(),
+});
 
-export interface LegacyCommandContext {
-  cwd?: string;
-  memory?: unknown;
-  config?: unknown;
-  sessionId?: string;
-}
+export const LegacySlashCommandSchema = z.object({
+  name: z.string(),
+  aliases: z.array(z.string()),
+  description: z.string(),
+  hidden: z.boolean().optional(),
+  handler: z.any(),
+  template: z.string().optional(),
+});
+
+export type LegacySlashCommand = z.infer<typeof LegacySlashCommandSchema>;
+export type LegacyCommandContext = z.infer<typeof LegacyCommandContextSchema>;
 
 export function adaptCommandToPlugin(command: LegacySlashCommand): CapabilityPlugin {
   const allTriggers = [command.name, ...command.aliases];
@@ -24,7 +27,7 @@ export function adaptCommandToPlugin(command: LegacySlashCommand): CapabilityPlu
     manifest: {
       name: command.name,
       version: "1.0.0",
-      type: CapabilityType.COMMAND,
+      type: "command" as const,
       description: command.description,
       triggers: allTriggers,
       tags: command.hidden ? ["hidden"] : undefined,

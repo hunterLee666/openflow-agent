@@ -2,23 +2,27 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { readFile, writeFile, mkdir, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
 
 const execAsync = promisify(exec);
 
-export interface CheckpointInfo {
-  id: string;
-  timestamp: number;
-  description: string;
-  filesChanged: number;
-  commitHash?: string;
-}
+export const CheckpointInfoSchema = z.object({
+  id: z.string(),
+  timestamp: z.number(),
+  description: z.string(),
+  filesChanged: z.number(),
+  commitHash: z.string().optional(),
+});
 
-export interface UndoResult {
-  success: boolean;
-  message: string;
-  previousState?: string;
-  currentState?: string;
-}
+export const UndoResultSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  previousState: z.string().optional(),
+  currentState: z.string().optional(),
+});
+
+export type CheckpointInfo = z.infer<typeof CheckpointInfoSchema>;
+export type UndoResult = z.infer<typeof UndoResultSchema>;
 
 const CHECKPOINT_DIR = ".openflow/checkpoints";
 

@@ -1,27 +1,41 @@
-export interface ContentBlock {
-  type: string;
-  text?: string;
-  id?: string;
-  name?: string;
-  input?: Record<string, unknown>;
-  content?: ContentBlock[];
-  tool_use_id?: string;
-}
+import { z } from "zod";
 
-export interface Message {
-  role: "user" | "assistant" | "system" | "tool";
-  content: string | ContentBlock[];
-  cacheControl?: { type: "ephemeral" | "hidden"; category?: string };
-}
+export const ContentBlockSchema: z.ZodType<any> = z.lazy(() => z.object({
+  type: z.string(),
+  text: z.string().optional(),
+  id: z.string().optional(),
+  name: z.string().optional(),
+  input: z.record(z.string(), z.unknown()).optional(),
+  content: z.array(ContentBlockSchema).optional(),
+  tool_use_id: z.string().optional(),
+}));
 
-export interface SerializedMessage {
-  id: string;
-  sessionId: string;
-  role: "user" | "assistant" | "system" | "tool";
-  content: string | ContentBlock[];
-  createdAt: number;
-  cacheControl?: { type: "ephemeral" | "hidden"; category?: string };
-}
+export type ContentBlock = z.infer<typeof ContentBlockSchema>;
+
+export const MessageSchema: z.ZodType<any> = z.object({
+  role: z.enum(["user", "assistant", "system", "tool"]),
+  content: z.union([z.string(), z.array(ContentBlockSchema)]),
+  cacheControl: z.object({
+    type: z.enum(["ephemeral", "hidden"]),
+    category: z.string().optional(),
+  }).optional(),
+});
+
+export type Message = z.infer<typeof MessageSchema>;
+
+export const SerializedMessageSchema: z.ZodType<any> = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  role: z.enum(["user", "assistant", "system", "tool"]),
+  content: z.union([z.string(), z.array(ContentBlockSchema)]),
+  createdAt: z.number(),
+  cacheControl: z.object({
+    type: z.enum(["ephemeral", "hidden"]),
+    category: z.string().optional(),
+  }).optional(),
+});
+
+export type SerializedMessage = z.infer<typeof SerializedMessageSchema>;
 
 let messageCounter = 0;
 
@@ -96,9 +110,9 @@ export function messageToText(message: Message): string {
   if (typeof message.content === "string") {
     return message.content;
   }
-  return message.content
-    .filter((c): c is ContentBlock & { type: "text" } => c.type === "text")
-    .map((c) => c.text || "")
+  return (message.content as ContentBlock[])
+    .filter((c: ContentBlock): c is ContentBlock & { type: "text" } => c.type === "text")
+    .map((c: ContentBlock) => c.text || "")
     .join("\n");
 }
 

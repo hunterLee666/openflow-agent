@@ -241,11 +241,11 @@ export async function withSessionLock<T>(
   fn: () => Promise<T>
 ): Promise<T> {
   const lockPath = join(sessionDir(sessionId), ".lock");
-  let fd: number | null = null;
+  let fileHandle: import("node:fs/promises").FileHandle | null = null;
 
   try {
     const { open } = await import("node:fs/promises");
-    fd = (await open(lockPath, "wx")).fd;
+    fileHandle = await open(lockPath, "wx");
   } catch {
     throw new Error("session busy");
   }
@@ -253,8 +253,8 @@ export async function withSessionLock<T>(
   try {
     return await fn();
   } finally {
-    const { close, rm } = await import("node:fs/promises");
-    await close(fd);
+    const { rm } = await import("node:fs/promises");
+    await fileHandle.close();
     await rm(lockPath).catch(() => {});
   }
 }

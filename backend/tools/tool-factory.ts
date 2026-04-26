@@ -3,12 +3,7 @@ import type { ToolDefinition } from "../types/capability.js";
 import type { InputValidator, ToolValidationContext, ValidationResult } from "./validation.js";
 import { validateWithZod, validateOutputWithZod } from "./validation.js";
 
-export type SafetyFlags =
-  | { isReadOnly: true; isConcurrencySafe: true }
-  | { isReadOnly: true; isConcurrencySafe: false }
-  | { isReadOnly: false; isConcurrencySafe: false };
-
-export interface ToolConfig<I = unknown, O = unknown> extends SafetyFlags {
+export interface ToolConfig<I = unknown, O = unknown> {
   name: string;
   description: string;
   inputSchema: z.ZodType<I>;
@@ -16,6 +11,8 @@ export interface ToolConfig<I = unknown, O = unknown> extends SafetyFlags {
   handler: (input: I, ctx: unknown) => Promise<O>;
   validateInput?: InputValidator<I>;
   resourceKeys?: string[];
+  isReadOnly: boolean;
+  isConcurrencySafe: boolean;
 }
 
 export function defineTool<I = unknown, O = unknown>(

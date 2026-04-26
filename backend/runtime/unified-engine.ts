@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { createRequire } from "node:module";
 import { EventEmitter } from "node:events";
 import { WorkflowEngine, WorkflowDefinition, WorkflowResult, WorkflowMode, WorkflowStep, WorkflowStepType } from "./workflow-engine.js";
+import { z } from "zod";
 
 const execAsync = promisify(exec);
 
@@ -26,58 +27,64 @@ export enum AssetType {
   UNKNOWN = "unknown",
 }
 
-export interface AssetFile {
-  path: string;
-  name: string;
-  type: AssetType;
-  content?: string;
-  executable?: boolean;
-  metadata?: Record<string, unknown>;
-  workflow?: {
-    mode?: WorkflowMode;
-    steps?: WorkflowStep[];
-  };
-}
+export const AssetTypeSchema = z.nativeEnum(AssetType);
 
-export interface SkillFrontMatter {
-  name?: string;
-  description?: string;
-  version?: string;
-  license?: string;
-  platforms?: string[];
-  prerequisites?: {
-    env_vars?: string[];
-    commands?: string[];
-  };
-  compatibility?: {
-    nodejs?: string;
-    python?: string;
-  };
-  "disable-model-invocation"?: boolean;
-  "user-invocable"?: boolean;
-  "allowed-tools"?: string[];
-  model?: string;
-  effort?: string;
-  context?: "fork";
-  agent?: string;
-  arguments?: string[];
-  paths?: string[];
-  shell?: "bash" | "powershell";
-  requires_tools?: string[];
-  requires_toolsets?: string[];
-  fallback_for_tools?: string[];
-  fallback_for_toolsets?: string[];
-  hooks?: Record<string, string>;
-  setup?: {
-    help?: string;
-    collect_secrets?: Array<{
-      env_var: string;
-      prompt: string;
-      secret: boolean;
-    }>;
-  };
-  metadata?: Record<string, unknown>;
-}
+export const AssetFileSchema: z.ZodType<any> = z.object({
+  path: z.string(),
+  name: z.string(),
+  type: AssetTypeSchema,
+  content: z.string().optional(),
+  executable: z.boolean().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  workflow: z.object({
+    mode: z.enum(["sequential", "parallel", "dag"]).optional(),
+    steps: z.array(z.any()).optional(),
+  }).optional(),
+});
+
+export type AssetFile = z.infer<typeof AssetFileSchema>;
+
+export const SkillFrontMatterSchema = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  version: z.string().optional(),
+  license: z.string().optional(),
+  platforms: z.array(z.string()).optional(),
+  prerequisites: z.object({
+    env_vars: z.array(z.string()).optional(),
+    commands: z.array(z.string()).optional(),
+  }).optional(),
+  compatibility: z.object({
+    nodejs: z.string().optional(),
+    python: z.string().optional(),
+  }).optional(),
+  "disable-model-invocation": z.boolean().optional(),
+  "user-invocable": z.boolean().optional(),
+  "allowed-tools": z.array(z.string()).optional(),
+  model: z.string().optional(),
+  effort: z.string().optional(),
+  context: z.literal("fork").optional(),
+  agent: z.string().optional(),
+  arguments: z.array(z.string()).optional(),
+  paths: z.array(z.string()).optional(),
+  shell: z.enum(["bash", "powershell"]).optional(),
+  requires_tools: z.array(z.string()).optional(),
+  requires_toolsets: z.array(z.string()).optional(),
+  fallback_for_tools: z.array(z.string()).optional(),
+  fallback_for_toolsets: z.array(z.string()).optional(),
+  hooks: z.record(z.string(), z.string()).optional(),
+  setup: z.object({
+    help: z.string().optional(),
+    collect_secrets: z.array(z.object({
+      env_var: z.string(),
+      prompt: z.string(),
+      secret: z.boolean(),
+    })).optional(),
+  }).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type SkillFrontMatter = z.infer<typeof SkillFrontMatterSchema>;
 
 export interface SkillPackage {
   name: string;
@@ -93,16 +100,18 @@ export interface SkillPackage {
   isActive: boolean;
 }
 
-export interface CommandFrontMatter {
-  name?: string;
-  description?: string;
-  "allowed-tools"?: string[];
-  model?: string;
-  effort?: string;
-  context?: "fork";
-  agent?: string;
-  arguments?: string[];
-}
+export const CommandFrontMatterSchema = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  "allowed-tools": z.array(z.string()).optional(),
+  model: z.string().optional(),
+  effort: z.string().optional(),
+  context: z.literal("fork").optional(),
+  agent: z.string().optional(),
+  arguments: z.array(z.string()).optional(),
+});
+
+export type CommandFrontMatter = z.infer<typeof CommandFrontMatterSchema>;
 
 export interface CommandPackage {
   name: string;
@@ -113,15 +122,17 @@ export interface CommandPackage {
   source: string;
 }
 
-export interface AgentFrontMatter {
-  name?: string;
-  description?: string;
-  model?: string;
-  tools?: string[];
-  skills?: string[];
-  "max-steps"?: number;
-  temperature?: number;
-}
+export const AgentFrontMatterSchema = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  model: z.string().optional(),
+  tools: z.array(z.string()).optional(),
+  skills: z.array(z.string()).optional(),
+  "max-steps": z.number().optional(),
+  temperature: z.number().optional(),
+});
+
+export type AgentFrontMatter = z.infer<typeof AgentFrontMatterSchema>;
 
 export interface AgentPackage {
   name: string;
@@ -138,18 +149,22 @@ export enum SecurityLevel {
   BLOCKED = "blocked",
 }
 
-export interface SecurityPolicy {
-  allowedFileTypes: AssetType[];
-  allowedCommands: string[];
-  blockedCommands: string[];
-  maxExecutionTime: number;
-  maxMemoryMB: number;
-  allowNetworkAccess: boolean;
-  allowFileSystemWrite: boolean;
-  allowedWritePaths: string[];
-  requireUserConfirmation: AssetType[];
-  disableSkillShellExecution: boolean;
-}
+export const SecurityLevelSchema = z.nativeEnum(SecurityLevel);
+
+export const SecurityPolicySchema = z.object({
+  allowedFileTypes: z.array(AssetTypeSchema),
+  allowedCommands: z.array(z.string()),
+  blockedCommands: z.array(z.string()),
+  maxExecutionTime: z.number(),
+  maxMemoryMB: z.number(),
+  allowNetworkAccess: z.boolean(),
+  allowFileSystemWrite: z.boolean(),
+  allowedWritePaths: z.array(z.string()),
+  requireUserConfirmation: z.array(AssetTypeSchema),
+  disableSkillShellExecution: z.boolean(),
+});
+
+export type SecurityPolicy = z.infer<typeof SecurityPolicySchema>;
 
 const DEFAULT_SECURITY_POLICY: SecurityPolicy = {
   allowedFileTypes: [

@@ -3,29 +3,36 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync } from "node:fs";
+import { z } from "zod";
 
-export interface PkcePair {
-  code_verifier: string;
-  code_challenge: string;
-}
+export const PkcePairSchema = z.object({
+  code_verifier: z.string(),
+  code_challenge: z.string(),
+});
 
-export interface TokenBundle {
-  access_token: string;
-  refresh_token?: string;
-  expires_at: number;
-  scope?: string;
-  token_type?: string;
-}
+export type PkcePair = z.infer<typeof PkcePairSchema>;
 
-export interface OAuthConfig {
-  authorizationEndpoint: string;
-  tokenEndpoint: string;
-  clientId: string;
-  redirectUri: string;
-  scope: string;
-  tokenStoragePath?: string;
-  encryptionKey?: Buffer;
-}
+export const TokenBundleSchema = z.object({
+  access_token: z.string(),
+  refresh_token: z.string().optional(),
+  expires_at: z.number(),
+  scope: z.string().optional(),
+  token_type: z.string().optional(),
+});
+
+export type TokenBundle = z.infer<typeof TokenBundleSchema>;
+
+export const OAuthConfigSchema = z.object({
+  authorizationEndpoint: z.string(),
+  tokenEndpoint: z.string(),
+  clientId: z.string(),
+  redirectUri: z.string(),
+  scope: z.string(),
+  tokenStoragePath: z.string().optional(),
+  encryptionKey: z.instanceof(Buffer).optional(),
+});
+
+export type OAuthConfig = z.infer<typeof OAuthConfigSchema>;
 
 export function generatePkcePair(): PkcePair {
   const verifier = base64Url(randomBytes(32));

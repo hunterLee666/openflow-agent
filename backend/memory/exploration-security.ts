@@ -1,33 +1,40 @@
 import { stat, realpath } from "node:fs/promises";
 import { join, resolve, normalize, isAbsolute } from "node:path";
+import { z } from "zod";
 
-export interface SecurityPolicy {
-  allowedPaths: string[];
-  blockedPaths: string[];
-  blockedCommands: string[];
-  allowedCommands: string[];
-  maxFileSize: number;
-  maxDirectoryDepth: number;
-  maxEntriesPerDirectory: number;
-  allowSymlinks: boolean;
-  allowHiddenFiles: boolean;
-  allowNetworkAccess: boolean;
-  allowElevatedExec: boolean;
-  requirePathValidation: boolean;
-  requireCommandValidation: boolean;
-}
+export const SecurityPolicySchema = z.object({
+  allowedPaths: z.array(z.string()),
+  blockedPaths: z.array(z.string()),
+  blockedCommands: z.array(z.string()),
+  allowedCommands: z.array(z.string()),
+  maxFileSize: z.number(),
+  maxDirectoryDepth: z.number(),
+  maxEntriesPerDirectory: z.number(),
+  allowSymlinks: z.boolean(),
+  allowHiddenFiles: z.boolean(),
+  allowNetworkAccess: z.boolean(),
+  allowElevatedExec: z.boolean(),
+  requirePathValidation: z.boolean(),
+  requireCommandValidation: z.boolean(),
+});
 
-export interface SecurityViolation {
-  type: "path" | "command" | "file" | "symlink" | "network" | "elevated";
-  severity: "low" | "medium" | "high" | "critical";
-  message: string;
-  blocked: boolean;
-}
+export type SecurityPolicy = z.infer<typeof SecurityPolicySchema>;
 
-export interface ValidationResult {
-  allowed: boolean;
-  violations: SecurityViolation[];
-}
+export const SecurityViolationSchema = z.object({
+  type: z.enum(["path", "command", "file", "symlink", "network", "elevated"]),
+  severity: z.enum(["low", "medium", "high", "critical"]),
+  message: z.string(),
+  blocked: z.boolean(),
+});
+
+export type SecurityViolation = z.infer<typeof SecurityViolationSchema>;
+
+export const ValidationResultSchema = z.object({
+  allowed: z.boolean(),
+  violations: z.array(SecurityViolationSchema),
+});
+
+export type ValidationResult = z.infer<typeof ValidationResultSchema>;
 
 const DEFAULT_BLOCKED_PATHS = [
   "/etc/passwd",

@@ -60,8 +60,8 @@ export class TokenBudgetInjector {
     const maxTokens = options?.maxTokens ?? this.getAvailableBudget();
 
     const sorted = [...segments].sort((a, b) => {
-      const weightA = this.config.priorityWeights[a.priority];
-      const weightB = this.config.priorityWeights[b.priority];
+      const weightA = this.config.priorityWeights[a.priority] ?? 0.5;
+      const weightB = this.config.priorityWeights[b.priority] ?? 0.5;
       const effectiveA = a.importance * weightA;
       const effectiveB = b.importance * weightB;
       return effectiveB - effectiveA;

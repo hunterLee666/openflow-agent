@@ -15,8 +15,9 @@ import { VisualizationRenderer } from "./runtime/visualization-renderer.js";
 import { LayeredConfigLoader } from "./runtime/layered-config.js";
 import { LLMClient, createLLMClient } from "./llm/index.js";
 import type { LLMClientConfig, LLMMessage, LLMToolDefinition, StreamCallbacks, CompletionResult } from "./llm/index.js";
-import { SessionManager, FileSessionStore } from "./session/index.js";
+import type { ProviderConfig } from "./llm/types.js";
 import type { SessionConfig } from "./session/index.js";
+import { SessionManager, FileSessionStore } from "./session/index.js";
 import { query } from "./query/index.js";
 import type { QueryInput, QueryResult, StreamEvent, QueryContext, QueryToolRegistry } from "./query/index.js";
 import type { Transport, TransportConfig, TransportHandler, TransportMessage } from "./transport/index.js";
@@ -254,9 +255,18 @@ export class OpenFlowCore {
 
     if (config.llmConfig?.apiKey) {
       const sessionId = config.sessionId || `session_${Date.now()}`;
+      const defaultProviderConfig: ProviderConfig = {
+        name: config.llmConfig.provider || "openai",
+        apiKey: config.llmConfig.apiKey,
+        baseUrl: config.llmConfig.baseUrl || "https://api.openai.com/v1",
+        supportedModels: [config.llmConfig.model || "gpt-4"],
+        defaultModel: config.llmConfig.model || "gpt-4",
+        supportsStreaming: true,
+        requiresThinkingFlag: false,
+      };
       this.llmClient = createLLMClient({
         apiKey: config.llmConfig.apiKey,
-        providerConfig: {},
+        providerConfig: defaultProviderConfig,
         provider: config.llmConfig.provider,
         baseUrl: config.llmConfig.baseUrl,
         model: config.llmConfig.model,
@@ -306,9 +316,18 @@ export class OpenFlowCore {
 
       createPrefetchTask("llm_client", async () => {
         if (this.config.llmConfig?.apiKey) {
+          const defaultProviderConfig: ProviderConfig = {
+            name: this.config.llmConfig.provider || "openai",
+            apiKey: this.config.llmConfig.apiKey,
+            baseUrl: this.config.llmConfig.baseUrl || "https://api.openai.com/v1",
+            supportedModels: [this.config.llmConfig.model || "gpt-4"],
+            defaultModel: this.config.llmConfig.model || "gpt-4",
+            supportsStreaming: true,
+            requiresThinkingFlag: false,
+          };
           const llmClient = createLLMClient({
             apiKey: this.config.llmConfig.apiKey,
-            providerConfig: {},
+            providerConfig: defaultProviderConfig,
             provider: this.config.llmConfig.provider,
             baseUrl: this.config.llmConfig.baseUrl,
             model: this.config.llmConfig.model,

@@ -2,28 +2,35 @@ import { spawn, ChildProcess } from "node:child_process";
 import { platform, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { mkdtemp, access, constants } from "node:fs/promises";
+import { z } from "zod";
 
-export interface SandboxProfile {
-  allowedPaths: string[];
-  readOnlyPaths: string[];
-  deniedPaths: string[];
-  allowNetwork: boolean;
-  allowedCommands?: string[];
-}
+export const SandboxProfileSchema = z.object({
+  allowedPaths: z.array(z.string()),
+  readOnlyPaths: z.array(z.string()),
+  deniedPaths: z.array(z.string()),
+  allowNetwork: z.boolean(),
+  allowedCommands: z.array(z.string()).optional(),
+});
 
-export interface SandboxResult {
-  success: boolean;
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  error?: string;
-}
+export type SandboxProfile = z.infer<typeof SandboxProfileSchema>;
 
-export interface SandboxConfig {
-  enabled: boolean;
-  profile: SandboxProfile;
-  platform?: "macos" | "linux";
-}
+export const SandboxResultSchema = z.object({
+  success: z.boolean(),
+  stdout: z.string(),
+  stderr: z.string(),
+  exitCode: z.number(),
+  error: z.string().optional(),
+});
+
+export type SandboxResult = z.infer<typeof SandboxResultSchema>;
+
+export const SandboxConfigSchema = z.object({
+  enabled: z.boolean(),
+  profile: SandboxProfileSchema,
+  platform: z.enum(["macos", "linux"]).optional(),
+});
+
+export type SandboxConfig = z.infer<typeof SandboxConfigSchema>;
 
 const DEFAULT_SANDBOX_PROFILE: SandboxProfile = {
   allowedPaths: [],

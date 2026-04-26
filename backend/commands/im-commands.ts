@@ -1,5 +1,6 @@
 import { CommandRegistry } from "./command-registry.js";
-import { mkdir, readFile, writeFile, readFileSync, existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { GatewayConfig, PlatformConfig } from "../messaging/index.js";
@@ -19,16 +20,17 @@ export function createIMCommands(registry: CommandRegistry): void {
   registry.register({
     name: "im-setup",
     description: "配置 IM 平台连接凭证",
-    handler: async (args: string[]) => {
-      const platform = args[0]?.toLowerCase();
-      const action = args[1]?.toLowerCase();
+    handler: async (args: string) => {
+      const parts = args.trim().split(/\s+/);
+      const platform = parts[0]?.toLowerCase();
+      const action = parts[1]?.toLowerCase();
 
       if (!platform) {
         return formatSetupHelp();
       }
 
       if (action === "enable") {
-        return await enablePlatform(platform, args.slice(2));
+        return await enablePlatform(platform, parts.slice(2));
       }
 
       if (action === "disable") {
@@ -54,8 +56,8 @@ export function createIMCommands(registry: CommandRegistry): void {
   registry.register({
     name: "im-test",
     description: "测试 IM 平台连接",
-    handler: async (args: string[]) => {
-      const platform = args[0]?.toLowerCase();
+    handler: async (args: string) => {
+      const platform = args.trim().split(/\s+/)[0]?.toLowerCase();
       if (!platform) {
         return "用法: /im-test <平台>";
       }
@@ -265,7 +267,7 @@ async function testConnection(platform: string): Promise<string> {
         return `✅ 飞书连接测试成功！`;
 
       case "wecom":
-        await testWeCom(platformConfig.appId, platformConfig.appSecret);
+        await testWeCorp(platformConfig.appId, platformConfig.appSecret);
         return `✅ 企业微信连接测试成功！`;
 
       case "line":

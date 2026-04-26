@@ -1,34 +1,42 @@
-import type { AbortSignal as NodeAbortSignal } from "node:buffer";
+import { z } from "zod";
 
-export interface PrefetchTask<T> {
-  name: string;
-  fn: (signal: AbortSignal) => Promise<T>;
-  timeoutMs: number;
-  critical: boolean;
-  dependsOn?: string[];
-}
+export const PrefetchTaskSchema: z.ZodType<any> = z.object({
+  name: z.string(),
+  fn: z.function().args(z.instanceof(AbortSignal)).returns(z.promise(z.unknown())),
+  timeoutMs: z.number(),
+  critical: z.boolean(),
+  dependsOn: z.array(z.string()).optional(),
+});
 
-export interface PrefetchResult<T> {
-  name: string;
-  status: "fulfilled" | "rejected";
-  value?: T;
-  error?: Error;
-  durationMs: number;
-}
+export type PrefetchTask<T> = z.infer<typeof PrefetchTaskSchema>;
 
-export interface PrefetchReport {
-  results: PrefetchResult<unknown>[];
-  totalDurationMs: number;
-  allCriticalPassed: boolean;
-  partialFailure: boolean;
-}
+export const PrefetchResultSchema: z.ZodType<any> = z.object({
+  name: z.string(),
+  status: z.enum(["fulfilled", "rejected"]),
+  value: z.unknown().optional(),
+  error: z.instanceof(Error).optional(),
+  durationMs: z.number(),
+});
 
-export interface PrefetcherConfig {
-  defaultTimeoutMs: number;
-  concurrencyLimit: number;
-  logTiming: boolean;
-  logFn?: (msg: string) => void;
-}
+export type PrefetchResult<T> = z.infer<typeof PrefetchResultSchema>;
+
+export const PrefetchReportSchema = z.object({
+  results: z.array(PrefetchResultSchema),
+  totalDurationMs: z.number(),
+  allCriticalPassed: z.boolean(),
+  partialFailure: z.boolean(),
+});
+
+export type PrefetchReport = z.infer<typeof PrefetchReportSchema>;
+
+export const PrefetcherConfigSchema = z.object({
+  defaultTimeoutMs: z.number(),
+  concurrencyLimit: z.number(),
+  logTiming: z.boolean(),
+  logFn: z.function().args(z.string()).returns(z.void()).optional(),
+});
+
+export type PrefetcherConfig = z.infer<typeof PrefetcherConfigSchema>;
 
 const DEFAULT_CONFIG: PrefetcherConfig = {
   defaultTimeoutMs: 5000,
@@ -174,7 +182,7 @@ export class StartupPrefetcher {
       for (const name of remaining) {
         const task = dag.get(name)!;
         const deps = task.dependsOn || [];
-        if (deps.every((d) => visited.has(d))) {
+        if (deps.every((d: string) => visited.has(d))) {
           ready.push(name);
         }
       }

@@ -1,16 +1,11 @@
 import { BasePlatformAdapter } from "./base-adapter.js";
 import type { PlatformConfig, PlatformMessage, PlatformUser, PlatformChat, MessageType } from "./types.js";
 
-let makeWASocket: any;
-let DisconnectReason: any;
-let useMultiFileAuthState: any;
+let baileysModule: any = null;
 
 async function loadBaileys(): Promise<void> {
-  if (!makeWASocket) {
-    const baileys = await import("baileys");
-    makeWASocket = baileys.default?.makeWASocket || baileys.makeWASocket;
-    DisconnectReason = baileys.DisconnectReason;
-    useMultiFileAuthState = baileys.useMultiFileAuthState;
+  if (!baileysModule) {
+    baileysModule = await import("baileys");
   }
 }
 
@@ -21,11 +16,14 @@ export class WhatsAppAdapter extends BasePlatformAdapter {
 
   constructor(config: PlatformConfig) {
     super(config);
-    this.authStatePath = config.metadata?.authPath || "./.openflow/whatsapp-auth";
+    this.authStatePath = (config.metadata as any)?.authPath || "./.openflow/whatsapp-auth";
   }
 
   async initialize(): Promise<void> {
     await loadBaileys();
+
+    const makeWASocket = baileysModule.default?.makeWASocket || baileysModule.makeWASocket;
+    const useMultiFileAuthState = baileysModule.useMultiFileAuthState;
 
     if (!this.config.token) {
       throw new Error("WhatsApp requires a phone number or session token");
@@ -138,6 +136,7 @@ export class WhatsAppAdapter extends BasePlatformAdapter {
     this.sock.ev.on("connection.update", (update: any) => {
       const { connection, lastDisconnect } = update;
       if (connection === "close") {
+        const DisconnectReason = baileysModule.DisconnectReason;
         const shouldReconnect =
           lastDisconnect?.error?.output?.statusCode !== DisconnectReason?.loggedOut;
         if (shouldReconnect) {

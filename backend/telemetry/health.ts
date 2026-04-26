@@ -1,9 +1,21 @@
-export interface HealthCheckResult {
-  status: "healthy" | "degraded" | "unhealthy";
-  checks: Record<string, { status: "ok" | "warn" | "error"; message?: string; latency?: number }>;
-  timestamp: number;
-  uptime: number;
-}
+import { z } from "zod";
+
+export const HealthCheckStatusSchema = z.enum(["ok", "warn", "error"]);
+
+export type HealthCheckStatus = z.infer<typeof HealthCheckStatusSchema>;
+
+export const HealthCheckResultSchema = z.object({
+  status: z.enum(["healthy", "degraded", "unhealthy"]),
+  checks: z.record(z.string(), z.object({
+    status: HealthCheckStatusSchema,
+    message: z.string().optional(),
+    latency: z.number().optional(),
+  })),
+  timestamp: z.number(),
+  uptime: z.number(),
+});
+
+export type HealthCheckResult = z.infer<typeof HealthCheckResultSchema>;
 
 export interface HealthChecker {
   registerCheck(name: string, check: () => Promise<{ status: "ok" | "warn" | "error"; message?: string; latency?: number }>): void;

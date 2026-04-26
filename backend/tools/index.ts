@@ -18,13 +18,13 @@ import { ToolManualRegistry } from "./tool-manual-registry.js";
 import type { CommandRegistry } from "../commands/command-registry.js";
 import type { CronScheduler } from "../scheduler/cron-scheduler.js";
 
-export { createFileTools, type FileConfig } from "./file-tools.js";
+export { createFileTools } from "./file-tools.js";
 export { createGitTools } from "./git-tools.js";
-export { createSearchTools, type GlobToolInput, type GrepToolInput } from "./search-tools.js";
-export { createBashTools, type BashToolInput, type BashOutputInput, type KillShellInput } from "./bash-tools.js";
+export { createSearchTools } from "./search-tools.js";
+export { createBashTools } from "./bash-tools.js";
 export { createAgentTool, type AgentToolManifest } from "./agent-tool.js";
-export { createWebTools, type WebFetchInput, type WebSearchInput } from "./web-tools.js";
-export { createUtilityTools, type TodoItem, type TodoWriteInput, type ExitPlanModeInput, type SlashCommandInput, type TaskInput, getTodoState, resetTodoState } from "./utility-tools.js";
+export { createWebTools } from "./web-tools.js";
+export { createUtilityTools, type TodoItem, getTodoState, resetTodoState } from "./utility-tools.js";
 export { createMultimediaTools, type MediaAnalysisResult } from "./multimedia-tools.js";
 export { createBrowserTools, type BrowserConfig, type BrowserState } from "./browser-tools.js";
 export { createGitHubTools, type GitHubConfig } from "./github-tools.js";
@@ -34,7 +34,7 @@ export { createIDETools, type IDEConfig } from "./ide-tools.js";
 export { createCronTools } from "./cron-tools.js";
 export { createToolSearchTool, type ToolSearchToolConfig } from "./tool-search-tool.js";
 export { ToolManualRegistry, type ToolManualEntry, type ToolManualIndex } from "./tool-manual-registry.js";
-export { defineTool, createReadOnlyTool, createWriteTool, type ToolConfig, type SafetyFlags } from "./tool-factory.js";
+export { defineTool, createReadOnlyTool, createWriteTool, type ToolConfig } from "./tool-factory.js";
 export {
   validateWithZod,
   validateOutputWithZod,

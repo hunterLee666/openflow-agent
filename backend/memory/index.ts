@@ -20,9 +20,10 @@ export { SessionManager, createSessionManager } from "./session-manager.js";
 export type { SessionEvent, SessionObservation, SessionRecord, ContextBundle, SessionReport, SessionManagerConfig } from "./session-manager.js";
 
 export { SQLiteStorage, createSQLiteStorage } from "./sqlite-storage.js";
+export type { MemoryEntry, MemoryQuery } from "./sqlite-storage.js";
 
 export { HNSWVectorIndex, createHNSWVectorIndex } from "./hnsw-vector-index.js";
-export type { HNSWConfig, HNSWEntry, HNSWSearchResult, HNSWMetric, HNSWStats } from "./hnsw-vector-index.js";
+export type { HNSWVectorConfig as HNSWConfig, HNSWEntry, HNSWVectorSearchResult as HNSWSearchResult, HNSWMetric, HNSWStats } from "./hnsw-vector-index.js";
 
 export { KnowledgeGraph, createKnowledgeGraph } from "./knowledge-graph.js";
 export type {
@@ -61,7 +62,7 @@ export type {
   SafetyFlag,
   IntentMetadata,
   Entity,
-  EntityType,
+  EntityType as IntentEntityType,
   TimeReference,
   OutputType,
   IntentComplexity,

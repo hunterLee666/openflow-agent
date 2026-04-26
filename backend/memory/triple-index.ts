@@ -1,37 +1,48 @@
-import type { HNSWVectorIndex, HNSWSearchResult } from "./hnsw-vector-index.js";
+import type { HNSWVectorIndex } from "./hnsw-vector-index.js";
+import { z } from "zod";
 
-export interface VectorIndexEntry {
-  id: string;
-  embedding: number[];
-  metadata: Record<string, unknown>;
-}
+export const VectorIndexEntrySchema = z.object({
+  id: z.string(),
+  embedding: z.array(z.number()),
+  metadata: z.record(z.string(), z.unknown()),
+});
 
-export interface BM25IndexEntry {
-  id: string;
-  terms: Map<string, number>;
-  content: string;
-}
+export type VectorIndexEntry = z.infer<typeof VectorIndexEntrySchema>;
 
-export interface MetadataFilter {
-  entities?: string[];
-  timeRange?: { start: string; end: string };
-  sourceType?: string;
-  minSalience?: number;
-}
+export const BM25IndexEntrySchema = z.object({
+  id: z.string(),
+  terms: z.map(z.string(), z.number()),
+  content: z.string(),
+});
 
-export interface SearchResult {
-  id: string;
-  score: number;
-  content: string;
-  metadata: Record<string, unknown>;
-}
+export type BM25IndexEntry = z.infer<typeof BM25IndexEntrySchema>;
+
+export const MetadataFilterSchema = z.object({
+  entities: z.array(z.string()).optional(),
+  timeRange: z.object({ start: z.string(), end: z.string() }).optional(),
+  sourceType: z.string().optional(),
+  minSalience: z.number().optional(),
+});
+
+export type MetadataFilter = z.infer<typeof MetadataFilterSchema>;
+
+export const SearchResultSchema = z.object({
+  id: z.string(),
+  score: z.number(),
+  content: z.string(),
+  metadata: z.record(z.string(), z.unknown()),
+});
+
+export type SearchResult = z.infer<typeof SearchResultSchema>;
 
 export type VectorStorageBackend = "memory" | "hnsw";
 
-export interface VectorIndexConfig {
-  backend: VectorStorageBackend;
-  hnswIndex?: HNSWVectorIndex;
-}
+export const VectorIndexConfigSchema = z.object({
+  backend: z.enum(["memory", "hnsw"]),
+  hnswIndex: z.custom<HNSWVectorIndex>().optional(),
+});
+
+export type VectorIndexConfig = z.infer<typeof VectorIndexConfigSchema>;
 
 const DEFAULT_VECTOR_CONFIG: VectorIndexConfig = {
   backend: "memory",

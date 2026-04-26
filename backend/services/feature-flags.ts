@@ -1,14 +1,22 @@
-export type FlagValue = boolean | string | number;
+import { z } from "zod";
 
-export type FlagMap = Record<string, FlagValue>;
+export const FlagValueSchema = z.union([z.boolean(), z.string(), z.number()]);
 
-export interface FlagDefinition {
-  key: string;
-  type: "bool" | "enum" | "number";
-  default: FlagValue;
-  description: string;
-  deprecated?: boolean;
-}
+export type FlagValue = z.infer<typeof FlagValueSchema>;
+
+export const FlagMapSchema = z.record(z.string(), FlagValueSchema);
+
+export type FlagMap = z.infer<typeof FlagMapSchema>;
+
+export const FlagDefinitionSchema = z.object({
+  key: z.string(),
+  type: z.enum(["bool", "enum", "number"]),
+  default: FlagValueSchema,
+  description: z.string(),
+  deprecated: z.boolean().optional(),
+});
+
+export type FlagDefinition = z.infer<typeof FlagDefinitionSchema>;
 
 export interface FlagSource {
   name: string;
@@ -16,11 +24,13 @@ export interface FlagSource {
   getFlags(): FlagMap | Promise<FlagMap>;
 }
 
-export interface EffectiveFlags {
-  values: FlagMap;
-  sources: Record<string, string>;
-  locked: Set<string>;
-}
+export const EffectiveFlagsSchema = z.object({
+  values: FlagMapSchema,
+  sources: z.record(z.string(), z.string()),
+  locked: z.set(z.string()),
+});
+
+export type EffectiveFlags = z.infer<typeof EffectiveFlagsSchema>;
 
 export function mergeFlags(layers: FlagMap[]): FlagMap {
   const out: FlagMap = {};

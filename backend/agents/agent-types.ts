@@ -1,29 +1,36 @@
 import type { ToolDefinition } from "../types/index.js";
+import { z } from "zod";
 
-export interface WorkerAgent {
-  id: string;
-  name: string;
-  description: string;
-  systemPrompt: string;
-  allowedTools: string[];
-}
+export const WorkerAgentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  systemPrompt: z.string(),
+  allowedTools: z.array(z.string()),
+});
 
-export interface SwarmAgent {
-  id: string;
-  name: string;
-  description: string;
-  systemPrompt: string;
-  allowedTools: string[];
-  handoffs: string[];
-}
+export type WorkerAgent = z.infer<typeof WorkerAgentSchema>;
 
-export interface AgentTypeDefinition {
-  description: string;
-  defaultTools?: string[];
-  systemPrompt?: string;
-  readonly?: boolean;
-  canSpawnSubagents?: boolean;
-}
+export const SwarmAgentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  systemPrompt: z.string(),
+  allowedTools: z.array(z.string()),
+  handoffs: z.array(z.string()),
+});
+
+export type SwarmAgent = z.infer<typeof SwarmAgentSchema>;
+
+export const AgentTypeDefinitionSchema = z.object({
+  description: z.string(),
+  defaultTools: z.array(z.string()).optional(),
+  systemPrompt: z.string().optional(),
+  readonly: z.boolean().optional(),
+  canSpawnSubagents: z.boolean().optional(),
+});
+
+export type AgentTypeDefinition = z.infer<typeof AgentTypeDefinitionSchema>;
 
 export const BUILTIN_AGENT_TYPES: Record<string, AgentTypeDefinition> = {
   "general-purpose": {

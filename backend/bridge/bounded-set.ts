@@ -90,16 +90,20 @@ export class LRUSet {
   }
 }
 
-export interface BoundedSetMetrics {
-  size: number;
-  maxSize: number;
-  hitRate: number;
-  missRate: number;
-  totalAdds: number;
-  totalHits: number;
-  totalMisses: number;
-  evictions: number;
-}
+import { z } from 'zod';
+
+export const BoundedSetMetricsSchema = z.object({
+  size: z.number(),
+  maxSize: z.number(),
+  hitRate: z.number(),
+  missRate: z.number(),
+  totalAdds: z.number(),
+  totalHits: z.number(),
+  totalMisses: z.number(),
+  evictions: z.number(),
+});
+
+export type BoundedSetMetrics = z.infer<typeof BoundedSetMetricsSchema>;
 
 export class BoundedSetWithMetrics extends BoundedUUIDSet {
   private totalAdds = 0;

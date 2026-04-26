@@ -1,28 +1,35 @@
 import type { CapabilityContext, CapabilityPlugin } from "../types/index.js";
-import { CapabilityType, CapabilityStatus } from "../types/index.js";
+import { CapabilityType } from "../types/index.js";
 import type { SkillDocument } from "../memory/enhanced-memory-core.js";
 import type { ProceduralMemory } from "../memory/procedural-memory.js";
+import { z } from "zod";
 
-export interface GEPAConfig {
-  minSuccessCount: number;
-  maxFailureCount: number;
-  distillInterval: number;
-  skillDir: string;
-}
+export const GEPAConfigSchema = z.object({
+  minSuccessCount: z.number(),
+  maxFailureCount: z.number(),
+  distillInterval: z.number(),
+  skillDir: z.string(),
+});
 
-export interface TaskTrace {
-  id: string;
-  goal: string;
-  steps: Array<{
-    tool: string;
-    input: unknown;
-    output: unknown;
-    timestamp: number;
-  }>;
-  outcome: "success" | "failure" | "partial";
-  duration: number;
-  timestamp: number;
-}
+export const TaskStepSchema = z.object({
+  tool: z.string(),
+  input: z.unknown(),
+  output: z.unknown(),
+  timestamp: z.number(),
+});
+
+export const TaskTraceSchema = z.object({
+  id: z.string(),
+  goal: z.string(),
+  steps: z.array(TaskStepSchema),
+  outcome: z.enum(["success", "failure", "partial"]),
+  duration: z.number(),
+  timestamp: z.number(),
+});
+
+export type GEPAConfig = z.infer<typeof GEPAConfigSchema>;
+export type TaskTrace = z.infer<typeof TaskTraceSchema>;
+export type TaskStep = z.infer<typeof TaskStepSchema>;
 
 export class GEPASelfEvolution {
   private traces: TaskTrace[] = [];
@@ -287,7 +294,7 @@ export function createGEPASkillPlugin(
     manifest: {
       name: skill.frontmatter.name,
       version: skill.frontmatter.version,
-      type: CapabilityType.SKILL,
+      type: "skill" as const,
       description: skill.frontmatter.description,
       triggers: skill.frontmatter.triggers,
       allowedTools: skill.frontmatter.allowedTools,

@@ -1,10 +1,14 @@
-export interface PromptLayer {
-  name: string;
-  content: string;
-  stability: "static" | "dynamic";
-  priority: number;
-  cacheable?: boolean;
-}
+import { z } from "zod";
+
+export const PromptLayerSchema = z.object({
+  name: z.string(),
+  content: z.string(),
+  stability: z.enum(["static", "dynamic"]),
+  priority: z.number(),
+  cacheable: z.boolean().optional(),
+});
+
+export type PromptLayer = z.infer<typeof PromptLayerSchema>;
 
 export interface PromptContext {
   config: Record<string, unknown>;

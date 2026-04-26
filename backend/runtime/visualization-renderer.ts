@@ -362,15 +362,12 @@ export class VisualizationRenderer extends EventEmitter {
 
   async openInBrowser(url: string, browser?: string): Promise<void> {
     try {
-      const openModule = await import("open");
-      const open = openModule.default;
+      const { exec } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const execAsync = promisify(exec);
 
-      const options: Record<string, unknown> = {};
-      if (browser) {
-        options.app = { name: browser };
-      }
-
-      await open(url, options);
+      const command = browser ? `${browser} "${url}"` : `open "${url}"`;
+      await execAsync(command);
       this.emit("browser:open", { url });
     } catch (error) {
       await this.fallbackOpen(url);
@@ -382,9 +379,11 @@ export class VisualizationRenderer extends EventEmitter {
     await access(absolutePath);
 
     try {
-      const openModule = await import("open");
-      const open = openModule.default;
-      await open(absolutePath);
+      const { exec } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const execAsync = promisify(exec);
+
+      await execAsync(`open "${absolutePath}"`);
       this.emit("file:open", { path: absolutePath });
     } catch (error) {
       await this.fallbackOpen(absolutePath);

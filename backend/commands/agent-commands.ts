@@ -1,15 +1,18 @@
 import type { PluginManager } from "../plugins/index.js";
 import type { AgentMode } from "../agents/mode-selector.js";
 import { ModeSelector } from "../agents/mode-selector.js";
+import { z } from "zod";
 
-interface AgentCommandArgs {
-  name?: string;
-  mode?: AgentMode;
-  goal?: string;
-  context?: string;
-  list?: boolean;
-  analyze?: boolean;
-}
+export const AgentCommandArgsSchema = z.object({
+  name: z.string().optional(),
+  mode: z.enum(["single", "swarm", "coordinator", "auto"]).optional(),
+  goal: z.string().optional(),
+  context: z.string().optional(),
+  list: z.boolean().optional(),
+  analyze: z.boolean().optional(),
+});
+
+export type AgentCommandArgs = z.infer<typeof AgentCommandArgsSchema>;
 
 export function createAgentCommands(manager: PluginManager): Record<string, (args: string) => Promise<string>> {
   const modeSelector = new ModeSelector();

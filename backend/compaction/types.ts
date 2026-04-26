@@ -1,45 +1,70 @@
-export type MemoryPriority = "critical" | "high" | "medium" | "low";
-export type MemorySource = "episodic" | "semantic" | "working" | "project" | "observation";
+import { z } from "zod";
 
-export interface TokenBudgetConfig {
-  maxTokens: number;
-  reservedTokens: number;
-  priorityWeights: Record<MemoryPriority, number>;
-  enableCompression: boolean;
-  compressionRatio: number;
-  fallbackToSummary: boolean;
-}
+export const MemoryPrioritySchema = z.enum(["critical", "high", "medium", "low"]);
 
-export interface ContextSegment {
-  id: string;
-  content: string;
-  tokens: number;
-  priority: MemoryPriority;
-  importance: number;
-  source: MemorySource;
-  canExpand: boolean;
-  summary?: string;
-}
+export type MemoryPriority = z.infer<typeof MemoryPrioritySchema>;
 
-export interface ContextBundle {
-  query: string;
-  segments: ContextSegment[];
-  totalTokens: number;
-  maxTokens: number;
-  hitRate: number;
-  renderedContent: string;
-}
+export const MemorySourceSchema = z.enum(["episodic", "semantic", "working", "project", "observation"]);
 
-export interface TokenEstimate {
-  text: string;
-  tokens: number;
-  charCount: number;
-}
+export type MemorySource = z.infer<typeof MemorySourceSchema>;
 
-export interface BudgetAllocationStats {
-  bySource: Record<string, { count: number; tokens: number; percent: number }>;
-  byPriority: Record<MemoryPriority, { count: number; tokens: number; percent: number }>;
-  totalTokens: number;
-  maxTokens: number;
-  utilization: number;
-}
+export const TokenBudgetConfigSchema = z.object({
+  maxTokens: z.number(),
+  reservedTokens: z.number(),
+  priorityWeights: z.record(MemoryPrioritySchema, z.number()),
+  enableCompression: z.boolean(),
+  compressionRatio: z.number(),
+  fallbackToSummary: z.boolean(),
+});
+
+export type TokenBudgetConfig = z.infer<typeof TokenBudgetConfigSchema>;
+
+export const ContextSegmentSchema = z.object({
+  id: z.string(),
+  content: z.string(),
+  tokens: z.number(),
+  priority: MemoryPrioritySchema,
+  importance: z.number(),
+  source: MemorySourceSchema,
+  canExpand: z.boolean(),
+  summary: z.string().optional(),
+});
+
+export type ContextSegment = z.infer<typeof ContextSegmentSchema>;
+
+export const ContextBundleSchema = z.object({
+  query: z.string(),
+  segments: z.array(ContextSegmentSchema),
+  totalTokens: z.number(),
+  maxTokens: z.number(),
+  hitRate: z.number(),
+  renderedContent: z.string(),
+});
+
+export type ContextBundle = z.infer<typeof ContextBundleSchema>;
+
+export const TokenEstimateSchema = z.object({
+  text: z.string(),
+  tokens: z.number(),
+  charCount: z.number(),
+});
+
+export type TokenEstimate = z.infer<typeof TokenEstimateSchema>;
+
+export const BudgetAllocationStatsSchema = z.object({
+  bySource: z.record(z.object({
+    count: z.number(),
+    tokens: z.number(),
+    percent: z.number(),
+  })),
+  byPriority: z.record(MemoryPrioritySchema, z.object({
+    count: z.number(),
+    tokens: z.number(),
+    percent: z.number(),
+  })),
+  totalTokens: z.number(),
+  maxTokens: z.number(),
+  utilization: z.number(),
+});
+
+export type BudgetAllocationStats = z.infer<typeof BudgetAllocationStatsSchema>;

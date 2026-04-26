@@ -1,30 +1,39 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { z } from "zod";
 
-export interface ProjectAnalysis {
-  name: string;
-  rootDir: string;
-  language: string;
-  framework?: string;
-  packageManager?: string;
-  totalFiles: number;
-  totalLines: number;
-  structure: DirectoryNode;
-  keyCommands: Array<{ name: string; command: string; description: string }>;
-  codingConventions: string[];
-  techStack: string[];
-}
-
-interface DirectoryNode {
+export type DirectoryNode = {
   name: string;
   type: "directory" | "file";
   children?: DirectoryNode[];
   size?: number;
-}
+};
 
-interface LanguageStats {
-  [extension: string]: { files: number; lines: number };
-}
+export const LanguageStatsSchema = z.record(z.object({
+  files: z.number(),
+  lines: z.number(),
+}));
+
+export const ProjectAnalysisSchema = z.object({
+  name: z.string(),
+  rootDir: z.string(),
+  language: z.string(),
+  framework: z.string().optional(),
+  packageManager: z.string().optional(),
+  totalFiles: z.number(),
+  totalLines: z.number(),
+  structure: z.any() as z.ZodType<DirectoryNode>,
+  keyCommands: z.array(z.object({
+    name: z.string(),
+    command: z.string(),
+    description: z.string(),
+  })),
+  codingConventions: z.array(z.string()),
+  techStack: z.array(z.string()),
+});
+
+export type LanguageStats = z.infer<typeof LanguageStatsSchema>;
+export type ProjectAnalysis = z.infer<typeof ProjectAnalysisSchema>;
 
 const TECH_STACK_INDICATORS: Record<string, string[]> = {
   "package.json": ["Node.js", "npm/yarn/pnpm"],

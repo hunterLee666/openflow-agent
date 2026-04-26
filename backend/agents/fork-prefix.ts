@@ -1,8 +1,12 @@
-export interface ForkPrefixConfig {
-  prefix: string;
-  enableCompletionPrefix: boolean;
-  completionPrefix: string;
-}
+import { z } from "zod";
+
+export const ForkPrefixConfigSchema = z.object({
+  prefix: z.string(),
+  enableCompletionPrefix: z.boolean(),
+  completionPrefix: z.string(),
+});
+
+export type ForkPrefixConfig = z.infer<typeof ForkPrefixConfigSchema>;
 
 const DEFAULT_CONFIG: ForkPrefixConfig = {
   prefix: "Fork started — processing in background",

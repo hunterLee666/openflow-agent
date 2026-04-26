@@ -1,32 +1,39 @@
 import { createHash } from "node:crypto";
+import { z } from "zod";
 
 export interface DesensitizationRule {
   pattern: RegExp;
-  replacement: string | ((match: string) => string);
+  replacement: string | ((match: string, ...groups: string[]) => string);
   priority: number;
   description: string;
 }
 
-export interface DesensitizationConfig {
-  enableDesensitization: boolean;
-  enableHashReplacement: boolean;
-  customRules: DesensitizationRule[];
-  maxDesensitizationLength: number;
-  logDesensitization: boolean;
-}
+export const DesensitizationConfigSchema = z.object({
+  enableDesensitization: z.boolean(),
+  enableHashReplacement: z.boolean(),
+  customRules: z.array(z.any()),
+  maxDesensitizationLength: z.number(),
+  logDesensitization: z.boolean(),
+});
 
-export interface DesensitizationStats {
-  totalRulesApplied: number;
-  sensitiveItemsFound: number;
-  originalLength: number;
-  desensitizedLength: number;
-  processingTimeMs: number;
-}
+export type DesensitizationConfig = z.infer<typeof DesensitizationConfigSchema>;
 
-export interface DesensitizationResult {
-  content: string;
-  stats: DesensitizationStats;
-}
+export const DesensitizationStatsSchema = z.object({
+  totalRulesApplied: z.number(),
+  sensitiveItemsFound: z.number(),
+  originalLength: z.number(),
+  desensitizedLength: z.number(),
+  processingTimeMs: z.number(),
+});
+
+export type DesensitizationStats = z.infer<typeof DesensitizationStatsSchema>;
+
+export const DesensitizationResultSchema = z.object({
+  content: z.string(),
+  stats: DesensitizationStatsSchema,
+});
+
+export type DesensitizationResult = z.infer<typeof DesensitizationResultSchema>;
 
 const DEFAULT_CONFIG: DesensitizationConfig = {
   enableDesensitization: true,

@@ -1,32 +1,47 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
+import { z } from "zod";
 
-export interface DreamEntry {
-  id: string;
-  timestamp: number;
-  content: string;
-  type: "event" | "preference" | "correction" | "fact";
-}
+export const DreamEntrySchema = z.object({
+  id: z.string(),
+  timestamp: z.number(),
+  content: z.string(),
+  type: z.enum(["event", "preference", "correction", "fact"]),
+});
 
-export interface DistilledCard {
-  id: string;
-  title: string;
-  description: string;
-  category: "user_preference" | "project_context" | "workflow" | "pain_point";
-  confidence: number;
-  createdAt: number;
-  sourceEntries: string[];
-}
+export type DreamEntry = z.infer<typeof DreamEntrySchema>;
 
-export interface KairosDreamingConfig {
-  memoryDir: string;
-  idleThresholdMs: number;
-  nightHours: [number, number];
-  enableNightDream: boolean;
-  enableIdleDream: boolean;
-  maxCardsPerDream: number;
-}
+export const DistilledCardSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+  category: z.enum(["user_preference", "project_context", "workflow", "pain_point"]),
+  confidence: z.number(),
+  createdAt: z.number(),
+  sourceEntries: z.array(z.string()),
+});
+
+export type DistilledCard = z.infer<typeof DistilledCardSchema>;
+
+export const KairosDreamingConfigSchema = z.object({
+  memoryDir: z.string(),
+  idleThresholdMs: z.number(),
+  nightHours: z.tuple([z.number(), z.number()]),
+  enableNightDream: z.boolean(),
+  enableIdleDream: z.boolean(),
+  maxCardsPerDream: z.number(),
+});
+
+export type KairosDreamingConfig = z.infer<typeof KairosDreamingConfigSchema>;
+
+export const DreamResultSchema = z.object({
+  distilled: z.number(),
+  cards: z.array(DistilledCardSchema),
+  reason: z.enum(["idle", "night", "manual"]),
+});
+
+export type DreamResult = z.infer<typeof DreamResultSchema>;
 
 const DEFAULT_CONFIG: KairosDreamingConfig = {
   memoryDir: ".openflow/memory/dreams",
@@ -281,12 +296,6 @@ export class KairosDreaming {
     const filePath = join(this.config.memoryDir, "distilled_cards.json");
     await writeFile(filePath, JSON.stringify(this.distilledCards, null, 2), "utf-8");
   }
-}
-
-export interface DreamResult {
-  distilled: number;
-  cards: DistilledCard[];
-  reason: "idle" | "night" | "manual";
 }
 
 export function createKairosDreaming(config?: Partial<KairosDreamingConfig>): KairosDreaming {

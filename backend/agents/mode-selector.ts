@@ -1,28 +1,34 @@
 import type { SubAgentTask, SubAgentContext } from "./sub-agent-system.js";
+import { z } from "zod";
 
-export type AgentMode = "single" | "swarm" | "coordinator";
+export const AgentModeSchema = z.enum(["single", "swarm", "coordinator"]);
 
-export interface ModeSelectorConfig {
-  singleAgentTokenThreshold: number;
-  swarmAgentThreshold: number;
-  coordinatorComplexityThreshold: number;
-}
+export const ModeSelectorConfigSchema = z.object({
+  singleAgentTokenThreshold: z.number(),
+  swarmAgentThreshold: z.number(),
+  coordinatorComplexityThreshold: z.number(),
+});
 
-export interface TaskComplexity {
-  score: number;
-  requiresMultipleAgents: boolean;
-  recommendedMode: AgentMode;
-  factors: TaskComplexityFactors;
-}
+export const TaskComplexityFactorsSchema = z.object({
+  hasMultipleSubtasks: z.boolean(),
+  requiresSpecialization: z.boolean(),
+  hasDependencies: z.boolean(),
+  estimatedTokenCount: z.number(),
+  requiresParallelism: z.boolean(),
+  complexityLevel: z.enum(["simple", "moderate", "complex"]),
+});
 
-export interface TaskComplexityFactors {
-  hasMultipleSubtasks: boolean;
-  requiresSpecialization: boolean;
-  hasDependencies: boolean;
-  estimatedTokenCount: number;
-  requiresParallelism: boolean;
-  complexityLevel: "simple" | "moderate" | "complex";
-}
+export const TaskComplexitySchema = z.object({
+  score: z.number(),
+  requiresMultipleAgents: z.boolean(),
+  recommendedMode: AgentModeSchema,
+  factors: TaskComplexityFactorsSchema,
+});
+
+export type AgentMode = z.infer<typeof AgentModeSchema>;
+export type ModeSelectorConfig = z.infer<typeof ModeSelectorConfigSchema>;
+export type TaskComplexityFactors = z.infer<typeof TaskComplexityFactorsSchema>;
+export type TaskComplexity = z.infer<typeof TaskComplexitySchema>;
 
 export class ModeSelector {
   private config: ModeSelectorConfig;

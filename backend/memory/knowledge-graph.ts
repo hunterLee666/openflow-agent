@@ -1,51 +1,78 @@
-export type EntityType = "person" | "project" | "concept" | "tool" | "location" | "event" | "organization" | "other";
+import { z } from "zod";
 
-export type RelationType = "related_to" | "depends_on" | "created_by" | "part_of" | "used_by" | "located_in" | "belongs_to" | "causes" | "prevents" | "similar_to";
+export const EntityTypeSchema = z.enum(["person", "project", "concept", "tool", "location", "event", "organization", "other"]);
 
-export interface GraphEntity {
-  id: string;
-  name: string;
-  type: EntityType;
-  description: string;
-  properties: Record<string, unknown>;
-  createdAt: number;
-  updatedAt: number;
-  confidence: number;
-  mentionCount: number;
-}
+export type EntityType = z.infer<typeof EntityTypeSchema>;
 
-export interface GraphRelation {
-  id: string;
-  sourceId: string;
-  targetId: string;
-  type: RelationType;
-  description: string;
-  confidence: number;
-  createdAt: number;
-  evidence?: string;
-}
+export const RelationTypeSchema = z.enum([
+  "related_to",
+  "depends_on",
+  "created_by",
+  "part_of",
+  "used_by",
+  "located_in",
+  "belongs_to",
+  "causes",
+  "prevents",
+  "similar_to",
+]);
 
-export interface GraphQuery {
-  entityName?: string;
-  entityType?: EntityType;
-  relationType?: RelationType;
-  connectedTo?: string;
-  minConfidence?: number;
-  limit?: number;
-}
+export type RelationType = z.infer<typeof RelationTypeSchema>;
 
-export interface GraphSearchResult {
-  entities: GraphEntity[];
-  relations: GraphRelation[];
-  paths: GraphEntity[][];
-}
+export const GraphEntitySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: EntityTypeSchema,
+  description: z.string(),
+  properties: z.record(z.string(), z.unknown()),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  confidence: z.number(),
+  mentionCount: z.number(),
+});
 
-export interface KnowledgeGraphStats {
-  totalEntities: number;
-  totalRelations: number;
-  entityTypes: Record<EntityType, number>;
-  relationTypes: Record<RelationType, number>;
-}
+export type GraphEntity = z.infer<typeof GraphEntitySchema>;
+
+export const GraphRelationSchema = z.object({
+  id: z.string(),
+  sourceId: z.string(),
+  targetId: z.string(),
+  type: RelationTypeSchema,
+  description: z.string(),
+  confidence: z.number(),
+  createdAt: z.number(),
+  evidence: z.string().optional(),
+});
+
+export type GraphRelation = z.infer<typeof GraphRelationSchema>;
+
+export const GraphQuerySchema = z.object({
+  entityName: z.string().optional(),
+  entityType: EntityTypeSchema.optional(),
+  relationType: RelationTypeSchema.optional(),
+  connectedTo: z.string().optional(),
+  minConfidence: z.number().optional(),
+  limit: z.number().optional(),
+});
+
+export type GraphQuery = z.infer<typeof GraphQuerySchema>;
+
+export const GraphSearchResultSchema = z.object({
+  entities: z.array(GraphEntitySchema),
+  relations: z.array(GraphRelationSchema),
+  paths: z.array(z.array(GraphEntitySchema)),
+});
+
+export type GraphSearchResult = z.infer<typeof GraphSearchResultSchema>;
+
+export const KnowledgeGraphStatsSchema = z.object({
+  totalEntities: z.number(),
+  totalRelations: z.number(),
+  entityTypes: z.record(EntityTypeSchema, z.number()),
+  relationTypes: z.record(RelationTypeSchema, z.number()),
+});
+
+export type KnowledgeGraphStats = z.infer<typeof KnowledgeGraphStatsSchema>;
 
 export class KnowledgeGraph {
   private entities = new Map<string, GraphEntity>();
@@ -148,7 +175,8 @@ export class KnowledgeGraph {
     }
 
     if (query.minConfidence !== undefined) {
-      matchedEntities = matchedEntities.filter((e) => e.confidence >= query.minConfidence);
+      const minConf = query.minConfidence;
+      matchedEntities = matchedEntities.filter((e) => e.confidence >= minConf);
     }
 
     let matchedRelations = Array.from(this.relations.values());

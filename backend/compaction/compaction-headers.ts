@@ -1,12 +1,15 @@
 import type { CompactionProfile } from "../llm/types.js";
 import { COMPACTION_PROFILES } from "../llm/types.js";
+import { z } from "zod";
 
-export interface CompactionConfig {
-  enabled: boolean;
-  profile: string;
-  autoApply: boolean;
-  threshold: number;
-}
+export const CompactionConfigSchema = z.object({
+  enabled: z.boolean(),
+  profile: z.string(),
+  autoApply: z.boolean(),
+  threshold: z.number(),
+});
+
+export type CompactionConfig = z.infer<typeof CompactionConfigSchema>;
 
 export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
   enabled: true,

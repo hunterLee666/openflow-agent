@@ -3,12 +3,98 @@ import { promisify } from "node:util";
 import { readdir, readFile, stat, writeFile, mkdir } from "node:fs/promises";
 import { join, resolve, basename } from "node:path";
 import { existsSync } from "node:fs";
+import { z } from "zod";
 import { ExplorationSecurity, createExplorationSecurity, SecurityPolicy } from "./exploration-security.js";
 import { ExplorationDesensitizer, createExplorationDesensitizer } from "./exploration-desensitizer.js";
 import type { ValidationResult, SecurityViolation } from "./exploration-security.js";
 import type { DesensitizationResult } from "./exploration-desensitizer.js";
 
 const execAsync = promisify(exec);
+
+export const IdentityInfoSchema = z.object({
+  name: z.string(),
+  role: z.string(),
+  personality: z.string(),
+  constraints: z.array(z.string()),
+});
+
+export type IdentityInfo = z.infer<typeof IdentityInfoSchema>;
+
+export const UserInfoSchema = z.object({
+  name: z.string(),
+  preferences: z.array(z.string()),
+  technicalLevel: z.string(),
+  communicationStyle: z.string(),
+});
+
+export type UserInfo = z.infer<typeof UserInfoSchema>;
+
+export const TimeInfoSchema = z.object({
+  iso: z.string(),
+  timezone: z.string(),
+  unixTimestamp: z.number(),
+});
+
+export type TimeInfo = z.infer<typeof TimeInfoSchema>;
+
+export const OSInfoSchema = z.object({
+  platform: z.string(),
+  release: z.string(),
+  arch: z.string(),
+  hostname: z.string(),
+  cpuCount: z.number(),
+  totalMemory: z.number(),
+});
+
+export type OSInfo = z.infer<typeof OSInfoSchema>;
+
+export const SandboxInfoSchema = z.object({
+  enabled: z.boolean(),
+  mode: z.string(),
+  allowedPaths: z.array(z.string()),
+  elevatedExec: z.boolean(),
+});
+
+export type SandboxInfo = z.infer<typeof SandboxInfoSchema>;
+
+export const ExplorationStepSchema = z.object({
+  step: z.number(),
+  action: z.string(),
+  tool: z.string(),
+  input: z.string(),
+  output: z.string(),
+  timestamp: z.number(),
+});
+
+export type ExplorationStep = z.infer<typeof ExplorationStepSchema>;
+
+export const ObservationSchema = z.object({
+  type: z.enum(["file", "command", "search", "browser", "api"]),
+  content: z.string(),
+  relevance: z.number(),
+  timestamp: z.number(),
+});
+
+export type Observation = z.infer<typeof ObservationSchema>;
+
+export const ExplorationEngineConfigSchema = z.object({
+  maxBootstrapChars: z.number(),
+  maxTotalBootstrapChars: z.number(),
+  maxDirectoryDepth: z.number(),
+  maxTopLevelEntries: z.number(),
+  maxDependencies: z.number(),
+  maxShortTermMemories: z.number(),
+  cacheTtlMs: z.number(),
+  enableGitExploration: z.boolean(),
+  enableProjectExploration: z.boolean(),
+  enableMemoryExploration: z.boolean(),
+  securityPolicy: z.any().optional(),
+  maxEnvTokens: z.number(),
+  enableDynamicRefresh: z.boolean(),
+  changeDetectionIntervalMs: z.number(),
+});
+
+export type ExplorationEngineConfig = z.infer<typeof ExplorationEngineConfigSchema>;
 
 export interface ExplorationContext {
   baseline: BaselineContext;
@@ -26,20 +112,6 @@ export interface BaselineContext {
   skills: SkillRegistry;
   memory: MemoryBaseline;
   time: TimeInfo;
-}
-
-export interface IdentityInfo {
-  name: string;
-  role: string;
-  personality: string;
-  constraints: string[];
-}
-
-export interface UserInfo {
-  name: string;
-  preferences: string[];
-  technicalLevel: string;
-  communicationStyle: string;
 }
 
 export interface WorkspaceBaseline {
@@ -75,28 +147,6 @@ export interface MemoryBaseline {
   shortTerm: ShortTermMemory[];
   longTerm: LongTermMemory;
   procedural: ProceduralMemory[];
-}
-
-export interface TimeInfo {
-  iso: string;
-  timezone: string;
-  unixTimestamp: number;
-}
-
-export interface OSInfo {
-  platform: string;
-  release: string;
-  arch: string;
-  hostname: string;
-  cpuCount: number;
-  totalMemory: number;
-}
-
-export interface SandboxInfo {
-  enabled: boolean;
-  mode: string;
-  allowedPaths: string[];
-  elevatedExec: boolean;
 }
 
 export interface DirectoryTree {
@@ -166,22 +216,6 @@ export interface TaskDrivenContext {
   nextActions: string[];
 }
 
-export interface ExplorationStep {
-  step: number;
-  action: string;
-  tool: string;
-  input: string;
-  output: string;
-  timestamp: number;
-}
-
-export interface Observation {
-  type: "file" | "command" | "search" | "browser" | "api";
-  content: string;
-  relevance: number;
-  timestamp: number;
-}
-
 export interface LayeredMemory {
   l1PromptMemory: PromptMemory;
   l2SessionSearch: SessionSearch;
@@ -225,23 +259,6 @@ export interface BootstrapFile {
   content: string;
   truncated: boolean;
   injected: boolean;
-}
-
-export interface ExplorationEngineConfig {
-  maxBootstrapChars: number;
-  maxTotalBootstrapChars: number;
-  maxDirectoryDepth: number;
-  maxTopLevelEntries: number;
-  maxDependencies: number;
-  maxShortTermMemories: number;
-  cacheTtlMs: number;
-  enableGitExploration: boolean;
-  enableProjectExploration: boolean;
-  enableMemoryExploration: boolean;
-  securityPolicy?: Partial<SecurityPolicy>;
-  maxEnvTokens: number;
-  enableDynamicRefresh: boolean;
-  changeDetectionIntervalMs: number;
 }
 
 const DEFAULT_CONFIG: ExplorationEngineConfig = {

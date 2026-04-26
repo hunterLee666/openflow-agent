@@ -1,7 +1,11 @@
-export interface MaskingOptions {
-  replaceWith?: string;
-  maskEntire?: boolean;
-}
+import { z } from "zod";
+
+export const MaskingOptionsSchema = z.object({
+  replaceWith: z.string().optional(),
+  maskEntire: z.boolean().optional(),
+});
+
+export type MaskingOptions = z.infer<typeof MaskingOptionsSchema>;
 
 const DEFAULT_MASK = "[REDACTED]";
 

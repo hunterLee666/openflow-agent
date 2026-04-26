@@ -604,28 +604,30 @@ export class AssetLoader {
       if (colonIndex === -1) continue;
 
       const key = line.slice(0, colonIndex).trim();
-      let value = line.slice(colonIndex + 1).trim();
+      let value: unknown = line.slice(colonIndex + 1).trim();
 
-      if (value.startsWith('"') && value.endsWith('"')) {
-        value = value.slice(1, -1);
-      } else if (value.startsWith("[") && value.endsWith("]")) {
-        try {
-          value = JSON.parse(value);
-        } catch {
-          value = value.slice(1, -1).split(",").map((s) => s.trim());
+      if (typeof value === "string") {
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        } else if (value.startsWith("[") && value.endsWith("]")) {
+          try {
+            value = JSON.parse(value);
+          } catch {
+            value = (value as string).slice(1, -1).split(",").map((s: string) => s.trim());
+          }
+        } else if (value.startsWith("{") && value.endsWith("}")) {
+          try {
+            value = JSON.parse(value);
+          } catch {
+            // Keep as string
+          }
+        } else if (value === "true") {
+          value = true;
+        } else if (value === "false") {
+          value = false;
+        } else if (!isNaN(Number(value)) && value !== "") {
+          value = Number(value);
         }
-      } else if (value.startsWith("{") && value.endsWith("}")) {
-        try {
-          value = JSON.parse(value);
-        } catch {
-          // Keep as string
-        }
-      } else if (value === "true") {
-        value = true;
-      } else if (value === "false") {
-        value = false;
-      } else if (!isNaN(Number(value)) && value !== "") {
-        value = Number(value);
       }
 
       result[key] = value;
