@@ -1,6 +1,6 @@
 import useInput from '../hooks/useInput'
 import useSize from '../hooks/useSize'
-import { Color } from '../screen'
+import { Color } from '../types'
 import Scrollbar from './Scrollbar'
 import Text from './Text'
 import { useEffect, useMemo, useState } from 'react'

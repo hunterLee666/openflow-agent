@@ -1,4 +1,4 @@
-import Renderer from '../renderer'
+import Renderer from '../core/renderer'
 import { useState, useEffect, useRef } from 'react'
 
 const interpolate = (toLow: number, toHigh: number, fromLow: number, fromHigh: number, value: number) => {
@@ -10,11 +10,14 @@ const interpolateColor = (toLow: string, toHigh: string, fromLow: number, fromHi
   if (!toLow.startsWith('#')) return toHigh
   if (!toHigh.startsWith('#')) return toHigh
 
-  const toLowColor = Renderer.term.parseHexColor(toLow)
+  const term = Renderer.term
+  if (!term) return toHigh
+
+  const toLowColor = term.parseHexColor(toLow)
   return (
     '#' +
     Buffer.from(
-      Renderer.term.parseHexColor(toHigh).map((i: number, index: number) => {
+      term.parseHexColor(toHigh).map((i: number, index: number) => {
         return Math.round(interpolate(toLowColor[index], i, fromLow, fromHigh, value))
       })
     ).toString('hex')

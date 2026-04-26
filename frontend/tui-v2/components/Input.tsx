@@ -1,6 +1,6 @@
 import useInput from '../hooks/useInput'
-import Renderer from '../renderer'
-import { Color } from '../screen'
+import Renderer from '../core/renderer'
+import { Color } from '../types'
 import Text, { TextProps } from './Text'
 import { useEffect, useMemo, useRef, useState } from 'react'
 

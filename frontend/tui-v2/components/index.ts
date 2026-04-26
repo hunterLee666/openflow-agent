@@ -5,6 +5,7 @@ export { default as Input } from './Input'
 export { default as List } from './List'
 export { default as Spinner } from './Spinner'
 export { default as Frame } from './Frame'
+export { default as Scrollbar } from './Scrollbar'
 export { AppLayout, Sidebar, ChatContainer, StatusBarLayout, TitleBarLayout } from './layout'
 export { OpenFlowSidebar } from './OpenFlowSidebar'
 export { ChatArea, type Message } from './ChatArea'
@@ -14,6 +15,9 @@ export { OpenFlowApp } from './OpenFlowApp'
 export { default as MessageBubble } from './ai/MessageBubble'
 export { default as StreamingText } from './ai/StreamingText'
 export { default as AsciiLogo } from './AsciiLogo'
+export { OperationTree, type OperationNodeData } from './OperationTree'
+export { ModelBadge, type ModelBadgeProps } from './ModelBadge'
+export { CommandPalette, type Command } from './CommandPalette'
 export {
   SidebarSection,
   ProviderItem,
