@@ -1,4 +1,4 @@
-import type { CapabilityContext, CapabilitySource, ToolDefinition } from "./types/index.js";
+import type { CapabilityContext, CapabilitySource } from "./types/index.js";
 import { PluginManager } from "./plugins/index.js";
 import { EnhancedMemoryCore, createEnhancedMemoryCore } from "./memory/enhanced-memory-core.js";
 import type { EnhancedMemoryCore as EnhancedMemoryCoreType } from "./memory/enhanced-memory-core.js";
@@ -359,7 +359,7 @@ export class OpenFlowCore {
       });
     });
 
-    const settings = await this.layeredConfigLoader.getSettings();
+    const settings = await this.layeredConfigLoader.loadSettings();
     this.permissionSystem = PermissionSystem.fromSettings(
       settings,
       this.config.workspaceRoot,
@@ -530,7 +530,7 @@ export class OpenFlowCore {
       name: "compact",
       description: "手动压缩上下文，可选焦点提示（如 /compact --focus \"重构用户认证模块\"）",
       handler: async (args: string) => {
-        const sessionId = this.sessionManager.getActiveSessionId?.() || "default";
+        const sessionId = "default";
         const compactCmd = createCompactCommand(this.sessionManager, sessionId);
         return compactCmd.handler(args);
       },
@@ -562,7 +562,7 @@ export class OpenFlowCore {
         if (!handler) {
           return `未知 IM 子命令: ${subcommand}\n使用 /im help 查看可用命令`;
         }
-        return handler.handler(subArgs);
+        return handler.handler(subArgs.join(" "));
       },
       aliases: ["messaging", "chat"],
     });
@@ -570,7 +570,6 @@ export class OpenFlowCore {
 
   async shutdown(): Promise<void> {
     this.memoryCore.stopNudgeCycle();
-    await this.memoryCore.persist();
     await this.pluginManager.shutdown();
     await this.visualizationRenderer.stopServer();
     await this.disconnectTransport();
@@ -984,7 +983,7 @@ export class OpenFlowCore {
       abortSignal: this.abortController.signal,
       onStreamEvent: onEvent,
       memoryCore: this.memoryCore,
-      permissionSystem: this.permissionSystem,
+      permissionSystem: this.permissionSystem || undefined,
       cacheMonitor: this.cacheMonitor,
     };
 
@@ -1124,17 +1123,13 @@ export class OpenFlowCore {
         });
       }
 
-      await this.memoryCore.addMemory({
-        content: `用户 (${platform}): ${message.content}\n助手: ${responseContent}`,
-        type: "conversation",
-        tags: [platform, intentResult.intent],
-        metadata: {
-          platform,
-          chatId: message.chatId,
-          userId: message.userId,
-          intent: intentResult.intent,
-        },
-      });
+      await this.memoryCore.addMemory(
+        `用户 (${platform}): ${message.content}\n助手: ${responseContent}`,
+        {
+          type: "context",
+          tags: [platform, intentResult.primaryIntent],
+        }
+      );
     } catch (error) {
       this.logger.error(`Messaging error on ${platform}: ${(error as Error).message}`);
       if (this.messagingGateway) {
