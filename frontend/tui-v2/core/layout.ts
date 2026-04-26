@@ -93,10 +93,10 @@ export function measureElement(element: React.ReactNode, containerWidth?: number
   const props = element.props as any
   const type = element.type
   
-  if (props.width !== undefined && props.height !== undefined) {
+  if (props.width !== undefined) {
     return {
       width: typeof props.width === 'number' ? props.width : 0,
-      height: typeof props.height === 'number' ? props.height : 0
+      height: props.height !== undefined ? (typeof props.height === 'number' ? props.height : 0) : 1
     }
   }
   
@@ -141,7 +141,7 @@ export function measureElement(element: React.ReactNode, containerWidth?: number
   const borderExtra = props.borderStyle ? 2 : 0
   
   return {
-    width: (props.width ?? childrenSize.width) + paddingX * 2 + borderExtra,
+    width: childrenSize.width + paddingX * 2 + borderExtra,
     height: (props.height ?? childrenSize.height) + paddingY * 2 + borderExtra
   }
 }

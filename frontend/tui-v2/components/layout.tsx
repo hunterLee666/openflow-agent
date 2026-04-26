@@ -10,16 +10,28 @@ export interface AppLayoutProps {
 }
 
 export function AppLayout({ children, sidebar, statusBar, titleBar }: AppLayoutProps): React.ReactElement {
-  return React.createElement(Box, { flexDirection: 'column', height: '100%' },
-    titleBar,
-    React.createElement(Box, { flexDirection: 'row' },
-      sidebar,
-      React.createElement(Box, { flexDirection: 'column' },
-        children
-      )
-    ),
-    statusBar
-  )
+  const elements: React.ReactNode[] = []
+  
+  if (titleBar) {
+    elements.push(titleBar)
+  }
+  
+  if (sidebar || children) {
+    const rowElements: React.ReactNode[] = []
+    if (sidebar) {
+      rowElements.push(sidebar)
+    }
+    if (children) {
+      rowElements.push(children)
+    }
+    elements.push(React.createElement(Box, { key: 'main', flexDirection: 'row' }, ...rowElements))
+  }
+  
+  if (statusBar) {
+    elements.push(statusBar)
+  }
+  
+  return React.createElement(Box, { flexDirection: 'column' }, ...elements)
 }
 
 export interface SidebarProps {
@@ -61,7 +73,7 @@ export interface TitleBarLayoutProps {
 export function TitleBarLayout({ children }: TitleBarLayoutProps): React.ReactElement {
   return React.createElement(Box, {
     flexDirection: 'row',
-    paddingX: 2,
-    paddingY: 1
+    paddingX: 1,
+    paddingY: 0
   }, children)
 }

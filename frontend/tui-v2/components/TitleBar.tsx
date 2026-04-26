@@ -2,23 +2,16 @@ import React from 'react'
 import Text from './Text'
 import { Box } from './Box'
 
-const ZHENGYI_LOGO = [
-  '██████╗ ██╗  ██╗██╗ █████╗  ██████╗ ██╗    ███████╗██╗      ██████╗ ██████╗  █████╗ ██████╗  █████╗ ',
-  '██╔══██╗██║  ██║██║██╔══██╗██╔════╝ ██║    ██╔════╝██║     ██╔═══██╗██╔══██╗██╔══██╗██╔══██╗██╔══██╗',
-  '██████╔╝███████║██║███████║██║  ███╗██║    █████╗  ██║     ██║   ██║██████╔╝███████║██████╔╝███████║',
-  '██╔═══╝ ██╔══██║██║██╔══██║██║   ██║██║    ██╔══╝  ██║     ██║   ██║██╔══██╗██╔══██║██╔══██╗██╔══██║',
-  '██║     ██║  ██║██║██║  ██║╚██████╔╝██║    ██║     ███████╗╚██████╔╝██║  ██║██║  ██║██║  ██║██║  ██║',
-  '╚═╝     ╚═╝  ╚═╝╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝    ╚═╝     ╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝'
-]
-
 export interface TitleBarProps {
   version?: string
 }
 
 export function TitleBar({ version = 'v2.0.0' }: TitleBarProps): React.ReactElement {
-  return React.createElement(Box, { flexDirection: 'column', paddingX: 2, paddingY: 1 },
-    React.createElement(Text, { color: 'BrightMagenta', bold: true, block: true }, ZHENGYI_LOGO.join('\n')),
-    React.createElement(Text, { color: 'BrightBlack', block: true }, `OpenFlow TUI ${version} - 高性能 AI 终端`)
+  return React.createElement(Box, { flexDirection: 'row', paddingX: 1, paddingY: 0 },
+    React.createElement(Text, { color: 'BrightMagenta', bold: true }, '◆ 政颐制造 '),
+    React.createElement(Text, { color: 'BrightCyan' }, 'OpenFlow TUI'),
+    React.createElement(Text, { color: 'BrightBlack' }, ` ${version}`),
+    React.createElement(Text, { color: 'BrightBlack', dim: true }, ' - 高性能 AI 终端')
   )
 }
 

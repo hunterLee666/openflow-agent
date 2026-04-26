@@ -1,7 +1,6 @@
 import React from 'react'
 import { Box } from './Box'
 import Text from './Text'
-import { ProviderItem, SkillItem, CommandItem } from './sidebar-items'
 
 type TabType = 'model' | 'provider' | 'skills' | 'commands' | 'history' | 'operations' | 'settings' | 'shortcuts'
 
@@ -81,113 +80,122 @@ export function OpenFlowSidebar({
   selectedIndex = 0
 }: OpenFlowSidebarProps): React.ReactElement {
   const tokenPercent = Math.round((tokenUsed / tokenTotal) * 100)
+  const progressBar = '█'.repeat(Math.round(tokenPercent / 5)) + '░'.repeat(20 - Math.round(tokenPercent / 5))
   
-  return React.createElement(Box, { flexDirection: 'column', paddingX: 1 },
-    React.createElement(Text, { color: 'BrightMagenta', bold: true, block: true }, '政颐制造 TUI'),
-    React.createElement(Text, { color: 'BrightBlack', dim: true }, 'v2.0 | 终端界面'),
-    React.createElement(Text, { block: true }, ''),
-    
-    React.createElement(Box, { flexDirection: 'column', paddingX: 1, paddingY: 0 },
-      React.createElement(Text, { color: 'BrightWhite', bold: true }, `🤖 ${model}`),
-      React.createElement(Text, { color: 'BrightBlack', dim: true }, `📦 ${provider}`),
-      React.createElement(Text, { color: 'BrightGreen' }, `⚡ 延迟: ${latency}ms`),
-      React.createElement(Text, { block: true },
-        React.createElement(Text, { color: 'BrightCyan' }, `💰 Token: ${tokenUsed}/${tokenTotal}`),
-        React.createElement(Text, { color: 'BrightYellow' }, ` [${tokenPercent}%]`)
-      ),
-      React.createElement(Text, { color: 'BrightCyan' }, '█'.repeat(Math.round(tokenPercent / 5)))
-    ),
-    React.createElement(Text, { block: true }, ''),
-    
-    React.createElement(Box, { flexDirection: 'column', paddingX: 1, paddingY: 0 },
-      React.createElement(Text, { 
-        color: selectedTab === 'model' ? 'BrightMagenta' : 'BrightBlack', 
-        bold: selectedTab === 'model' 
-      }, TABS.find(t => t.key === selectedTab)?.label || '未选中')
-    ),
-    
-    React.createElement(Text, { block: true }, ''),
-    
-    React.createElement(Box, { flexDirection: 'column' },
-      selectedTab === 'provider' && React.createElement(Box, { flexDirection: 'column' },
-        PROVIDERS.map((p, i) => React.createElement(Text, { 
-          key: p, 
-          color: i === selectedIndex ? 'BrightMagenta' : 'BrightWhite',
-          bold: i === selectedIndex
-        }, p === provider ? `▶ ${p}` : `  ${p}`))
-      ),
-      
-      selectedTab === 'skills' && React.createElement(Box, { flexDirection: 'column' },
-        SKILLS.map((s, i) => React.createElement(Box, { key: s.name, flexDirection: 'column' },
-          React.createElement(Text, { 
-            color: i === selectedIndex ? 'BrightMagenta' : 'BrightWhite',
-            bold: i === selectedIndex
-          }, i === selectedIndex ? '▶ ' : '  ' + s.name),
-          React.createElement(Text, { color: 'BrightBlack', dim: true }, '  ' + s.desc)
-        ))
-      ),
-      
-      selectedTab === 'commands' && React.createElement(Box, { flexDirection: 'column' },
-        COMMANDS.map((c, i) => React.createElement(Text, { key: c.cmd, block: true },
-          React.createElement(Text, { 
-            color: i === selectedIndex ? 'BrightMagenta' : 'BrightWhite',
-            bold: i === selectedIndex
-          }, i === selectedIndex ? '▶ ' : '  '),
-          React.createElement(Text, { color: 'BrightCyan' }, c.cmd),
-          React.createElement(Text, { color: 'BrightBlack', dim: true }, ' - ' + c.desc)
-        ))
-      ),
-      
-      selectedTab === 'history' && React.createElement(Box, { flexDirection: 'column' },
-        HISTORY.map((h, i) => React.createElement(Box, { key: h.id, flexDirection: 'column' },
-          React.createElement(Text, { 
-            color: i === selectedIndex ? 'BrightMagenta' : 'BrightWhite',
-            bold: i === selectedIndex
-          }, i === selectedIndex ? '▶ ' : '  ' + h.name),
-          React.createElement(Text, { color: 'BrightBlack', dim: true }, '  ' + h.time)
-        ))
-      ),
-      
-      selectedTab === 'operations' && React.createElement(Box, { flexDirection: 'column' },
-        OPERATIONS.map((op, i) => {
-          const statusIcon = op.status === 'success' ? '✅' : op.status === 'running' ? '🔄' : '⏳'
-          const statusColor = op.status === 'success' ? 'BrightGreen' : op.status === 'running' ? 'BrightYellow' : 'BrightBlack'
-          return React.createElement(Text, { key: op.name, block: true },
-            React.createElement(Text, { 
-              color: i === selectedIndex ? 'BrightMagenta' : statusColor,
-              bold: i === selectedIndex
-            }, i === selectedIndex ? '▶ ' : '  '),
-            React.createElement(Text, { color: statusColor }, statusIcon + ' ' + op.name)
-          )
-        })
-      ),
-      
-      selectedTab === 'settings' && React.createElement(Box, { flexDirection: 'column' },
-        SETTINGS.map((s, i) => React.createElement(Text, { key: s.name, block: true },
-          React.createElement(Text, { 
-            color: i === selectedIndex ? 'BrightMagenta' : 'BrightWhite',
-            bold: i === selectedIndex
-          }, i === selectedIndex ? '▶ ' : '  '),
-          React.createElement(Text, { color: 'BrightWhite' }, s.name),
-          React.createElement(Text, { color: s.enabled ? 'BrightGreen' : 'BrightBlack', dim: !s.enabled }, s.enabled ? ' [ON]' : ' [OFF]')
-        ))
-      ),
-      
-      selectedTab === 'shortcuts' && React.createElement(Box, { flexDirection: 'column' },
-        SHORTCUTS.map((sh, i) => React.createElement(Text, { key: sh.key, block: true },
-          React.createElement(Text, { 
-            color: i === selectedIndex ? 'BrightMagenta' : 'BrightWhite',
-            bold: i === selectedIndex
-          }, i === selectedIndex ? '▶ ' : '  '),
-          React.createElement(Text, { color: 'BrightCyan' }, sh.key.padEnd(8)),
-          React.createElement(Text, { color: 'BrightBlack', dim: true }, sh.desc)
-        ))
-      )
-    ),
-    
-    React.createElement(Text, { block: true }, ''),
-    React.createElement(Text, { color: 'BrightBlack', dim: true }, '按 ↑/↓ 切换 Tab')
-  )
+  const lines: React.ReactNode[] = []
+  
+  lines.push(React.createElement(Text, { key: 'title', color: 'BrightMagenta', bold: true }, '◆ 政颐制造 TUI'))
+  lines.push(React.createElement(Text, { key: 'version', color: 'BrightBlack', dim: true }, 'v2.0 | 终端界面'))
+  lines.push(React.createElement(Text, { key: 'space1', block: true }, ''))
+  
+  lines.push(React.createElement(Text, { key: 'model-label', color: 'BrightBlack' }, '模型'))
+  lines.push(React.createElement(Text, { key: 'model', color: 'BrightWhite', bold: true }, `  🤖 ${model}`))
+  lines.push(React.createElement(Text, { key: 'provider', color: 'BrightBlack', dim: true }, `  📦 ${provider}`))
+  lines.push(React.createElement(Text, { key: 'latency', color: 'BrightGreen' }, `  ⚡ 延迟: ${latency}ms`))
+  lines.push(React.createElement(Text, { key: 'token', color: 'BrightCyan' }, `  💰 Token: ${tokenUsed}/${tokenTotal} [${tokenPercent}%]`))
+  lines.push(React.createElement(Text, { key: 'progress', color: 'BrightMagenta' }, `  ${progressBar}`))
+  lines.push(React.createElement(Text, { key: 'space2', block: true }, ''))
+  
+  const currentTab = TABS.find(t => t.key === selectedTab)
+  lines.push(React.createElement(Text, { key: 'tab', color: 'BrightMagenta', bold: true }, currentTab?.label || ''))
+  lines.push(React.createElement(Text, { key: 'space3', block: true }, ''))
+  
+  if (selectedTab === 'provider') {
+    PROVIDERS.forEach((p, i) => {
+      const isSelected = i === selectedIndex
+      const prefix = isSelected ? '▶ ' : '  '
+      const suffix = p === provider ? ' ✓' : ''
+      lines.push(React.createElement(Text, { 
+        key: `provider-${p}`, 
+        color: isSelected ? 'BrightMagenta' : 'BrightWhite',
+        bold: isSelected
+      }, prefix + p + suffix))
+    })
+  } else if (selectedTab === 'skills') {
+    SKILLS.forEach((s, i) => {
+      const isSelected = i === selectedIndex
+      lines.push(React.createElement(Text, { 
+        key: `skill-${s.name}`, 
+        color: isSelected ? 'BrightMagenta' : 'BrightWhite',
+        bold: isSelected
+      }, (isSelected ? '▶ ' : '  ') + s.name))
+      lines.push(React.createElement(Text, { 
+        key: `skill-desc-${s.name}`, 
+        color: 'BrightBlack', 
+        dim: true 
+      }, '    ' + s.desc))
+    })
+  } else if (selectedTab === 'commands') {
+    COMMANDS.forEach((c, i) => {
+      const isSelected = i === selectedIndex
+      lines.push(React.createElement(Text, { key: `cmd-${c.cmd}`, block: true },
+        React.createElement(Text, { 
+          color: isSelected ? 'BrightMagenta' : 'BrightWhite',
+          bold: isSelected
+        }, isSelected ? '▶ ' : '  '),
+        React.createElement(Text, { color: 'BrightCyan' }, c.cmd),
+        React.createElement(Text, { color: 'BrightBlack', dim: true }, ' - ' + c.desc)
+      ))
+    })
+  } else if (selectedTab === 'history') {
+    HISTORY.forEach((h, i) => {
+      const isSelected = i === selectedIndex
+      lines.push(React.createElement(Text, { 
+        key: `hist-${h.id}`, 
+        color: isSelected ? 'BrightMagenta' : 'BrightWhite',
+        bold: isSelected
+      }, (isSelected ? '▶ ' : '  ') + h.name))
+      lines.push(React.createElement(Text, { 
+        key: `hist-time-${h.id}`, 
+        color: 'BrightBlack', 
+        dim: true 
+      }, '  ' + h.time))
+    })
+  } else if (selectedTab === 'operations') {
+    OPERATIONS.forEach((op, i) => {
+      const statusIcon = op.status === 'success' ? '✅' : op.status === 'running' ? '🔄' : '⏳'
+      const statusColor = op.status === 'success' ? 'BrightGreen' : op.status === 'running' ? 'BrightYellow' : 'BrightBlack'
+      const isSelected = i === selectedIndex
+      lines.push(React.createElement(Text, { key: `op-${op.name}`, block: true },
+        React.createElement(Text, { 
+          color: isSelected ? 'BrightMagenta' : statusColor,
+          bold: isSelected
+        }, isSelected ? '▶ ' : '  '),
+        React.createElement(Text, { color: statusColor }, statusIcon + ' ' + op.name)
+      ))
+    })
+  } else if (selectedTab === 'settings') {
+    SETTINGS.forEach((s, i) => {
+      const isSelected = i === selectedIndex
+      const statusText = s.enabled ? ' [ON]' : ' [OFF]'
+      const statusColor = s.enabled ? 'BrightGreen' : 'BrightBlack'
+      lines.push(React.createElement(Text, { key: `set-${s.name}`, block: true },
+        React.createElement(Text, { 
+          color: isSelected ? 'BrightMagenta' : 'BrightWhite',
+          bold: isSelected
+        }, isSelected ? '▶ ' : '  '),
+        React.createElement(Text, { color: 'BrightWhite' }, s.name),
+        React.createElement(Text, { color: statusColor, dim: !s.enabled }, statusText)
+      ))
+    })
+  } else if (selectedTab === 'shortcuts') {
+    SHORTCUTS.forEach((sh, i) => {
+      const isSelected = i === selectedIndex
+      lines.push(React.createElement(Text, { key: `sh-${sh.key}`, block: true },
+        React.createElement(Text, { 
+          color: isSelected ? 'BrightMagenta' : 'BrightWhite',
+          bold: isSelected
+        }, isSelected ? '▶ ' : '  '),
+        React.createElement(Text, { color: 'BrightCyan' }, sh.key.padEnd(8)),
+        React.createElement(Text, { color: 'BrightBlack', dim: true }, sh.desc)
+      ))
+    })
+  }
+  
+  lines.push(React.createElement(Text, { key: 'space4', block: true }, ''))
+  lines.push(React.createElement(Text, { key: 'hint', color: 'BrightBlack', dim: true }, '按 ↑/↓ 切换 Tab'))
+  
+  return React.createElement(Box, { flexDirection: 'column', paddingX: 1 }, ...lines)
 }
 
 export default OpenFlowSidebar
