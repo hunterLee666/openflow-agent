@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { createLoopCommand } from "../../refactored/core/commands/loop-command.js";
-import { CronScheduler } from "../../refactored/core/scheduler/cron-scheduler.js";
+import { createLoopCommand } from "../../src/commands/loop-command.js";
+import { CronScheduler } from "../../src/scheduler/cron-scheduler.js";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";

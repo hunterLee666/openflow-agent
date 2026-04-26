@@ -3,22 +3,22 @@ import {
   CircuitBreaker,
   CircuitBreakerError,
   CircuitBreakerRegistry,
-} from "../../refactored/core/utils/circuit-breaker.js";
+} from "../../src/utils/circuit-breaker.js";
 import {
   TranscriptStore,
   createUserMessageEvent,
   createAssistantMessageEvent,
   createErrorEvent,
-} from "../../refactored/core/utils/transcript.js";
+} from "../../src/utils/transcript.js";
 import {
   retryWithBackoff,
   calculateExponentialBackoff,
   RetryBudget,
-} from "../../refactored/core/utils/retry-with-backoff.js";
+} from "../../src/utils/retry-with-backoff.js";
 import {
   DegradationLadder,
   DEFAULT_DEGRADATION_LEVELS,
-} from "../../refactored/core/utils/degradation-ladder.js";
+} from "../../src/utils/degradation-ladder.js";
 
 describe("Circuit Breaker", () => {
   let breaker: CircuitBreaker;

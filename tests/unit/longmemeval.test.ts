@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { EnhancedMemoryCore, createEnhancedMemoryCore } from "../../refactored/core/memory/enhanced-memory-core.js";
-import { KnowledgeGraph, createKnowledgeGraph } from "../../refactored/core/memory/knowledge-graph.js";
-import { ConfidenceScorer, createConfidenceScorer } from "../../refactored/core/memory/confidence-scorer.js";
+import { EnhancedMemoryCore, createEnhancedMemoryCore } from "../../src/memory/enhanced-memory-core.js";
+import { KnowledgeGraph, createKnowledgeGraph } from "../../src/memory/knowledge-graph.js";
+import { ConfidenceScorer, createConfidenceScorer } from "../../src/memory/confidence-scorer.js";
 
 interface LongMemEvalTestCase {
   id: string;

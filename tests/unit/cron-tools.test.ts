@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { createCronTools } from "../../refactored/core/tools/cron-tools.js";
-import { CronScheduler } from "../../refactored/core/scheduler/cron-scheduler.js";
+import { createCronTools } from "../../src/tools/cron-tools.js";
+import { CronScheduler } from "../../src/scheduler/cron-scheduler.js";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";

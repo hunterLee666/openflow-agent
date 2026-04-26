@@ -20,14 +20,16 @@ export interface JwtVerifyOptions {
   maxTokenAge?: number;
 }
 
-export interface JwtVerifyResult {
-  ok: true;
-  claims: JwtClaims;
-} | {
-  ok: false;
-  reason: string;
-  code: number;
-}
+export type JwtVerifyResult = 
+  | {
+      ok: true;
+      claims: JwtClaims;
+    }
+  | {
+      ok: false;
+      reason: string;
+      code: number;
+    };
 
 export interface JwtSignOptions {
   algorithm?: 'HS256' | 'HS384' | 'HS512';
