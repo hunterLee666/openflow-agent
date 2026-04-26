@@ -3,7 +3,7 @@ import Text from './Text'
 import { Box } from './Box'
 
 export interface AppLayoutProps {
-  children: React.ReactNode
+  children?: React.ReactNode
   sidebar?: React.ReactNode
   statusBar?: React.ReactNode
   titleBar?: React.ReactNode
@@ -23,7 +23,7 @@ export function AppLayout({ children, sidebar, statusBar, titleBar }: AppLayoutP
 }
 
 export interface SidebarProps {
-  children: React.ReactNode
+  children?: React.ReactNode
   width?: number
 }
 
@@ -35,7 +35,7 @@ export function Sidebar({ children, width = 35 }: SidebarProps): React.ReactElem
 }
 
 export interface ChatContainerProps {
-  children: React.ReactNode
+  children?: React.ReactNode
 }
 
 export function ChatContainer({ children }: ChatContainerProps): React.ReactElement {
@@ -43,7 +43,7 @@ export function ChatContainer({ children }: ChatContainerProps): React.ReactElem
 }
 
 export interface StatusBarLayoutProps {
-  children: React.ReactNode
+  children?: React.ReactNode
 }
 
 export function StatusBarLayout({ children }: StatusBarLayoutProps): React.ReactElement {
@@ -55,7 +55,7 @@ export function StatusBarLayout({ children }: StatusBarLayoutProps): React.React
 }
 
 export interface TitleBarLayoutProps {
-  children: React.ReactNode
+  children?: React.ReactNode
 }
 
 export function TitleBarLayout({ children }: TitleBarLayoutProps): React.ReactElement {

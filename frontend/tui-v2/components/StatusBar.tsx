@@ -23,20 +23,15 @@ export function StatusBar({
   const statusText = status === 'idle' ? '就绪' : status === 'running' ? '运行中' : '错误'
 
   return React.createElement(Box, { flexDirection: 'row', paddingX: 1, paddingY: 0 },
-    React.createElement(Text, { color: statusColor, bold: true }, '●'),
-    ' ',
+    React.createElement(Text, { color: statusColor, bold: true }, '● '),
     React.createElement(Text, { color: 'BrightWhite' }, statusText),
-    ' │ ',
+    React.createElement(Text, { color: 'BrightBlack' }, ' │ '),
     React.createElement(Text, { color: 'BrightMagenta' }, provider),
-    '/',
+    React.createElement(Text, { color: 'BrightBlack' }, '/'),
     React.createElement(Text, { color: 'BrightWhite' }, model),
-    ' │ ',
-    React.createElement(Text, { color: 'BrightBlack' }, '会话:'),
-    ' ',
+    React.createElement(Text, { color: 'BrightBlack' }, ' │ 会话: '),
     React.createElement(Text, { color: 'BrightWhite' }, session),
-    ' │ ',
-    React.createElement(Text, { color: 'BrightBlack' }, 'Token:'),
-    ' ',
+    React.createElement(Text, { color: 'BrightBlack' }, ' │ Token: '),
     React.createElement(Text, { color: 'BrightMagenta' }, String(tokenUsed)),
     React.createElement(Text, { color: 'BrightBlack' }, `/${tokenTotal}`)
   )
