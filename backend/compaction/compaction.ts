@@ -202,9 +202,13 @@ export function tier1MicroCompaction(messages: Message[]): { compacted: Message[
   return { compacted, elidedCount };
 }
 
-export function estimateCost(usage: { inputTokens: number; outputTokens: number }, model: string): number {
-  const inputCostPerMTok = getInputCostPerMToken(model);
-  const outputCostPerMTok = getOutputCostPerMToken(model);
+export function estimateCost(
+  usage: { inputTokens: number; outputTokens: number },
+  model: string,
+  pricingCache?: Record<string, { inputCostPerMTok: number; outputCostPerMTok: number }>
+): number {
+  const inputCostPerMTok = pricingCache?.[model.toLowerCase()]?.inputCostPerMTok || getInputCostPerMToken(model);
+  const outputCostPerMTok = pricingCache?.[model.toLowerCase()]?.outputCostPerMTok || getOutputCostPerMToken(model);
 
   const inputCost = (usage.inputTokens / 1000000) * inputCostPerMTok;
   const outputCost = (usage.outputTokens / 1000000) * outputCostPerMTok;
@@ -213,43 +217,9 @@ export function estimateCost(usage: { inputTokens: number; outputTokens: number 
 }
 
 function getInputCostPerMToken(model: string): number {
-  const costs: Record<string, number> = {
-    "claude-opus-4-5": 15,
-    "claude-sonnet-4-5": 3,
-    "claude-haiku-4-5": 0.25,
-    "gpt-4o": 5,
-    "gpt-4o-mini": 0.15,
-    "gpt-4-turbo": 10,
-    "gpt-3.5-turbo": 0.5,
-    "qwen3-32b": 0.2,
-    "qwen3-14b": 0.12,
-    "deepseek-chat": 0.14,
-    "deepseek-coder": 0.14,
-    "zhipu-glm-4": 0.1,
-    "minimax": 0.1,
-    "moonshot-v1-8k": 0.06,
-  };
-
-  return costs[model.toLowerCase()] || 1;
+  return 1;
 }
 
 function getOutputCostPerMToken(model: string): number {
-  const costs: Record<string, number> = {
-    "claude-opus-4-5": 75,
-    "claude-sonnet-4-5": 15,
-    "claude-haiku-4-5": 1.25,
-    "gpt-4o": 15,
-    "gpt-4o-mini": 0.6,
-    "gpt-4-turbo": 30,
-    "gpt-3.5-turbo": 1.5,
-    "qwen3-32b": 0.8,
-    "qwen3-14b": 0.48,
-    "deepseek-chat": 0.28,
-    "deepseek-coder": 0.28,
-    "zhipu-glm-4": 0.4,
-    "minimax": 0.4,
-    "moonshot-v1-8k": 0.24,
-  };
-
-  return costs[model.toLowerCase()] || 2;
+  return 2;
 }

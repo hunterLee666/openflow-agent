@@ -16,7 +16,6 @@ import { normalize, resolve, relative } from "node:path";
 
 const SAFE_GUARD_PATHS = [
   ".git",
-  ".claude",
   ".openflow",
   ".bashrc",
   ".zshrc",
@@ -431,7 +430,7 @@ export class PermissionPipeline {
       if (cmd) {
         const guardPatterns = [
           /\.git\s/,
-          /\.claude\s/,
+          /\.openflow\s/,
           /\.bashrc/,
           /\.zshrc/,
           /\.ssh\//,

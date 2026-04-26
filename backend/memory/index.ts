@@ -112,8 +112,8 @@ export type {
   DesensitizationResult,
 } from "./exploration-desensitizer.js";
 
-export { ClaudeMdLoader, createClaudeMdLoader } from "./claude-md-loader.js";
-export type { ClaudeMdLayer, ClaudeMdStackResult } from "./claude-md-loader.js";
+export { OpenflowMdLoader, createOpenflowMdLoader } from "./openflow-md-loader.js";
+export type { OpenflowMdLayer, OpenflowMdStackResult } from "./openflow-md-loader.js";
 
 export { DualModelRetriever, createDualModelRetriever } from "./dual-model-retriever.js";
 export type { MemoryCard, MemoryRetrievalResult, DualModelRetrieverConfig } from "./dual-model-retriever.js";

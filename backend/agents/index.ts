@@ -11,10 +11,10 @@ export type {
 
 export { SwarmMode } from "./swarm-mode.js";
 export type {
-  SwarmAgent,
   SwarmConfig,
   SwarmContext,
 } from "./swarm-mode.js";
+export type { SwarmAgent } from "./agent-types.js";
 
 export { CoordinatorMode } from "./coordinator-mode.js";
 export type {

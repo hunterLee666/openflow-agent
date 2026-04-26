@@ -97,12 +97,12 @@ export const COMPACTION_PROFILES: Record<string, CompactionProfile> = {
   "anthropic-compress": {
     id: "anthropic-compress",
     name: "Anthropic Compression",
-    description: "Anthropic 官方压缩头，支持 Opus 4.6 / Sonnet 4.6",
+    description: "Anthropic 官方压缩头",
     headers: {
       "anthropic-beta": "prompt-caching-2024-07-31",
       "x-compression": "anthropic-compress",
     },
-    supportedModels: ["claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4-5", "claude-sonnet-4-5"],
+    supportedModels: [],
     enabled: true,
   },
   "openai-compress": {
@@ -112,7 +112,7 @@ export const COMPACTION_PROFILES: Record<string, CompactionProfile> = {
     headers: {
       "x-openai-compress": "true",
     },
-    supportedModels: ["gpt-4o", "gpt-4-turbo"],
+    supportedModels: [],
     enabled: false,
   },
 };

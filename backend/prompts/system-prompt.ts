@@ -17,7 +17,7 @@ export interface PromptContext {
   sessionId?: string;
   mcpInstructions?: string[];
   enableLazyToolLoading?: boolean;
-  claudeMdStack?: string;
+  openflowMdStack?: string;
   memoryInjections?: string;
   memoryWarnings?: string[];
   tokenBudget?: number;
@@ -186,12 +186,12 @@ Error handling:
       content: `Current turn: ${ctx.turn}\nSession: ${ctx.sessionId || "new"}\nWorking directory: ${ctx.cwd}`,
     });
 
-    if (ctx.claudeMdStack) {
+    if (ctx.openflowMdStack) {
       layers.push({
         name: "project_memory",
         stability: "dynamic",
         priority: 10.5,
-        content: ctx.claudeMdStack,
+        content: ctx.openflowMdStack,
       });
     }
 

@@ -1,13 +1,16 @@
-import { VectorStore, FileSystemStorage } from "persistent-hnsw";
+import { HNSWIndex, HNSWConfig, SearchResult, DEFAULT_HNSW_CONFIG } from "./hnsw-index.js";
+import { FileSystemStorage, StorageBackend } from "./hnsw-storage.js";
+import { DistanceMetric } from "./hnsw-metrics.js";
+import { existsSync, mkdirSync } from "node:fs";
 
-export type HNSWMetric = "euclidean" | "cosine" | "inner_product";
+export type { DistanceMetric as HNSWMetric } from "./hnsw-metrics.js";
 
 export interface HNSWConfig {
   dimensions: number;
   M: number;
   efConstruction: number;
   efSearch: number;
-  metric: HNSWMetric;
+  metric: DistanceMetric;
   storagePath: string;
   maxVectorsPerShard: number;
   maxLoadedShards: number;
@@ -28,7 +31,7 @@ export interface HNSWSearchResult {
 export interface HNSWStats {
   totalVectors: number;
   dimensions: number;
-  metric: HNSWMetric;
+  metric: DistanceMetric;
   memoryUsage: number;
 }
 
@@ -45,7 +48,8 @@ const DEFAULT_CONFIG: HNSWConfig = {
 
 export class HNSWVectorIndex {
   private config: HNSWConfig;
-  private store: VectorStore | null = null;
+  private index: HNSWIndex | null = null;
+  private storage: StorageBackend | null = null;
   private metadataMap = new Map<string, Record<string, unknown>>();
   private initialized = false;
 
@@ -54,26 +58,45 @@ export class HNSWVectorIndex {
   }
 
   async initialize(): Promise<void> {
-    this.store = VectorStore.create({
-      hnsw: {
-        dimensions: this.config.dimensions,
-        M: this.config.M,
-        efConstruction: this.config.efConstruction,
-        efSearch: this.config.efSearch,
-        metric: this.config.metric,
-      },
-      sharding: {
-        maxVectorsPerShard: this.config.maxVectorsPerShard,
-        maxLoadedShards: this.config.maxLoadedShards,
-      },
-      storage: new FileSystemStorage(this.config.storagePath),
+    this.index = new HNSWIndex({
+      dimensions: this.config.dimensions,
+      M: this.config.M,
+      efConstruction: this.config.efConstruction,
+      efSearch: this.config.efSearch,
+      metric: this.config.metric,
     });
+
+    if (this.config.storagePath) {
+      if (!existsSync(this.config.storagePath)) {
+        mkdirSync(this.config.storagePath, { recursive: true });
+      }
+      this.storage = new FileSystemStorage(this.config.storagePath);
+      await this.loadFromStorage();
+    }
 
     this.initialized = true;
   }
 
+  private async loadFromStorage(): Promise<void> {
+    if (!this.storage || !this.index) return;
+
+    const files = await this.storage.list();
+    if (files.length === 0) return;
+
+    const mainFile = files.find((f) => f === "index") || files[0];
+    const data = await this.storage.read(mainFile);
+    if (!data) return;
+
+    try {
+      const json = JSON.parse(new TextDecoder().decode(data));
+      this.index = HNSWIndex.deserialize(json);
+    } catch {
+      // Ignore deserialization errors, start fresh
+    }
+  }
+
   async insert(entry: HNSWEntry): Promise<void> {
-    if (!this.store || !this.initialized) {
+    if (!this.index || !this.initialized) {
       throw new Error("HNSW index not initialized");
     }
 
@@ -81,10 +104,7 @@ export class HNSWVectorIndex {
       ? entry.vector
       : new Float32Array(entry.vector);
 
-    await this.store.insert({
-      id: entry.id,
-      vector,
-    });
+    this.index.insert(entry.id, vector);
 
     if (entry.metadata) {
       this.metadataMap.set(entry.id, entry.metadata);
@@ -92,20 +112,17 @@ export class HNSWVectorIndex {
   }
 
   async batchInsert(entries: HNSWEntry[]): Promise<void> {
-    if (!this.store || !this.initialized) {
+    if (!this.index || !this.initialized) {
       throw new Error("HNSW index not initialized");
     }
 
-    const items = entries.map((entry) => ({
-      id: entry.id,
-      vector: entry.vector instanceof Float32Array
-        ? entry.vector
-        : new Float32Array(entry.vector),
-    }));
-
-    await this.store.insert(items);
-
     for (const entry of entries) {
+      const vector = entry.vector instanceof Float32Array
+        ? entry.vector
+        : new Float32Array(entry.vector);
+
+      this.index.insert(entry.id, vector);
+
       if (entry.metadata) {
         this.metadataMap.set(entry.id, entry.metadata);
       }
@@ -120,7 +137,7 @@ export class HNSWVectorIndex {
       filter?: (id: string) => boolean;
     }
   ): Promise<HNSWSearchResult[]> {
-    if (!this.store || !this.initialized) {
+    if (!this.index || !this.initialized) {
       throw new Error("HNSW index not initialized");
     }
 
@@ -128,11 +145,12 @@ export class HNSWVectorIndex {
       ? queryVector
       : new Float32Array(queryVector);
 
-    const results = await this.store.search(vector, topK, {
-      efSearch: options?.efSearch ?? this.config.efSearch,
-      filter: options?.filter,
-      includeVectors: false,
-    });
+    const results = this.index.search(
+      vector,
+      topK,
+      options?.efSearch,
+      options?.filter
+    );
 
     return results.map((result) => ({
       id: result.id,
@@ -142,21 +160,21 @@ export class HNSWVectorIndex {
   }
 
   async delete(id: string): Promise<boolean> {
-    if (!this.store || !this.initialized) {
+    if (!this.index || !this.initialized) {
       throw new Error("HNSW index not initialized");
     }
 
-    await this.store.delete(id);
+    this.index.delete(id);
     this.metadataMap.delete(id);
     return true;
   }
 
   async count(): Promise<number> {
-    if (!this.store || !this.initialized) {
+    if (!this.index || !this.initialized) {
       throw new Error("HNSW index not initialized");
     }
 
-    return this.store.shardManager.totalVectors;
+    return this.index.size;
   }
 
   async getStats(): Promise<HNSWStats> {
@@ -166,29 +184,31 @@ export class HNSWVectorIndex {
       totalVectors: count,
       dimensions: this.config.dimensions,
       metric: this.config.metric,
-      memoryUsage: 0,
+      memoryUsage: this.index?.memoryUsage() || 0,
     };
   }
 
   async flush(): Promise<void> {
-    if (!this.store || !this.initialized) {
+    if (!this.index || !this.storage || !this.initialized) {
       throw new Error("HNSW index not initialized");
     }
 
-    await this.store.flush();
+    const data = this.index.serialize();
+    const json = JSON.stringify(data);
+    const bytes = new TextEncoder().encode(json);
+    await this.storage.write("index", bytes);
   }
 
   async close(): Promise<void> {
-    if (this.store && this.initialized) {
-      await this.store.flush();
-      await this.store.close();
-      this.store = null;
+    if (this.index && this.initialized) {
+      await this.flush();
+      this.index = null;
       this.initialized = false;
     }
   }
 
   has(id: string): boolean {
-    return this.metadataMap.has(id);
+    return this.index?.has(id) || false;
   }
 
   getMetadata(id: string): Record<string, unknown> | undefined {
@@ -199,3 +219,6 @@ export class HNSWVectorIndex {
 export function createHNSWVectorIndex(config?: Partial<HNSWConfig>): HNSWVectorIndex {
   return new HNSWVectorIndex(config);
 }
+
+export { FileSystemStorage, InMemoryStorage } from "./hnsw-storage.js";
+export type { StorageBackend } from "./hnsw-storage.js";

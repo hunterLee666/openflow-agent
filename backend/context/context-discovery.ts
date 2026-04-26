@@ -23,7 +23,6 @@ export const CONTEXT_FILE_DEFS: Array<{
 }> = [
   { name: ".openflow.md", type: "instructions", priority: 100 },
   { name: "AGENTS.md", type: "instructions", priority: 90 },
-  { name: "CLAUDE.md", type: "instructions", priority: 85 },
   { name: "SOUL.md", type: "system-prompt", priority: 80 },
   { name: ".cursorrules", type: "rules", priority: 75 },
   { name: ".windsurfrules", type: "rules", priority: 70 },

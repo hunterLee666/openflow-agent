@@ -16,7 +16,7 @@ export {
   TokenBudgetInjector,
   createTokenBudgetInjector,
   DEFAULT_TOKEN_BUDGET_CONFIG,
-  estimateTokensClaude,
+  estimateTokens,
   estimateTokensGPT,
 } from "./token-budget.js";
 export type {

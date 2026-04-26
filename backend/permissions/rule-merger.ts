@@ -113,11 +113,11 @@ export function createDefaultRules(): PermissionRule[] {
       note: "安全护栏与专用工具处理",
     },
     {
-      name: "block-dot-claude",
+      name: "block-dot-openflow",
       action: "deny",
       tool: "Edit",
-      pathRegex: "(^|/)\\.claude(/|$)",
-      note: "禁止修改 Claude 配置",
+      pathRegex: "(^|/)\\.openflow(/|$)",
+      note: "禁止修改 Openflow 配置",
     },
     {
       name: "block-shell-config",

@@ -119,7 +119,6 @@ export {
 
 export {
   TerminalCapability,
-  TerminalInfo,
   CapabilityQuery,
   DEFAULT_TERMINAL_INFO,
   detectTerminalCapabilities,
@@ -128,6 +127,7 @@ export {
   isTerminalCapable,
   detectTerminalFromEnv,
 } from "./termio/capability-detect.js"
+export type { TerminalInfo } from "./termio/capability-detect.js"
 
 export {
   getStringWidth,
@@ -143,7 +143,6 @@ export {
 } from "./termio/unicode-width.js"
 
 export {
-  VimMode,
   VimCursor,
   VimKeybinding,
   VimState,
@@ -159,16 +158,11 @@ export {
   formatKeySequence,
   VimStateMachine,
   createVimStateMachine,
-  VimAction,
-  VimActionResult,
 } from "./vim/index.js"
+export type { VimMode, VimAction, VimActionResult } from "./vim/index.js"
 
 export {
-  StreamingConfig,
   DEFAULT_STREAMING_CONFIG,
-  StreamingChunk,
-  StreamingSource,
-  StreamingState,
   createStreamingState,
   splitIntoWords,
   streamWords,
@@ -176,11 +170,12 @@ export {
   streamWordByWord,
   streamBySentence,
   calculateStreamingMetrics,
-  StreamingRendererOptions,
   DEFAULT_RENDERER_OPTIONS,
   renderWithFrameControl,
 } from "./render/streaming-renderer.js"
+export type { StreamingConfig, StreamingChunk, StreamingSource, StreamingState, StreamingRendererOptions } from "./render/streaming-renderer.js"
 
-export * from "./animation.js";
+export { easings, Tween, animateValue, Sequence, delay, parallel } from "./animation.js";
+export type { EasingFunction, TweenOptions, SequenceOptions, Animation } from "./animation.js";
 
-export * from "./types.js";
+export type { TerminalSize, Color, Style, Cursor, Node, YogaConfig, LayoutResult, FlexDirection, FlexWrap, AlignItems, AlignContent, JustifyContent, Position, Spacing, BorderStyle } from "./types.js";

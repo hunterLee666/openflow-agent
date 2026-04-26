@@ -81,8 +81,7 @@ function calculateCandidateScore(
   }
 
   if (complexity.requiresCreativity) {
-    const isAnthropic = provider.name.toLowerCase().includes("anthropic") ||
-      provider.name.toLowerCase().includes("claude");
+    const isAnthropic = provider.name.toLowerCase().includes("anthropic");
     if (isAnthropic) score += 20;
   }
 

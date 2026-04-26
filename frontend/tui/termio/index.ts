@@ -73,16 +73,15 @@ export {
   isTwoCharEsc,
   type EscAction,
 } from './esc.js'
-export * from './types.js'
+export type { Grapheme, TextStyle, Color, NamedColor, Action, CursorAction, Cell } from './types.js'
+export { defaultCell, cloneCell } from './types.js'
 export { createTokenizer, createParser } from './parser.js'
 export type { Token, Tokenizer } from './parser.js'
 export { Parser } from './parser.js'
 export {
-  MouseProtocolConfig,
   DEFAULT_MOUSE_CONFIG,
   MouseButton,
   MouseModifier,
-  MouseEvent,
   MouseMode,
   enableMouse,
   disableMouse,
@@ -99,9 +98,9 @@ export {
   getMouseProtocolSequence,
   createMouseProtocolSequences,
 } from './mouse.js'
+export type { MouseProtocolConfig, MouseEvent } from './mouse.js'
 export {
   TerminalCapability,
-  TerminalInfo,
   CapabilityQuery,
   DEFAULT_TERMINAL_INFO,
   detectTerminalCapabilities,
@@ -110,6 +109,7 @@ export {
   isTerminalCapable,
   detectTerminalFromEnv,
 } from './capability-detect.js'
+export type { TerminalInfo } from './capability-detect.js'
 export {
   getStringWidth,
   getCharWidth,

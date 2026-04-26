@@ -3,7 +3,7 @@ import { join, resolve, dirname } from "node:path";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 
-export interface ClaudeCodeSettings {
+export interface OpenflowSettings {
   model?: string;
   modelOverrides?: Record<string, string>;
   availableModels?: string[];
@@ -23,48 +23,10 @@ export interface ModelAlias {
   resolveTo: string;
 }
 
-export const MODEL_ALIASES: Record<string, ModelAlias> = {
-  default: {
-    alias: "default",
-    description: "System default model for your account type",
-    resolveTo: "sonnet",
-  },
-  best: {
-    alias: "best",
-    description: "Most capable available model",
-    resolveTo: "opus",
-  },
-  sonnet: {
-    alias: "sonnet",
-    description: "Latest Sonnet model for daily coding tasks",
-    resolveTo: "claude-sonnet-4-20250514",
-  },
-  opus: {
-    alias: "opus",
-    description: "Latest Opus model for complex reasoning tasks",
-    resolveTo: "claude-opus-4-5-20250514",
-  },
-  haiku: {
-    alias: "haiku",
-    description: "Fast and efficient Haiku model for simple tasks",
-    resolveTo: "claude-3-haiku-20240307",
-  },
-  "sonnet[1m]": {
-    alias: "sonnet[1m]",
-    description: "Sonnet with 1 million token context window",
-    resolveTo: "claude-sonnet-4-20250514",
-  },
-  "opus[1m]": {
-    alias: "opus[1m]",
-    description: "Opus with 1 million token context window",
-    resolveTo: "claude-opus-4-5-20250514",
-  },
-};
-
 export interface ConfigSource {
   path: string;
   priority: number;
-  settings: ClaudeCodeSettings;
+  settings: OpenflowSettings;
 }
 
 export interface MergedConfig {
@@ -78,14 +40,14 @@ export interface MergedConfig {
 const CONFIG_FOLDERS = [".openflow"];
 const SETTINGS_FILE = "settings.json";
 
-export class ClaudeCodeConfigAdapter {
+export class OpenflowConfigAdapter {
   private configDirs: string[];
   private mergedConfig: MergedConfig | null = null;
   private modelAliases: Record<string, ModelAlias>;
 
   constructor(projectDir: string, customAliases?: Record<string, ModelAlias>) {
     this.configDirs = this.buildConfigDirs(projectDir);
-    this.modelAliases = { ...MODEL_ALIASES, ...(customAliases || {}) };
+    this.modelAliases = customAliases || {};
   }
 
   private buildConfigDirs(projectDir: string): string[] {
@@ -140,7 +102,7 @@ export class ClaudeCodeConfigAdapter {
 
       try {
         const content = await readFile(settingsPath, "utf-8");
-        const settings = JSON.parse(content) as ClaudeCodeSettings;
+        const settings = JSON.parse(content) as OpenflowSettings;
 
         sources.push({
           path: settingsPath,
@@ -231,13 +193,6 @@ export class ClaudeCodeConfigAdapter {
       return this.modelAliases[alias].resolveTo;
     }
 
-    if (alias.endsWith("[1m]")) {
-      const baseAlias = alias.replace("[1m]", "");
-      if (baseAlias in this.modelAliases) {
-        return this.modelAliases[baseAlias].resolveTo;
-      }
-    }
-
     return alias;
   }
 
@@ -253,7 +208,7 @@ export class ClaudeCodeConfigAdapter {
   }
 
   getEffectiveModel(): string | undefined {
-    const envModel = process.env.ANTHROPIC_MODEL;
+    const envModel = process.env.OPENFLOW_MODEL;
     if (envModel) {
       return this.resolveModelWithOverrides(envModel);
     }
@@ -271,15 +226,12 @@ export class ClaudeCodeConfigAdapter {
     const mergedEnv = { ...settingsEnv };
 
     const envVars = [
-      "ANTHROPIC_MODEL",
-      "ANTHROPIC_DEFAULT_OPUS_MODEL",
-      "ANTHROPIC_DEFAULT_SONNET_MODEL",
-      "ANTHROPIC_DEFAULT_HAIKU_MODEL",
-      "CLAUDE_CODE_SUBAGENT_MODEL",
-      "ANTHROPIC_BASE_URL",
-      "ANTHROPIC_API_KEY",
-      "OPENAI_API_KEY",
-      "CLAUDE_CODE_EFFORT_LEVEL",
+      "OPENFLOW_MODEL",
+      "OPENFLOW_PROVIDER",
+      "OPENFLOW_BASE_URL",
+      "OPENFLOW_API_KEY",
+      "OPENFLOW_SUBAGENT_MODEL",
+      "OPENFLOW_EFFORT_LEVEL",
     ];
 
     for (const envVar of envVars) {
@@ -318,8 +270,8 @@ export class ClaudeCodeConfigAdapter {
   }
 }
 
-export async function loadClaudeCodeConfig(projectDir: string): Promise<ClaudeCodeConfigAdapter | null> {
-  const adapter = new ClaudeCodeConfigAdapter(projectDir);
+export async function loadOpenflowConfig(projectDir: string): Promise<OpenflowConfigAdapter | null> {
+  const adapter = new OpenflowConfigAdapter(projectDir);
   const mergedConfig = await adapter.load();
 
   if (mergedConfig) {

@@ -18,8 +18,8 @@ export type TextStyles = {
 export interface Theme {
   autoAccept: string
   bashBorder: string
-  claude: string
-  claudeShimmer: string
+  openflow: string
+  openflowShimmer: string
   permission: string
   permissionShimmer: string
   planMode: string
@@ -85,8 +85,8 @@ export type ThemeSetting = (typeof THEME_SETTINGS)[number]
 const lightTheme: Theme = {
   autoAccept: 'rgb(135,0,255)',
   bashBorder: 'rgb(255,0,135)',
-  claude: 'rgb(120,190,120)',
-  claudeShimmer: 'rgb(160,220,160)',
+  openflow: 'rgb(120,190,120)',
+  openflowShimmer: 'rgb(160,220,160)',
   permission: 'rgb(130,165,210)',
   permissionShimmer: 'rgb(160,195,235)',
   planMode: 'rgb(0,102,102)',
@@ -137,8 +137,8 @@ const lightTheme: Theme = {
 const darkTheme: Theme = {
   autoAccept: 'rgb(135,0,255)',
   bashBorder: 'rgb(255,0,135)',
-  claude: 'rgb(120,190,120)',
-  claudeShimmer: 'rgb(160,220,160)',
+  openflow: 'rgb(120,190,120)',
+  openflowShimmer: 'rgb(160,220,160)',
   permission: 'rgb(130,165,210)',
   permissionShimmer: 'rgb(160,195,235)',
   planMode: 'rgb(0,102,102)',

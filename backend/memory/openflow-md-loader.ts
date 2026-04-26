@@ -1,50 +1,51 @@
 import { readFile, stat } from "node:fs/promises";
-import { join, dirname, resolve, homedir } from "node:path";
+import { join, dirname, resolve } from "node:path";
+import { homedir } from "node:os";
 import { existsSync } from "node:fs";
 
-export interface ClaudeMdLayer {
+export interface OpenflowMdLayer {
   source: "global" | "project" | "directory" | "local";
   path: string;
   content: string;
   lineCount: number;
 }
 
-export interface ClaudeMdStackResult {
-  layers: ClaudeMdLayer[];
+export interface OpenflowMdStackResult {
+  layers: OpenflowMdLayer[];
   mergedContent: string;
   warnings: string[];
 }
 
-const GLOBAL_CLAUDE_MD = join(homedir(), ".claude", "CLAUDE.md");
-const LOCAL_CLAUDE_MD = ".claude/CLAUDE.local.md";
-const PROJECT_CLAUDE_MD = "CLAUDE.md";
+const GLOBAL_OPENFLOW_MD = join(homedir(), ".openflow", "OPENFLOW.md");
+const LOCAL_OPENFLOW_MD = ".openflow/OPENFLOW.local.md";
+const PROJECT_OPENFLOW_MD = "OPENFLOW.md";
 
 const MIN_LINES = 50;
 const MAX_LINES = 200;
 const MAX_TOTAL_LINES = 500;
 
-export class ClaudeMdLoader {
-  async loadStack(cwd: string): Promise<ClaudeMdStackResult> {
-    const layers: ClaudeMdLayer[] = [];
+export class OpenflowMdLoader {
+  async loadStack(cwd: string): Promise<OpenflowMdStackResult> {
+    const layers: OpenflowMdLayer[] = [];
     const warnings: string[] = [];
 
     const projectRoot = await this.findProjectRoot(cwd);
 
-    const globalContent = await this.readIfExists(GLOBAL_CLAUDE_MD);
+    const globalContent = await this.readIfExists(GLOBAL_OPENFLOW_MD);
     if (globalContent) {
       const lineCount = globalContent.split("\n").length;
       layers.push({
         source: "global",
-        path: GLOBAL_CLAUDE_MD,
+        path: GLOBAL_OPENFLOW_MD,
         content: globalContent,
         lineCount,
       });
       if (lineCount > MAX_LINES) {
-        warnings.push(`Global CLAUDE.md has ${lineCount} lines (recommended: ${MIN_LINES}-${MAX_LINES})`);
+        warnings.push(`Global OPENFLOW.md has ${lineCount} lines (recommended: ${MIN_LINES}-${MAX_LINES})`);
       }
     }
 
-    const projectPath = join(projectRoot, PROJECT_CLAUDE_MD);
+    const projectPath = join(projectRoot, PROJECT_OPENFLOW_MD);
     const projectContent = await this.readIfExists(projectPath);
     if (projectContent) {
       const lineCount = projectContent.split("\n").length;
@@ -55,14 +56,14 @@ export class ClaudeMdLoader {
         lineCount,
       });
       if (lineCount > MAX_LINES) {
-        warnings.push(`Project CLAUDE.md has ${lineCount} lines (recommended: ${MIN_LINES}-${MAX_LINES})`);
+        warnings.push(`Project OPENFLOW.md has ${lineCount} lines (recommended: ${MIN_LINES}-${MAX_LINES})`);
       }
     }
 
     const directoryLayers = await this.loadDirectoryLayers(cwd, projectRoot);
     layers.push(...directoryLayers);
 
-    const localPath = join(projectRoot, LOCAL_CLAUDE_MD);
+    const localPath = join(projectRoot, LOCAL_OPENFLOW_MD);
     const localContent = await this.readIfExists(localPath);
     if (localContent) {
       const lineCount = localContent.split("\n").length;
@@ -77,29 +78,29 @@ export class ClaudeMdLoader {
     const mergedContent = this.mergeLayers(layers);
     const totalLines = mergedContent.split("\n").length;
     if (totalLines > MAX_TOTAL_LINES) {
-      warnings.push(`Total CLAUDE.md stack has ${totalLines} lines (max: ${MAX_TOTAL_LINES}). Consider trimming.`);
+      warnings.push(`Total OPENFLOW.md stack has ${totalLines} lines (max: ${MAX_TOTAL_LINES}). Consider trimming.`);
     }
 
     return { layers, mergedContent, warnings };
   }
 
-  private async loadDirectoryLayers(cwd: string, projectRoot: string): Promise<ClaudeMdLayer[]> {
-    const layers: ClaudeMdLayer[] = [];
+  private async loadDirectoryLayers(cwd: string, projectRoot: string): Promise<OpenflowMdLayer[]> {
+    const layers: OpenflowMdLayer[] = [];
     const ancestors = this.getAncestorsFromRootTo(cwd, projectRoot);
 
     for (const dir of ancestors) {
-      const dirClaudeMd = join(dir, PROJECT_CLAUDE_MD);
-      const content = await this.readIfExists(dirClaudeMd);
+      const dirOpenflowMd = join(dir, PROJECT_OPENFLOW_MD);
+      const content = await this.readIfExists(dirOpenflowMd);
       if (content) {
         const lineCount = content.split("\n").length;
         layers.push({
           source: "directory",
-          path: dirClaudeMd,
+          path: dirOpenflowMd,
           content,
           lineCount,
         });
         if (lineCount > MAX_LINES) {
-          console.warn(`Directory CLAUDE.md at ${dirClaudeMd} has ${lineCount} lines`);
+          console.warn(`Directory OPENFLOW.md at ${dirOpenflowMd} has ${lineCount} lines`);
         }
       }
     }
@@ -128,9 +129,9 @@ export class ClaudeMdLoader {
 
     while (current !== root) {
       const hasGit = existsSync(join(current, ".git"));
-      const hasClaudeMd = existsSync(join(current, PROJECT_CLAUDE_MD));
+      const hasOpenflowMd = existsSync(join(current, PROJECT_OPENFLOW_MD));
 
-      if (hasGit || hasClaudeMd) {
+      if (hasGit || hasOpenflowMd) {
         return current;
       }
 
@@ -142,7 +143,7 @@ export class ClaudeMdLoader {
     return resolve(cwd);
   }
 
-  private mergeLayers(layers: ClaudeMdLayer[]): string {
+  private mergeLayers(layers: OpenflowMdLayer[]): string {
     const parts: string[] = [];
 
     for (const layer of layers) {
@@ -172,6 +173,6 @@ export class ClaudeMdLoader {
   }
 }
 
-export function createClaudeMdLoader(): ClaudeMdLoader {
-  return new ClaudeMdLoader();
+export function createOpenflowMdLoader(): OpenflowMdLoader {
+  return new OpenflowMdLoader();
 }

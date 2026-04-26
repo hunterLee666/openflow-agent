@@ -5,8 +5,8 @@ import { homedir } from "node:os";
 import type { CapabilityContext } from "../types/index.js";
 
 const CONFIG_DIR_NAMES = [".openflow"];
-const MEMORY_FILES = ["OPENFLOW.md", "CLAUDE.md"];
-const LOCAL_MEMORY_FILES = ["OPENFLOW.local.md", "CLAUDE.local.md"];
+const MEMORY_FILES = ["OPENFLOW.md"];
+const LOCAL_MEMORY_FILES = ["OPENFLOW.local.md"];
 const SETTINGS_FILE = "settings.json";
 const LOCAL_SETTINGS_FILE = "settings.local.json";
 

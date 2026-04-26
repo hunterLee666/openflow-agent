@@ -109,7 +109,7 @@ export class AutoMemoryExtractor {
     return false;
   }
 
-  async promoteToClaudeMd(observation: MemoryObservation): Promise<string> {
+  async promoteToOpenflowMd(observation: MemoryObservation): Promise<string> {
     const promotedContent = `## ${observation.content}\n\n- Type: ${observation.type}\n- Confidence: ${observation.confidence.toFixed(2)}\n- Observed: ${observation.occurrenceCount} times\n`;
 
     await this.deleteObservation(observation.id);

@@ -1,8 +1,7 @@
 import type { SubAgentMessage, SubAgentTask, SubAgentResult, SubAgentContext } from "./sub-agent-system.js";
 import type { ToolDefinition } from "../types/index.js";
-import { SwarmAgent } from "./agent-types.js";
+import type { SwarmAgent } from "./agent-types.js";
 import { MessageRouter } from "./message-router.js";
-export { SwarmAgent } from "./agent-types.js";
 
 export interface SwarmConfig {
   maxIterations: number;
@@ -170,7 +169,13 @@ export class SwarmMode {
   private buildAgentMessages(swarmCtx: SwarmContext, agent: SwarmAgent): SubAgentMessage[] {
     const messages = [...swarmCtx.conversationHistory];
 
-    const lastSystemIdx = messages.findLastIndex((m) => m.role === "system");
+    let lastSystemIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "system") {
+        lastSystemIdx = i;
+        break;
+      }
+    }
 
     if (lastSystemIdx >= 0) {
       messages[lastSystemIdx] = {

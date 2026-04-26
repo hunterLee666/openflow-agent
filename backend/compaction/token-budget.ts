@@ -266,7 +266,7 @@ export const DEFAULT_TOKEN_BUDGET_CONFIG: TokenBudgetConfig = {
   fallbackToSummary: true,
 };
 
-export function estimateTokensClaude(text: string): number {
+export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 

@@ -288,6 +288,108 @@ export class WebSocketTransport extends BaseTransport {
   }
 }
 
+export class WebSocketServerTransport extends BaseTransport {
+  private server: any;
+  private connections: Map<string, any> = new Map();
+
+  constructor(config: WebSocketConfig, handler: TransportHandler) {
+    super(config, handler);
+  }
+
+  async connect(): Promise<void> {
+    try {
+      const WebSocketModule = await import("ws");
+      const WebSocketServer = (WebSocketModule.default as any)?.WebSocketServer || WebSocketModule.default;
+
+      const port = (this.config as any).port || 8765;
+      const host = this.config.host || "localhost";
+
+      this.server = new WebSocketServer({ port, host });
+
+      this.server.on("connection", (ws: any) => {
+        const connectionId = crypto.randomUUID();
+        this.connections.set(connectionId, ws);
+
+        this.notifyConnect();
+
+        ws.on("message", (data: Buffer) => {
+          try {
+            const message = this.parseMessage(data.toString());
+            this.notifyMessage(message);
+          } catch {
+            this.notifyError(new Error("Failed to parse WebSocket message"));
+          }
+        });
+
+        ws.on("close", () => {
+          this.connections.delete(connectionId);
+          if (this.connections.size === 0) {
+            this.notifyDisconnect();
+          }
+        });
+
+        ws.on("error", (error: Error) => {
+          this.notifyError(error);
+        });
+      });
+
+      this.server.on("error", (error: Error) => {
+        this.notifyError(error);
+      });
+
+      await new Promise<void>((resolve) => {
+        this.server.on("listening", () => {
+          resolve();
+        });
+      });
+    } catch (error) {
+      this.notifyError(error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
+  }
+
+  async disconnect(): Promise<void> {
+    if (this.server) {
+      this.server.close();
+      this.server = null;
+    }
+    this.connections.clear();
+    this.notifyDisconnect();
+  }
+
+  async send(message: TransportMessage): Promise<void> {
+    if (!this.connected || this.connections.size === 0) {
+      throw new Error("No WebSocket connections");
+    }
+
+    try {
+      const data = JSON.stringify(message);
+      for (const ws of this.connections.values()) {
+        if (ws.readyState === 1) {
+          ws.send(data);
+        }
+      }
+      this.metrics.messagesSent++;
+      this.metrics.bytesSent += data.length;
+    } catch (error) {
+      this.notifyError(error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
+  }
+
+  private parseMessage(data: string): TransportMessage {
+    const parsed = JSON.parse(data);
+    return {
+      id: parsed.id || `msg_${Date.now()}`,
+      type: parsed.type || "event",
+      channel: parsed.channel || "default",
+      payload: parsed.payload,
+      timestamp: new Date(parsed.timestamp || Date.now()),
+      metadata: parsed.metadata,
+    };
+  }
+}
+
 export class TcpTransport extends BaseTransport {
   private socket: import("net").Socket | null = null;
   private host: string;
@@ -386,6 +488,9 @@ export function createTransport(config: TransportConfig, handler: TransportHandl
     case "stdio":
       return new StdioTransport(config as StdioConfig, handler);
     case "websocket":
+      if ((config as any).port) {
+        return new WebSocketServerTransport(config as WebSocketConfig, handler);
+      }
       return new WebSocketTransport(config as WebSocketConfig, handler);
     case "tcp":
       return new TcpTransport(config as TcpConfig, handler);

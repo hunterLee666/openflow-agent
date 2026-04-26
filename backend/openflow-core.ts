@@ -2,7 +2,7 @@ import type { CapabilityContext, CapabilitySource, ToolDefinition } from "./type
 import { PluginManager } from "./plugins/index.js";
 import { EnhancedMemoryCore, createEnhancedMemoryCore } from "./memory/enhanced-memory-core.js";
 import type { EnhancedMemoryCore as EnhancedMemoryCoreType } from "./memory/enhanced-memory-core.js";
-import { ClaudeMdLoader, createClaudeMdLoader } from "./memory/claude-md-loader.js";
+import { OpenflowMdLoader, createOpenflowMdLoader } from "./memory/openflow-md-loader.js";
 import { DualModelRetriever, createDualModelRetriever } from "./memory/dual-model-retriever.js";
 import { AutoMemoryExtractor, createAutoMemoryExtractor } from "./memory/auto-memory-extractor.js";
 import { KairosDreaming, createKairosDreaming } from "./memory/kairos-dreaming.js";
@@ -132,7 +132,7 @@ export class OpenFlowCore {
   private cronScheduler: CronScheduler;
   private messagingGateway: MessagingGateway | null = null;
   private permissionSystem: PermissionSystem | null = null;
-  private claudeMdLoader: ClaudeMdLoader;
+  private openflowMdLoader: OpenflowMdLoader;
   private dualModelRetriever: DualModelRetriever;
   private autoMemoryExtractor: AutoMemoryExtractor;
   private kairosDreaming: KairosDreaming;
@@ -207,7 +207,7 @@ export class OpenFlowCore {
 
     this.systemPromptBuilder.setCacheMonitor(this.cacheMonitor);
 
-    this.claudeMdLoader = createClaudeMdLoader();
+    this.openflowMdLoader = createOpenflowMdLoader();
     this.dualModelRetriever = createDualModelRetriever({
       maxInject: 5,
       precisionThreshold: 0.78,
@@ -758,8 +758,8 @@ export class OpenFlowCore {
       description: s.type,
     }));
 
-    const claudeMdResult = await this.claudeMdLoader.loadStack(this.config.workspaceRoot);
-    const memoryWarnings = [...claudeMdResult.warnings];
+    const openflowMdResult = await this.openflowMdLoader.loadStack(this.config.workspaceRoot);
+    const memoryWarnings = [...openflowMdResult.warnings];
 
     const ctx: PromptContext = {
       config: {},
@@ -767,7 +767,7 @@ export class OpenFlowCore {
       cwd: this.config.workspaceRoot,
       turn: 0,
       sessionId,
-      claudeMdStack: claudeMdResult.mergedContent,
+      openflowMdStack: openflowMdResult.mergedContent,
       memoryWarnings,
     };
     const cache: PromptCache = new Map();
@@ -783,8 +783,8 @@ export class OpenFlowCore {
       description: s.type,
     }));
 
-    const claudeMdResult = await this.claudeMdLoader.loadStack(this.config.workspaceRoot);
-    const memoryWarnings = [...claudeMdResult.warnings];
+    const openflowMdResult = await this.openflowMdLoader.loadStack(this.config.workspaceRoot);
+    const memoryWarnings = [...openflowMdResult.warnings];
 
     const autoObservations = await this.autoMemoryExtractor.getObservations(this.config.workspaceRoot);
     const candidates: MemoryCard[] = autoObservations.map((obs) => ({
@@ -825,7 +825,7 @@ export class OpenFlowCore {
       cwd: this.config.workspaceRoot,
       turn: 0,
       sessionId,
-      claudeMdStack: claudeMdResult.mergedContent,
+      openflowMdStack: openflowMdResult.mergedContent,
       memoryInjections,
       memoryWarnings,
     };
@@ -967,7 +967,7 @@ export class OpenFlowCore {
       apiKey: this.config.llmConfig?.apiKey || "",
       provider: this.config.llmConfig?.provider,
       baseUrl: this.config.llmConfig?.baseUrl,
-      model: this.config.llmConfig?.model || "claude-sonnet-4-20250514",
+      model: this.config.llmConfig?.model || "",
       maxTokens: this.config.queryConfig?.maxTokens || 8192,
       maxTurns: this.config.queryConfig?.maxTurns || 50,
       tokenBudget: this.config.queryConfig?.tokenBudget || 100000,

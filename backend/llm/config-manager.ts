@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
-import { ClaudeCodeConfigAdapter, loadClaudeCodeConfig, MODEL_ALIASES } from "../adapters/llm-config-adapter.js";
+import { OpenflowConfigAdapter, loadOpenflowConfig } from "../adapters/openflow-config-adapter.js";
 import type { ProviderConfig } from "./types.js";
 
 export interface LLMConfig {
@@ -34,7 +34,7 @@ const DEFAULT_CONFIG_FILE = "llm-config.json";
 export class LLMConfigManager {
   private config: LLMConfig;
   private configPath: string;
-  private claudeAdapter: ClaudeCodeConfigAdapter | null = null;
+  private openflowAdapter: OpenflowConfigAdapter | null = null;
   private projectDir: string;
 
   constructor(configDir: string, configFile = DEFAULT_CONFIG_FILE, projectDir?: string) {
@@ -56,7 +56,7 @@ export class LLMConfigManager {
   async initialize(): Promise<void> {
     await this.load();
 
-    this.claudeAdapter = await loadClaudeCodeConfig(this.projectDir);
+    this.openflowAdapter = await loadOpenflowConfig(this.projectDir);
 
     if (Object.keys(this.config.providers).length === 0) {
       await this.createDefaultConfig();
@@ -91,42 +91,42 @@ export class LLMConfigManager {
         };
       }
 
-      if (this.claudeAdapter) {
-        await this.mergeClaudeCodeConfig();
+      if (this.openflowAdapter) {
+        await this.mergeOpenflowConfig();
       }
     } catch (error) {
       console.warn(`Failed to load LLM config from ${this.configPath}:`, error);
     }
   }
 
-  private async mergeClaudeCodeConfig(): Promise<void> {
-    if (!this.claudeAdapter) return;
+  private async mergeOpenflowConfig(): Promise<void> {
+    if (!this.openflowAdapter) return;
 
-    const claudeModel = this.claudeAdapter.getEffectiveModel();
-    if (claudeModel) {
-      const resolvedModel = this.claudeAdapter.resolveModelWithOverrides(claudeModel);
+    const openflowModel = this.openflowAdapter.getEffectiveModel();
+    if (openflowModel) {
+      const resolvedModel = this.openflowAdapter.resolveModelWithOverrides(openflowModel);
       this.config.defaultModel = resolvedModel;
     }
 
-    const claudeOverrides = this.claudeAdapter.getModelOverrides();
-    if (Object.keys(claudeOverrides).length > 0) {
+    const openflowOverrides = this.openflowAdapter.getModelOverrides();
+    if (Object.keys(openflowOverrides).length > 0) {
       this.config.modelOverrides = {
         ...this.config.modelOverrides,
-        ...claudeOverrides,
+        ...openflowOverrides,
       };
     }
 
-    const claudeAvailableModels = this.claudeAdapter.getAvailableModels();
-    if (claudeAvailableModels && claudeAvailableModels.length > 0) {
-      this.config.availableModels = claudeAvailableModels;
+    const openflowAvailableModels = this.openflowAdapter.getAvailableModels();
+    if (openflowAvailableModels && openflowAvailableModels.length > 0) {
+      this.config.availableModels = openflowAvailableModels;
     }
 
-    const claudeEnv = this.claudeAdapter.getEffectiveEnv();
-    if (claudeEnv.ANTHROPIC_API_KEY && this.config.providers.anthropic) {
-      this.config.providers.anthropic.apiKey = claudeEnv.ANTHROPIC_API_KEY;
+    const openflowEnv = this.openflowAdapter.getEffectiveEnv();
+    if (openflowEnv.OPENFLOW_API_KEY && this.config.providers.anthropic) {
+      this.config.providers.anthropic.apiKey = openflowEnv.OPENFLOW_API_KEY;
     }
-    if (claudeEnv.OPENAI_API_KEY && this.config.providers.openai) {
-      this.config.providers.openai.apiKey = claudeEnv.OPENAI_API_KEY;
+    if (openflowEnv.OPENAI_API_KEY && this.config.providers.openai) {
+      this.config.providers.openai.apiKey = openflowEnv.OPENAI_API_KEY;
     }
   }
 
@@ -255,10 +255,6 @@ export class LLMConfigManager {
       return this.config.modelAliases[alias];
     }
 
-    if (alias in MODEL_ALIASES) {
-      return MODEL_ALIASES[alias].resolveTo;
-    }
-
     return alias;
   }
 
@@ -328,60 +324,17 @@ export class LLMConfigManager {
     return [...(this.config.availableModels || [])];
   }
 
-  getClaudeAdapter(): ClaudeCodeConfigAdapter | null {
-    return this.claudeAdapter;
+  getOpenflowAdapter(): OpenflowConfigAdapter | null {
+    return this.openflowAdapter;
   }
 
   private async createDefaultConfig(): Promise<void> {
     const defaultConfig: LLMConfigFile = {
       version: "1.0.0",
-      providers: {
-        anthropic: {
-          baseUrl: "https://api.anthropic.com",
-          apiKey: "",
-          defaultModel: "claude-sonnet-4-20250514",
-          supportedModels: [
-            "claude-opus-4-5-20250514",
-            "claude-sonnet-4-20250514",
-            "claude-3-5-sonnet-20241022",
-            "claude-3-5-haiku-20241022",
-            "claude-3-haiku-20240307",
-          ],
-          supportsStreaming: true,
-          requiresThinkingFlag: false,
-          costPer1kInput: 0.015,
-          costPer1kOutput: 0.075,
-          maxTokens: 8192,
-          contextWindow: 200000,
-        },
-        openai: {
-          baseUrl: "https://api.openai.com/v1",
-          apiKey: "",
-          defaultModel: "gpt-4o",
-          supportedModels: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo", "o1", "o1-mini", "o3-mini"],
-          supportsStreaming: true,
-          requiresThinkingFlag: false,
-          costPer1kInput: 0.01,
-          costPer1kOutput: 0.03,
-          maxTokens: 16384,
-          contextWindow: 128000,
-        },
-        deepseek: {
-          baseUrl: "https://api.deepseek.com/v1",
-          apiKey: "",
-          defaultModel: "deepseek-chat",
-          supportedModels: ["deepseek-chat", "deepseek-coder", "deepseek-reasoner"],
-          supportsStreaming: true,
-          requiresThinkingFlag: false,
-          costPer1kInput: 0.001,
-          costPer1kOutput: 0.002,
-          maxTokens: 8192,
-          contextWindow: 64000,
-        },
-      },
-      defaultProvider: "anthropic",
-      defaultModel: "claude-sonnet-4-20250514",
-      fallbackProviders: ["openai", "deepseek"],
+      providers: {},
+      defaultProvider: "",
+      defaultModel: "",
+      fallbackProviders: [],
       budgetUsd: 10,
       maxLatencyMs: 5000,
     };

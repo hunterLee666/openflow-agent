@@ -219,9 +219,9 @@ export class HookSystem extends EventEmitter {
       timeout: config.timeout || 10000,
       env: {
         ...process.env,
-        CLAUDE_PROJECT_DIR: ctx.projectDir || "",
-        CLAUDE_SESSION_ID: ctx.sessionId,
-        CLAUDE_EVENT: ctx.event || "",
+        OPENFLOW_PROJECT_DIR: ctx.projectDir || "",
+        OPENFLOW_SESSION_ID: ctx.sessionId,
+        OPENFLOW_EVENT: ctx.event || "",
       },
     });
 
@@ -268,9 +268,9 @@ async function executeCommandHook(command: string, ctx: HookContext, timeout: nu
       timeout,
       env: {
         ...process.env,
-        CLAUDE_PROJECT_DIR: ctx.projectDir || "",
-        CLAUDE_CODE_REMOTE: "false",
-        CLAUDE_SESSION_ID: ctx.sessionId,
+        OPENFLOW_PROJECT_DIR: ctx.projectDir || "",
+        OPENFLOW_CODE_REMOTE: "false",
+        OPENFLOW_SESSION_ID: ctx.sessionId,
       },
     });
 
