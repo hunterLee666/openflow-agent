@@ -1,0 +1,5 @@
+[install]
+auto = "fallback"
+
+[install.cache]
+disable = false
