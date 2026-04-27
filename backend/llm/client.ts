@@ -125,10 +125,28 @@ export class LLMClient {
   }
 
   async complete(
-    messages: LLMMessage[],
-    tools?: LLMToolDefinition[],
+    messagesOrOptions: LLMMessage[] | { messages: LLMMessage[]; tools?: LLMToolDefinition[]; callbacks?: StreamCallbacks; maxTokens?: number; temperature?: number },
+    toolsOrCallbacks?: LLMToolDefinition[] | StreamCallbacks,
     callbacks?: StreamCallbacks
   ): Promise<CompletionResult> {
+    let messages: LLMMessage[];
+    let tools: LLMToolDefinition[] | undefined;
+    let streamCallbacks: StreamCallbacks | undefined;
+    let maxTokensOpt: number | undefined;
+    let temperatureOpt: number | undefined;
+
+    if (Array.isArray(messagesOrOptions)) {
+      messages = messagesOrOptions;
+      tools = toolsOrCallbacks as LLMToolDefinition[] | undefined;
+      streamCallbacks = callbacks;
+    } else {
+      messages = messagesOrOptions.messages;
+      tools = messagesOrOptions.tools;
+      streamCallbacks = messagesOrOptions.callbacks;
+      maxTokensOpt = messagesOrOptions.maxTokens;
+      temperatureOpt = messagesOrOptions.temperature;
+    }
+
     if (!this.degradationLadder.isFeatureEnabled("tool_execution")) {
       throw new Error("LLM service degraded: tool execution disabled");
     }
@@ -138,9 +156,9 @@ export class LLMClient {
         return await retryWithBackoff(
           async () => {
             if (this.provider === "anthropic") {
-              return await this.anthropicComplete(messages, tools, callbacks);
+              return await this.anthropicComplete(messages, tools, streamCallbacks);
             } else {
-              return await this.openaiCompatibleComplete(messages, tools, callbacks);
+              return await this.openaiCompatibleComplete(messages, tools, streamCallbacks);
             }
           },
           {

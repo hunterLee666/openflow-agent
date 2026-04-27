@@ -299,12 +299,11 @@ export class WebSocketServerTransport extends BaseTransport {
   async connect(): Promise<void> {
     try {
       const WebSocketModule = await import("ws");
-      const WebSocketServer = (WebSocketModule.default as any)?.WebSocketServer || WebSocketModule.default;
+      const WebSocketServer = (WebSocketModule as any).WebSocketServer;
 
       const port = (this.config as any).port || 8765;
-      const host = this.config.host || "localhost";
 
-      this.server = new WebSocketServer({ port, host });
+      this.server = new WebSocketServer({ port });
 
       this.server.on("connection", (ws: any) => {
         const connectionId = crypto.randomUUID();

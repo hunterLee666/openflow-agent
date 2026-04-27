@@ -184,6 +184,67 @@ OpenFlow Server - AI 编码助手服务端
     };
   });
 
+  bridge.registerHandler("streamQuery", async (params: unknown, sessionId: string) => {
+    const { message } = params as { message: string };
+
+    if (!message) {
+      throw new Error("消息内容不能为空");
+    }
+
+    const chunks: string[] = [];
+    const result = await core.executeQuery(
+      { message, threadId: sessionId },
+      (event) => {
+        if (event.kind === "assistant_text_delta" || event.kind === "completion") {
+          chunks.push(event.text || "");
+        }
+      }
+    );
+
+    return {
+      content: chunks.join("") || result.content,
+      threadId: result.threadId,
+      turn: result.turn,
+      usage: result.usage,
+    };
+  });
+
+  bridge.registerHandler("listSessions", async (_params: unknown, sessionId: string) => {
+    console.log(`[Session ${sessionId}] 列出所有会话`);
+    const threads = await core.getSessionManager().listAllThreads();
+    return { sessions: threads };
+  });
+
+  bridge.registerHandler("getSession", async (params: unknown, sessionId: string) => {
+    const { threadId } = params as { threadId: string };
+    console.log(`[Session ${sessionId}] 获取会话: ${threadId}`);
+    const messages = await core.getSessionManager().loadSession(threadId);
+    return { threadId, messages };
+  });
+
+  bridge.registerHandler("deleteSession", async (params: unknown, sessionId: string) => {
+    const { threadId } = params as { threadId: string };
+    console.log(`[Session ${sessionId}] 删除会话: ${threadId}`);
+    await core.getSessionManager().deleteSession(threadId);
+    return { success: true };
+  });
+
+  bridge.registerHandler("getTools", async (_params: unknown, sessionId: string) => {
+    console.log(`[Session ${sessionId}] 获取工具列表`);
+    const tools = core.getTools();
+    return { tools };
+  });
+
+  bridge.registerHandler("getAgents", async (_params: unknown, sessionId: string) => {
+    console.log(`[Session ${sessionId}] 获取 Agent 列表`);
+    const agents = [
+      { id: "assistant", name: "Assistant", description: "General purpose assistant" },
+      { id: "coder", name: "Coder", description: "Specialized in code generation and debugging" },
+      { id: "analyst", name: "Analyst", description: "Data analysis and research" },
+    ];
+    return { agents };
+  });
+
   bridge.on("connected", () => {
     console.log("🔗 客户端已连接");
   });
