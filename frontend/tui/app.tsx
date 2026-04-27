@@ -1,457 +1,300 @@
-import React, {
-  type ReactNode,
-  type ReactElement,
-  useState,
-  useCallback,
-  useEffect,
-  useRef,
-} from "react";
-import { Box } from "./components/Box.js";
-import { Text } from "./components/Text.js";
-import { Spinner } from "./components/Spinner.js";
-import { MessageComponent, MessageList, type Message } from "./components/Message.js";
-import { TextInput } from "./components/TextInput.js";
-import { Markdown } from "./components/Markdown.js";
-import { StatusBar } from "./components/StatusBar.js";
-import { Notifications } from "./components/Notifications.js";
-import { Help } from "./components/Help.js";
-import { useTerminalSize } from "./hooks/useTerminalSize.js";
-import { useInput } from "./hooks/useInput.js";
-import { SHOW_CURSOR, HIDE_CURSOR } from "./ansi.js";
-import { useHistory } from "./hooks/useHistory.js";
-import { useDoublePress } from "./hooks/useDoublePress.js";
-import type { KeybindingContextName } from "./keybindings/schema.js";
-import {
-  VimStateMachine,
-  createVimStateMachine,
-  type VimMode,
-  type VimState,
-  type VimConfig,
-  DEFAULT_VIM_CONFIG,
-  formatModeIndicator,
-} from "./vim/index.js";
-import {
-  detectTerminalFromEnv,
-  getMouseProtocolSequence,
-  type TerminalInfo,
-} from "./termio/index.js";
-import { z } from "zod";
+import React, { useState, useCallback, useEffect, useRef } from "react"
+import { Box, Text, useInput, useApp } from "ink"
+import { useTheme } from "@/contexts/theme-context"
+import { useAppContext } from "@/contexts/app-context"
+import { useModalContext } from "@/contexts/modal-context"
+import { useNotificationContext } from "@/contexts/notification-context"
+import { useTerminalSize } from "@/hooks/use-terminal-size"
+import { useTextInput } from "@/hooks/use-text-input"
+import { AppHeader } from "@/components/app-header"
+import { ChatThread } from "@/components/chat-thread"
+import { ChatMessage } from "@/components/chat-message"
+import { TextInput } from "@/components/text-input"
+import { StatusBar } from "@/components/status-bar"
+import { LoadingIndicator } from "@/components/loading-indicator"
+import { CommandPalette } from "@/components/command-palette"
+import { Dialog } from "@/components/dialog"
+import { TaskPanel } from "@/components/task-panel"
+import { NotificationPanel } from "@/components/notification-panel"
+import { HelpPanel } from "@/components/help-panel"
+import { Tabs } from "@/components/tabs"
+import { globalKeyResolver } from "@/keybindings"
+import { DEFAULT_KEYBINDINGS } from "@/keybindings/schema"
+import type { Message } from "@/types"
+import type { Task as TaskType } from "@/components"
+import type { Notification } from "@/components"
 
-export const AppNotificationSchema = z.object({
-  id: z.string(),
-  type: z.enum(['info', 'warning', 'error']),
-  message: z.string(),
-})
-export type AppNotification = z.infer<typeof AppNotificationSchema>
+const COMMANDS = [
+  {
+    id: "clear",
+    label: "清屏",
+    description: "清除所有消息",
+    shortcut: "Ctrl+K",
+    action: () => {},
+  },
+  {
+    id: "theme",
+    label: "切换主题",
+    description: "循环切换主题",
+    shortcut: "Ctrl+T",
+    action: () => {},
+  },
+  {
+    id: "help",
+    label: "帮助",
+    description: "显示快捷键",
+    shortcut: "Ctrl+H",
+    action: () => {},
+  },
+  {
+    id: "compact",
+    label: "压缩对话",
+    description: "压缩上下文",
+    shortcut: "Ctrl+M",
+    action: () => {},
+  },
+  {
+    id: "export",
+    label: "导出对话",
+    description: "导出为 Markdown",
+    shortcut: "Ctrl+E",
+    action: () => {},
+  },
+  {
+    id: "settings",
+    label: "设置",
+    description: "打开设置面板",
+    shortcut: "Ctrl+,",
+    action: () => {},
+  },
+]
 
-export const AppPropsSchema = z.object({
-  title: z.string().optional(),
-  subtitle: z.string().optional(),
-  messages: z.array(z.any()).optional(),
-  onSendMessage: z.function().args(z.string()).returns(z.void()).optional(),
-  onExit: z.function().returns(z.void()).optional(),
-  children: z.any().optional(),
-  isLoading: z.boolean().optional(),
-  error: z.string().nullable().optional(),
-  showHelp: z.boolean().optional(),
-  showNotifications: z.boolean().optional(),
-  showStatusBar: z.boolean().optional(),
-  prompt: z.string().optional(),
-  enableVimMode: z.boolean().optional(),
-  vimConfig: z.record(z.string(), z.any()).optional(),
-})
-export type AppProps = z.infer<typeof AppPropsSchema>
+export const App = () => {
+  const { theme, themeName, setTheme } = useTheme()
+  const { state: appState, dispatch, addMessage, clearMessages } = useAppContext()
+  const { modal, openModal, closeModal, toggleModal } = useModalContext()
+  const { notifications, addNotification, dismissNotification } = useNotificationContext()
+  const { columns, rows } = useTerminalSize()
 
-export const AppStateSchema = z.object({
-  input: z.string(),
-  messages: z.array(z.any()),
-  isLoading: z.boolean(),
-  selectedIndex: z.number(),
-  showHelp: z.boolean(),
-  notifications: z.array(AppNotificationSchema),
-  vimMode: z.enum(['normal', 'insert', 'visual', 'visual-line', 'command']),
-  vimState: z.any().nullable(),
-  terminalInfo: z.any().nullable(),
-})
-export type AppState = z.infer<typeof AppStateSchema>
-
-export function App({
-  title = "OpenFlow CLI",
-  subtitle,
-  messages = [],
-  onSendMessage,
-  onExit,
-  children,
-  isLoading: externalIsLoading = false,
-  error,
-  showHelp: initialShowHelp = false,
-  showNotifications: initialShowNotifications = true,
-  showStatusBar: initialShowStatusBar = true,
-  prompt = ">",
-  enableVimMode = false,
-  vimConfig = {},
-}: AppProps): ReactElement {
-  const [input, setInput] = useState("");
-  const [internalMessages, setInternalMessages] = useState<Message[]>(messages);
-  const [internalIsLoading, setInternalIsLoading] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [showHelp, setShowHelp] = useState(initialShowHelp);
-  const [notifications, setNotifications] = useState<AppState['notifications']>([]);
-  const [vimMode, setVimMode] = useState<VimMode>(enableVimMode ? 'normal' : 'insert');
-  const [vimState, setVimState] = useState<VimState | null>(null);
-  const [terminalInfo, setTerminalInfo] = useState<TerminalInfo | null>(null);
-  const terminalSize = useTerminalSize();
-  const inputHistory = useHistory<string>({ maxSize: 100 });
-  const vimMachineRef = useRef<VimStateMachine | null>(null);
-
-  const isLoading = externalIsLoading || internalIsLoading;
+  const [tasks, setTasks] = useState<TaskType[]>([])
+  const [activeTab, setActiveTab] = useState("chat")
+  const [showHelp, setShowHelp] = useState(false)
+  const keybindingsInitialized = useRef(false)
 
   useEffect(() => {
-    const info = detectTerminalFromEnv()
-    setTerminalInfo(info)
+    if (keybindingsInitialized.current) return
+    keybindingsInitialized.current = true
 
-    if (info.supportsMouse) {
-      const { enable } = getMouseProtocolSequence(info.program)
-      process.stdout.write(enable)
-    }
+    globalKeyResolver.addBindings(DEFAULT_KEYBINDINGS)
 
-    if (enableVimMode) {
-      vimMachineRef.current = createVimStateMachine({
-        ...DEFAULT_VIM_CONFIG,
-        ...vimConfig,
-        enableVimMode: true,
-      })
-      setVimState(vimMachineRef.current.getState())
-    }
-  }, [])
+    globalKeyResolver.register("exit", () => {
+      process.exit(0)
+    })
 
-  useEffect(() => {
-    process.stdout.write(HIDE_CURSOR);
-    return () => {
-      process.stdout.write(SHOW_CURSOR);
+    globalKeyResolver.register("clear", () => {
+      clearMessages()
+      addNotification({ type: "info", message: "已清屏" })
+    })
 
-      if (terminalInfo?.supportsMouse) {
-        process.stdout.write('\x1b[?9l\x1b[?1000l\x1b[?1001l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1016l')
-      }
-    };
-  }, [terminalInfo]);
+    globalKeyResolver.register("toggleTheme", () => {
+      const themes = ["default", "atomOne", "dracula", "github"]
+      const currentIndex = themes.indexOf(themeName)
+      const nextIndex = (currentIndex + 1) % themes.length
+      setTheme(themes[nextIndex] as any)
+      addNotification({ type: "success", message: `主题已切换为: ${themes[nextIndex]}` })
+    })
 
-  const addNotification = useCallback(
-    (type: 'info' | 'warning' | 'error', message: string) => {
-      const id = `notification-${Date.now()}`
-      setNotifications(prev => [...prev, { id, type, message }])
-      setTimeout(() => {
-        setNotifications(prev => prev.filter(n => n.id !== id))
-      }, 5000)
-    },
-    []
-  )
+    globalKeyResolver.register("commandPalette", () => {
+      toggleModal("commandPalette")
+    })
 
-  const removeNotification = useCallback((id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id))
-  }, [])
+    globalKeyResolver.register("help", () => {
+      setShowHelp((prev) => !prev)
+    })
+  }, [clearMessages, addNotification, themeName, setTheme, toggleModal])
 
-  const handleExitDoublePress = useDoublePress(
-    () => {
-      addNotification('info', 'Ctrl+C again to exit')
-    },
-    () => {
-      onExit?.()
-    }
-  )
-
-  const handleHistoryUp = useCallback(() => {
-    const item = inputHistory.goBack()
-    if (item !== null) {
-      setInput(item)
-    }
-  }, [inputHistory])
-
-  const handleHistoryDown = useCallback(() => {
-    const item = inputHistory.goForward()
-    if (item !== null) {
-      setInput(item)
-    } else {
-      setInput('')
-    }
-  }, [inputHistory])
-
-  useInput({
-    onEscape: () => {
-      if (enableVimMode && vimMachineRef.current) {
-        const result = vimMachineRef.current.handleKey('<Esc>')
-        setVimMode(result.newState.mode)
-        setVimState(result.newState)
-      } else if (showHelp) {
-        setShowHelp(false)
-      } else if (input) {
-        setInput('')
-      } else {
-        onExit?.()
-      }
-    },
-    onCtrlC: () => {
-      if (enableVimMode && vimMachineRef.current && vimMode !== 'insert') {
-        const result = vimMachineRef.current.handleKey('<Ctrl-c>')
-        setVimMode(result.newState.mode)
-        setVimState(result.newState)
-      } else {
-        handleExitDoublePress()
-      }
-    },
-    onCtrlL: () => {
-      setInternalMessages([])
-      addNotification('info', 'Screen cleared')
-    },
-    onCtrlR: () => {
-      addNotification('info', 'History search not implemented')
-    },
-    onArrowUp: () => {
-      if (enableVimMode && vimMachineRef.current && vimMode === 'normal') {
-        const result = vimMachineRef.current.handleKey('k')
-        setVimMode(result.newState.mode)
-        setVimState(result.newState)
-      } else if (!input) {
-        handleHistoryUp()
-      }
-    },
-    onArrowDown: () => {
-      if (enableVimMode && vimMachineRef.current && vimMode === 'normal') {
-        const result = vimMachineRef.current.handleKey('j')
-        setVimMode(result.newState.mode)
-        setVimState(result.newState)
-      } else if (!input) {
-        handleHistoryDown()
-      }
-    },
-    onTab: () => {
-      // Auto-complete logic can be added here
-    },
-    onEnter: () => {
-      if (enableVimMode && vimMachineRef.current && vimMode === 'command') {
-        const result = vimMachineRef.current.handleKey('<Enter>')
-        setVimMode(result.newState.mode)
-        setVimState(result.newState)
-      } else if (input.trim()) {
-        handleSend(input);
-      }
-    },
-    onKeyDown: (event) => {
-      if (enableVimMode && vimMachineRef.current) {
-        const result = vimMachineRef.current.handleKey(event.key)
-        setVimMode(result.newState.mode)
-        setVimState(result.newState)
-
-        const action = result.action
-        if (action) {
-          if (action.type === 'insert_text') {
-            const payload = action.payload
-            if (payload && payload.text) {
-              setInput(prev => prev + payload.text)
-            }
-          } else if (action.type === 'delete_char') {
-            setInput(prev => prev.slice(0, -1))
-          } else if (action.type === 'delete_line') {
-            setInput('')
-          } else if (action.type === 'submit') {
-            if (input.trim()) {
-              handleSend(input)
-            }
-          }
-        }
-      }
-    },
-  });
-
-  const handleSend = useCallback(
-    (text: string) => {
+  const {
+    value: inputValue,
+    cursorPosition,
+    isFocused,
+    setValue: setInputValue,
+    setIsFocused,
+    submit: handleSubmit,
+  } = useTextInput({
+    onSubmit: (value) => {
       const userMessage: Message = {
-        id: `user-${Date.now()}`,
-        role: "user",
-        content: [{ type: "text", text }],
-        timestamp: Date.now(),
-      };
+        id: Date.now().toString(),
+        sender: "user",
+        content: value,
+        timestamp: new Date(),
+      }
+      addMessage(userMessage)
+      dispatch({ type: "SET_LOADING", payload: true })
 
-      setInternalMessages(prev => [...prev, userMessage]);
-      inputHistory.push(text)
-      setInput("");
-
-      onSendMessage?.(text);
+      setTimeout(() => {
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          sender: "assistant",
+          content: `收到你的消息: "${value}"\n\n这是基于 Qwen Code CLI 架构的全新实现！`,
+          timestamp: new Date(),
+        }
+        addMessage(assistantMessage)
+        dispatch({ type: "SET_LOADING", payload: false })
+      }, 1000)
     },
-    [input, onSendMessage, inputHistory]
-  );
+  })
 
-  const handleInputChange = useCallback((value: string) => {
-    setInput(value);
-  }, []);
+  useInput((input, key) => {
+    const modifiers: string[] = []
+    if (key.ctrl) modifiers.push("ctrl")
+    if (key.shift) modifiers.push("shift")
+    if (key.meta) modifiers.push("meta")
 
-  const handleSubmit = useCallback(
-    (value: string) => {
-      handleSend(value);
-    },
-    [handleSend]
-  );
+    if (modal.isOpen) return
+
+    globalKeyResolver.execute(input, modifiers)
+  })
+
+  const chatHeight = Math.max(8, rows - 14)
+
+  const handleCommandAction = useCallback((commandId: string) => {
+    switch (commandId) {
+      case "clear":
+        clearMessages()
+        break
+      case "theme":
+        const themes = ["default", "atomOne", "dracula", "github"]
+        const currentIndex = themes.indexOf(themeName)
+        const nextIndex = (currentIndex + 1) % themes.length
+        setTheme(themes[nextIndex] as any)
+        break
+      case "help":
+        setShowHelp(true)
+        break
+    }
+    closeModal()
+  }, [clearMessages, themeName, setTheme, closeModal])
+
+  const commandsWithActions = COMMANDS.map((cmd) => ({
+    ...cmd,
+    action: () => handleCommandAction(cmd.id),
+  }))
+
+  const keybindings = [
+    { keys: "Ctrl+P", description: "命令面板" },
+    { keys: "Ctrl+T", description: "切换主题" },
+    { keys: "Ctrl+K", description: "清屏" },
+    { keys: "Ctrl+H", description: "帮助" },
+    { keys: "Ctrl+L", description: "切换布局" },
+    { keys: "Enter", description: "发送消息" },
+    { keys: "Esc", description: "退出/关闭" },
+    { keys: "↑/↓", description: "滚动/历史" },
+  ]
 
   return (
-    <Box
-      flexDirection="column"
-      width="100%"
-      height={terminalSize.height}
-      style={{ fontFamily: "monospace" }}
-    >
-      <Box
-        flexDirection="column"
-        padding={1}
-        backgroundColor="#1a1a2e"
-      >
-        <Box flexDirection="row" justifyContent="space-between">
-          <Box flexDirection="column">
-            <Text bold color="brightWhite">
-              {title}
-            </Text>
-            {subtitle && (
-              <Text color="dim" style={{ fontSize: 12 }}>
-                {subtitle}
-              </Text>
-            )}
-          </Box>
-          {isLoading && <Spinner label="thinking..." />}
-        </Box>
-      </Box>
+    <Box flexDirection="column" width={columns} paddingX={1}>
+      <AppHeader />
 
-      <Box flexDirection="column" flex={1} overflow="auto" padding={1}>
-        {internalMessages.length > 0 ? (
-          <MessageList messages={internalMessages} />
-        ) : (
-          <Box flexDirection="column" alignItems="center" justifyContent="center" flex={1}>
-            <Text color="dim">Welcome to {title}</Text>
-            <Text color="dim" style={{ fontSize: 12, marginTop: 8 }}>
-              Type your message and press Enter to start
-            </Text>
-          </Box>
-        )}
-
-        {children}
-
-        {error && (
-          <Box padding={1} backgroundColor="#3a1a1a">
-            <Text color="red" bold>
-              Error: {error}
-            </Text>
-          </Box>
-        )}
-      </Box>
-
-      {initialShowNotifications && notifications.length > 0 && (
-        <Notifications
-          notifications={notifications.map(n => ({
-            id: n.id,
-            type: n.type,
-            message: n.message,
-          }))}
-          onDismiss={removeNotification}
+      <Box flexDirection="row" paddingY={1}>
+        <Tabs
+          tabs={[
+            { id: "chat", label: "对话" },
+            { id: "tasks", label: "任务", badge: tasks.filter((t) => t.status === "running").length },
+          ]}
+          activeTab={activeTab}
+          onChange={setActiveTab}
         />
+      </Box>
+
+      <Box flexDirection="column">
+        <Text color={theme.gray}>{"─".repeat(Math.min(columns - 2, 80))}</Text>
+      </Box>
+
+      {activeTab === "chat" && (
+        <Box flexDirection="column" paddingY={1}>
+          <ChatThread maxHeight={chatHeight}>
+            {appState.messages.map((msg) => (
+              <ChatMessage
+                key={msg.id}
+                sender={msg.sender}
+                timestamp={msg.timestamp}
+                content={msg.content}
+                streaming={msg.streaming}
+                toolName={msg.toolName}
+                toolStatus={msg.toolStatus}
+              />
+            ))}
+          </ChatThread>
+
+          {appState.isLoading && (
+            <Box paddingY={1}>
+              <LoadingIndicator message="Thinking" />
+            </Box>
+          )}
+        </Box>
       )}
 
-      {showHelp && <Help isOpen={showHelp} onClose={() => setShowHelp(false)} />}
+      {activeTab === "tasks" && (
+        <Box flexDirection="column" paddingY={1} height={chatHeight}>
+          <TaskPanel tasks={tasks} title="任务面板" />
+        </Box>
+      )}
 
-      <Box
-        flexDirection="row"
-        alignItems="center"
-        padding={1}
-        backgroundColor="#1a1a2e"
-        gap={1}
-      >
-        {enableVimMode && vimState && (
-          <Text
-            color={vimMode === 'normal' ? 'green' : vimMode === 'insert' ? 'cyan' : vimMode === 'visual' ? 'yellow' : 'magenta'}
-            bold
-          >
-            {formatModeIndicator(vimMode)}
-          </Text>
-        )}
-        <Text color="cyan" bold>
-          {prompt}
-        </Text>
+      <Box flexDirection="column">
+        <Text color={theme.gray}>{"─".repeat(Math.min(columns - 2, 80))}</Text>
+      </Box>
 
-        <Box flex={1}>
-          <TextInput
-            value={input}
-            onChange={handleInputChange}
-            onSubmit={handleSubmit}
-            placeholder={enableVimMode && vimMode === 'normal' ? 'Normal mode - press i to insert' : 'Type a message...'}
-            autoFocus={vimMode === 'insert' || !enableVimMode}
+      <Box paddingY={1}>
+        <TextInput
+          value={inputValue}
+          onChange={setInputValue}
+          onSubmit={handleSubmit}
+          placeholder="输入消息..."
+          isFocused={isFocused}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+        />
+      </Box>
+
+      <StatusBar
+        model="qwen2.5-vl-3b"
+        tokens={appState.tokenCount}
+        connected={appState.connected}
+        showShortcuts
+      />
+
+      {modal.isOpen && modal.type === "commandPalette" && (
+        <Box position="absolute" top={3} left={1} right={1}>
+          <CommandPalette
+            commands={commandsWithActions}
+            onClose={closeModal}
+            placeholder="输入命令..."
           />
         </Box>
-
-        {isLoading && <Spinner label="thinking..." />}
-      </Box>
-
-      {initialShowStatusBar && (
-        <StatusBar
-          segments={[
-            { label: 'mode', value: enableVimMode ? vimMode : 'chat' },
-            { label: 'connection', value: 'connected' },
-            { label: 'tokens', value: '0' },
-            ...(terminalInfo ? [{ label: 'terminal', value: terminalInfo.name }] : []),
-          ]}
-        />
       )}
-    </Box>
-  );
-}
 
-export interface TabbedAppProps extends AppProps {
-  tabs?: Array<{ id: string; label: string; content: ReactNode }>
-  activeTab?: string
-  onTabChange?: (tabId: string) => void
-}
-
-export function TabbedApp({
-  tabs = [],
-  activeTab,
-  onTabChange,
-  ...props
-}: TabbedAppProps): ReactElement {
-  const [internalActiveTab, setInternalActiveTab] = useState(activeTab || tabs[0]?.id)
-  const currentTab = tabs.find(t => t.id === internalActiveTab) || tabs[0]
-
-  const handleTabChange = useCallback((tabId: string) => {
-    setInternalActiveTab(tabId)
-    onTabChange?.(tabId)
-  }, [onTabChange])
-
-  return (
-    <App {...props}>
-      <Box flexDirection="column" flex={1}>
-        <Box flexDirection="row" gap={1} padding={1}>
-          {tabs.map(tab => (
-            <Box
-              key={tab.id}
-              padding={1}
-              onClick={() => handleTabChange(tab.id)}
-              style={{
-                borderBottom: tab.id === internalActiveTab ? '2px solid #4a9eff' : 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <Text
-                color={tab.id === internalActiveTab ? 'brightWhite' : 'dim'}
-                bold={tab.id === internalActiveTab}
-              >
-                {tab.label}
-              </Text>
-            </Box>
-          ))}
+      {modal.isOpen && modal.type === "dialog" && (
+        <Box position="absolute" top={Math.floor(rows / 2 - 5)} left={Math.floor((columns - 60) / 2)}>
+          <Dialog
+            title={(modal.props?.title as string) ?? "Dialog"}
+            onClose={closeModal}
+            actions={(modal.props?.actions as any[]) ?? []}
+          >
+            <Text>{(modal.props?.content as string) ?? "Dialog content"}</Text>
+          </Dialog>
         </Box>
-        {currentTab?.content}
-      </Box>
-    </App>
+      )}
+
+      {showHelp && (
+        <Box position="absolute" top={Math.floor(rows / 2 - 8)} left={Math.floor((columns - 50) / 2)}>
+          <HelpPanel keybindings={keybindings} onClose={() => setShowHelp(false)} />
+        </Box>
+      )}
+
+      <NotificationPanel
+        notifications={notifications}
+        onDismiss={dismissNotification}
+      />
+    </Box>
   )
 }
-
-export function renderApp(props: AppProps): ReactElement {
-  return <App {...props} />;
-}
-
-export default App;

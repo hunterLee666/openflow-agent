@@ -1,100 +1,57 @@
-import type { ParsedKeystroke } from './types.js'
+import type { KeyBinding, KeyMatch } from "./types"
 
-export interface Key {
-  value: string
-  ctrl: boolean
-  shift: boolean
-  alt: boolean
-  meta: boolean
-  super: boolean
-  escape?: boolean
-  return?: boolean
-  tab?: boolean
-  backspace?: boolean
-  delete?: boolean
-  upArrow?: boolean
-  downArrow?: boolean
-  leftArrow?: boolean
-  rightArrow?: boolean
-  pageUp?: boolean
-  pageDown?: boolean
-  home?: boolean
-  end?: boolean
-  wheelUp?: boolean
-  wheelDown?: boolean
+export function normalizeKey(input: string): string {
+  return input.toLowerCase()
 }
 
-export function getKeyName(input: string, key: Key): string | null {
-  if (key.escape) return 'escape'
-  if (key.return) return 'enter'
-  if (key.tab) return 'tab'
-  if (key.backspace) return 'backspace'
-  if (key.delete) return 'delete'
-  if (key.upArrow) return 'up'
-  if (key.downArrow) return 'down'
-  if (key.leftArrow) return 'left'
-  if (key.rightArrow) return 'right'
-  if (key.pageUp) return 'pageup'
-  if (key.pageDown) return 'pagedown'
-  if (key.wheelUp) return 'wheelup'
-  if (key.wheelDown) return 'wheeldown'
-  if (key.home) return 'home'
-  if (key.end) return 'end'
-  if (input.length === 1) return input.toLowerCase()
-  return null
+export function normalizeModifiers(modifiers?: string[]): string[] {
+  return (modifiers ?? []).map((m) => m.toLowerCase()).sort()
 }
 
-function getInkModifiers(key: Key): { ctrl: boolean; shift: boolean; meta: boolean; super: boolean } {
-  return {
-    ctrl: key.ctrl,
-    shift: key.shift,
-    meta: key.meta,
-    super: key.super,
-  }
+export function bindingToString(binding: KeyBinding): string {
+  const mods = binding.modifiers ?? []
+  const modStr = mods.length > 0 ? mods.map((m) => m + "+").join("") : ""
+  return `${modStr}${binding.key}`
 }
 
-function modifiersMatch(
-  inkMods: { ctrl: boolean; shift: boolean; meta: boolean; super: boolean },
-  target: ParsedKeystroke,
-): boolean {
-  if (inkMods.ctrl !== target.ctrl) return false
-  if (inkMods.shift !== target.shift) return false
-
-  const targetNeedsMeta = target.alt || target.meta
-  if (inkMods.meta !== targetNeedsMeta) return false
-
-  if (inkMods.super !== target.super) return false
-
-  return true
-}
-
-export function matchesKeystroke(
+export function matchesKey(
+  binding: KeyBinding,
   input: string,
-  key: Key,
-  target: ParsedKeystroke,
+  modifiers: string[]
 ): boolean {
-  const keyName = getKeyName(input, key)
-  if (keyName !== target.key) return false
-
-  const inkMods = getInkModifiers(key)
-
-  if (key.escape) {
-    const effectiveMeta = false
-    if (effectiveMeta !== (target.alt || target.meta)) return false
-  } else {
-    if (!modifiersMatch(inkMods, target)) return false
+  if (normalizeKey(binding.key) !== normalizeKey(input)) {
+    return false
   }
 
-  return true
+  const bindingMods = normalizeModifiers(binding.modifiers)
+  const inputMods = normalizeModifiers(modifiers)
+
+  if (bindingMods.length !== inputMods.length) {
+    return false
+  }
+
+  return bindingMods.every((mod, i) => mod === inputMods[i])
 }
 
-export function matchesBinding(
+export function findMatchingBindings(
+  bindings: KeyBinding[],
   input: string,
-  key: Key,
-  chord: ParsedKeystroke[],
-): boolean {
-  if (chord.length !== 1) return false
+  modifiers: string[]
+): KeyMatch[] {
+  return bindings
+    .filter((b) => matchesKey(b, input, modifiers))
+    .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
+    .map((b) => ({
+      binding: b,
+      matchedAt: Date.now(),
+    }))
+}
 
-  const expected = chord[0]
-  return matchesKeystroke(input, key, expected)
+export function findBestMatch(
+  bindings: KeyBinding[],
+  input: string,
+  modifiers: string[]
+): KeyMatch | null {
+  const matches = findMatchingBindings(bindings, input, modifiers)
+  return matches.length > 0 ? matches[0] : null
 }

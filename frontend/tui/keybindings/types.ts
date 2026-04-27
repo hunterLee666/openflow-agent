@@ -1,29 +1,23 @@
-export interface ParsedKeystroke {
+export type ModifierKey = "ctrl" | "shift" | "alt" | "meta"
+
+export interface KeyBinding {
   key: string
-  ctrl: boolean
-  alt: boolean
-  shift: boolean
-  meta: boolean
-  super: boolean
-}
-
-export type Chord = ParsedKeystroke[]
-
-export interface KeybindingBlock {
-  context: string
-  bindings: Record<string, string | null>
-}
-
-export interface ParsedBinding {
-  chord: Chord
-  action: string | null
-  context: string
+  modifiers?: ModifierKey[]
+  action: string
   description?: string
+  context?: string
+  priority?: number
 }
 
-export interface ResolvedKey {
-  key: string
-  display: string
+export interface KeyMatch {
+  binding: KeyBinding
+  matchedAt: number
 }
 
-export type Platform = 'macos' | 'windows' | 'linux' | 'wsl' | 'unknown'
+export type KeyHandler = () => void | Promise<void>
+
+export interface KeyBindingContext {
+  name: string
+  bindings: KeyBinding[]
+  isActive: () => boolean
+}

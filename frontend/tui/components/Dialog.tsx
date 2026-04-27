@@ -1,123 +1,63 @@
-import React, { type ReactNode, type ReactElement } from "react";
-import { Box } from "./Box.js";
-import { Text } from "./Text.js";
-import { Button } from "./Button.js";
-import { z } from "zod";
+import React from "react"
+import { Box, Text } from "ink"
+import { useTheme } from "@/contexts/theme-context"
 
-export const DialogPropsSchema = z.object({
-  isOpen: z.boolean(),
-  title: z.string().optional(),
-  children: z.any().optional(),
-  footer: z.any().optional(),
-  width: z.union([z.number(), z.string()]).optional(),
-  onClose: z.function().returns(z.void()).optional(),
-})
-export type DialogProps = z.infer<typeof DialogPropsSchema>
+export interface DialogProps {
+  title: string
+  children: React.ReactNode
+  onClose?: () => void
+  actions?: Array<{
+    label: string
+    action: () => void
+    variant?: "primary" | "secondary" | "danger"
+  }>
+  width?: number
+}
 
-export function Dialog({
-  isOpen,
+export const Dialog = ({
   title,
   children,
-  footer,
+  onClose,
+  actions,
   width = 60,
-}: DialogProps): ReactElement | null {
-  if (!isOpen) {
-    return null;
-  }
+}: DialogProps) => {
+  const { theme } = useTheme()
 
   return (
-    <Box
-      position="absolute"
-      top="0"
-      left="0"
-      right="0"
-      bottom="0"
-      justifyContent="center"
-      alignItems="center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.7)" }}
-    >
-      <Box
-        flexDirection="column"
-        width={width}
-        maxWidth={90}
-        maxHeight={80}
-        backgroundColor="#1a1a2e"
-        style={{ border: "1px solid #444" }}
-        overflow="hidden"
-      >
-        {title && (
-          <Box
-            flexDirection="row"
-            alignItems="center"
-            padding={1}
-            style={{ borderBottom: "1px solid #333" }}
-          >
-            <Text bold color="brightWhite">
-              {title}
-            </Text>
-            <Box flex={1} />
-            <Text color="dim" style={{ cursor: "pointer" }}>
-              [X]
-            </Text>
-          </Box>
-        )}
-
-        <Box flexDirection="column" flex={1} padding={1} overflow="auto">
-          {children}
-        </Box>
-
-        {footer && (
-          <Box
-            flexDirection="row"
-            justifyContent="flex-end"
-            gap={1}
-            padding={1}
-            style={{ borderTop: "1px solid #333" }}
-          >
-            {footer}
-          </Box>
+    <Box flexDirection="column" borderStyle="double" borderColor={theme.accentBlue} width={width}>
+      <Box flexDirection="row" justifyContent="space-between" paddingX={2} paddingTop={1}>
+        <Text bold color={theme.accentBlue}>
+          {title}
+        </Text>
+        {onClose && (
+          <Text color={theme.comment}>[Esc]</Text>
         )}
       </Box>
-    </Box>
-  );
-}
 
-export interface ConfirmDialogProps {
-  isOpen: boolean;
-  title?: string;
-  message?: string;
-  confirmLabel?: string;
-  cancelLabel?: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-  danger?: boolean;
-}
+      <Box paddingX={2} paddingY={1}>
+        {children}
+      </Box>
 
-export function ConfirmDialog({
-  isOpen,
-  title = "Confirm",
-  message,
-  confirmLabel = "OK",
-  cancelLabel = "Cancel",
-  onConfirm,
-  onCancel,
-  danger = false,
-}: ConfirmDialogProps): ReactElement | null {
-  return (
-    <Dialog isOpen={isOpen} title={title} width={40}>
-      {message && (
-        <Box padding={1}>
-          <Text>{message}</Text>
+      {actions && actions.length > 0 && (
+        <Box flexDirection="row" justifyContent="flex-end" paddingX={2} paddingBottom={1}>
+          {actions.map((action, index) => (
+            <Box key={index} marginLeft={index > 0 ? 1 : 0}>
+              <Text
+                color={
+                  action.variant === "primary"
+                    ? theme.accentBlue
+                    : action.variant === "danger"
+                    ? theme.accentRed
+                    : theme.foreground
+                }
+                bold={action.variant === "primary"}
+              >
+                {action.label}
+              </Text>
+            </Box>
+          ))}
         </Box>
       )}
-      <Box flexDirection="row" justifyContent="flex-end" gap={1} padding={1}>
-        <Button onClick={onCancel}>{cancelLabel}</Button>
-        <Button onClick={onConfirm} variant={danger ? "danger" : "primary"}>
-          {confirmLabel}
-        </Button>
-      </Box>
-    </Dialog>
-  );
+    </Box>
+  )
 }
-
-export default Dialog;

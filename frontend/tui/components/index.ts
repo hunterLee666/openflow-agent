@@ -1,22 +1,28 @@
-export { Box } from './Box.js'
-export { Text } from './Text.js'
-export { Button } from './Button.js'
-export { Dialog } from './Dialog.js'
-export { Select } from './Select.js'
-export { Tabs } from './Tabs.js'
-export { ScrollBox } from './ScrollBox.js'
-export { Spinner } from './Spinner.js'
-export { MessageComponent, MessageList, type Message, type MessageProps, type MessageContent, type MessageRole } from './Message.js'
-export { TextInput } from './TextInput.js'
-export { SlashCommands } from './SlashCommands.js'
-export { StatusBar, TokenDisplay, ModelStatus, ProgressBar } from './StatusBar.js'
-export { Notifications } from './Notifications.js'
-export { KeyboardShortcutHint } from './KeyboardShortcutHint.js'
-export { SearchBox } from './SearchBox.js'
-export { Help } from './Help.js'
-export { DiffDialog } from './DiffDialog.js'
-export { ExitFlow } from './ExitFlow.js'
-export { Markdown } from './Markdown.js'
-export { Messages as MessagesList } from './Messages.js'
-export { VirtualList, SelectableList, type VirtualListProps, type VirtualListItem } from './VirtualList.js'
-export { TagTabs, type TagTabsProps } from './TagTabs.js'
+export { AppHeader } from "./app-header"
+export type { AppHeaderProps } from "./app-header"
+export { ChatMessage } from "./chat-message"
+export type { ChatMessageProps } from "./chat-message"
+export { ChatThread } from "./chat-thread"
+export type { ChatThreadProps } from "./chat-thread"
+export { TextInput } from "./text-input"
+export type { TextInputProps } from "./text-input"
+export { StatusBar } from "./status-bar"
+export type { StatusBarProps } from "./status-bar"
+export { LoadingIndicator } from "./loading-indicator"
+export type { LoadingIndicatorProps } from "./loading-indicator"
+export { CodeBlock } from "./code-block"
+export type { CodeBlockProps } from "./code-block"
+export { CommandPalette } from "./command-palette"
+export type { CommandPaletteProps, CommandItem } from "./command-palette"
+export { TaskPanel } from "./task-panel"
+export type { TaskPanelProps, Task } from "./task-panel"
+export { Dialog } from "./dialog"
+export type { DialogProps } from "./dialog"
+export { NotificationPanel } from "./notification-panel"
+export type { NotificationPanelProps, Notification } from "./notification-panel"
+export { ToolCall } from "./tool-call"
+export type { ToolCallProps } from "./tool-call"
+export { Tabs } from "./tabs"
+export type { TabsProps, TabItem } from "./tabs"
+export { HelpPanel } from "./help-panel"
+export type { HelpPanelProps } from "./help-panel"

@@ -1,167 +1,50 @@
-import { BaseEvent } from './event.js'
+import { EventEmitter } from "./emitter"
+import type { EventType, EventHandler, EventPayload } from "./event"
 
-type EventHandler = (event: BaseEvent) => void
+export class EventDispatcher {
+  private emitter: EventEmitter
+  private middleware: Array<(payload: EventPayload) => EventPayload | void> = []
 
-interface HandlerMap {
-  [type: string]: {
-    capture?: EventHandler
-    bubble?: EventHandler
+  constructor(emitter?: EventEmitter) {
+    this.emitter = emitter ?? new EventEmitter()
   }
-}
 
-export interface DOMElement {
-  parentNode: DOMElement | null
-  dispatchEvent(event: BaseEvent): boolean
-  addEventListener(type: string, handler: EventHandler, capture?: boolean): void
-  removeEventListener(
-    type: string,
-    handler: EventHandler,
-    capture?: boolean,
-  ): void
-}
+  use(middleware: (payload: EventPayload) => EventPayload | void): void {
+    this.middleware.push(middleware)
+  }
 
-function collectListeners(
-  target: DOMElement,
-  event: BaseEvent,
-): Array<{ node: DOMElement; handler: EventHandler; phase: 'capturing' | 'at_target' | 'bubbling' }> {
-  const listeners: Array<{
-    node: DOMElement
-    handler: EventHandler
-    phase: 'capturing' | 'at_target' | 'bubbling'
-  }> = []
-
-  let node: DOMElement | undefined = target
-
-  while (node) {
-    const handlers = (node as unknown as { __handlers?: HandlerMap }).__handlers?.[event.constructor.name]
-
-    if (handlers?.capture) {
-      listeners.unshift({
-        node,
-        handler: handlers.capture,
-        phase: node === target ? 'at_target' : 'capturing',
-      })
+  dispatch<T = unknown>(type: EventType, data: T, source?: string): void {
+    let payload: EventPayload<T> = {
+      type,
+      data,
+      timestamp: Date.now(),
+      source,
     }
 
-    if (handlers?.bubble && (event.bubbles || node === target)) {
-      listeners.push({
-        node,
-        handler: handlers.bubble,
-        phase: node === target ? 'at_target' : 'bubbling',
-      })
+    for (const mw of this.middleware) {
+      const result = mw(payload)
+      if (result === null) return
+      if (result) payload = result as EventPayload<T>
     }
 
-    node = node.parentNode ?? undefined
+    this.emitter.emit(type, payload.data, payload.source)
   }
 
-  return listeners
-}
+  on<T = unknown>(event: EventType, handler: EventHandler<T>): () => void {
+    return this.emitter.on(event, handler)
+  }
 
-export class Dispatcher {
-  static dispatch(target: DOMElement, event: BaseEvent): boolean {
-    const listeners = collectListeners(target, event)
+  once<T = unknown>(event: EventType, handler: EventHandler<T>): () => void {
+    return this.emitter.once(event, handler)
+  }
 
-    for (const listener of listeners) {
-      listener.handler(event)
+  off<T = unknown>(event: EventType, handler: EventHandler<T>): void {
+    this.emitter.off(event, handler)
+  }
 
-      if (event.didStopImmediatePropagation()) {
-        return true
-      }
-    }
-
-    return true
+  getEmitter(): EventEmitter {
+    return this.emitter
   }
 }
 
-export function createEventTarget(): DOMElement {
-  const internals: { handlers: HandlerMap } = {
-    handlers: {},
-  }
-
-  return {
-    parentNode: null,
-
-    dispatchEvent(event: BaseEvent): boolean {
-      const handlers = internals.handlers[event.constructor.name]
-      if (!handlers) return true
-
-      if (handlers.capture) {
-        handlers.capture(event)
-      }
-
-      if (!event.bubbles || event.didStopImmediatePropagation()) {
-        return true
-      }
-
-      if (handlers.bubble) {
-        handlers.bubble(event)
-      }
-
-      return true
-    },
-
-    addEventListener(
-      type: string,
-      handler: EventHandler,
-      capture = false,
-    ): void {
-      if (!internals.handlers[type]) {
-        internals.handlers[type] = {}
-      }
-      if (capture) {
-        internals.handlers[type].capture = handler
-      } else {
-        internals.handlers[type].bubble = handler
-      }
-    },
-
-    removeEventListener(
-      type: string,
-      handler: EventHandler,
-      capture = false,
-    ): void {
-      const handlers = internals.handlers[type]
-      if (handlers) {
-        if (capture) {
-          handlers.capture = undefined
-        } else {
-          handlers.bubble = undefined
-        }
-      }
-    },
-  } as DOMElement
-}
-
-export class FocusEvent extends BaseEvent {
-  constructor(
-    public readonly type: 'focus' | 'blur',
-    public readonly relatedTarget: DOMElement | null,
-  ) {
-    super(type)
-  }
-}
-
-export class KeyboardEvent extends BaseEvent {
-  constructor(
-    public readonly type: 'keydown' | 'keyup' | 'keypress',
-    public readonly key: string,
-    public readonly code: string,
-    public readonly ctrlKey: boolean,
-    public readonly shiftKey: boolean,
-    public readonly altKey: boolean,
-    public readonly metaKey: boolean,
-  ) {
-    super(type)
-  }
-}
-
-export class MouseEvent extends BaseEvent {
-  constructor(
-    public readonly type: 'click' | 'mousedown' | 'mouseup' | 'mousemove',
-    public readonly x: number,
-    public readonly y: number,
-    public readonly button: number,
-  ) {
-    super(type)
-  }
-}
+export const globalDispatcher = new EventDispatcher()

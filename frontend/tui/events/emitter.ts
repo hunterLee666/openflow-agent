@@ -1,51 +1,100 @@
-import { EventEmitter as NodeEventEmitter } from 'events'
-import { BaseEvent } from './event.js'
+import type { EventType, EventHandler, EventPayload, EventFilter } from "./event"
 
-export class EventEmitter extends NodeEventEmitter {
-  constructor() {
-    super()
-    this.setMaxListeners(0)
+export class EventEmitter {
+  private listeners = new Map<EventType, Set<EventHandler>>()
+  private filters = new Map<EventType, Set<EventFilter>>()
+  private history: EventPayload[] = []
+  private maxHistory = 100
+
+  on<T = unknown>(event: EventType, handler: EventHandler<T>): () => void {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set())
+    }
+    this.listeners.get(event)!.add(handler as EventHandler)
+
+    return () => this.off(event, handler as EventHandler)
   }
 
-  override emit(type: string | symbol, ...args: unknown[]): boolean {
-    if (type === 'error') {
-      return super.emit(type, ...args)
+  off<T = unknown>(event: EventType, handler: EventHandler<T>): void {
+    this.listeners.get(event)?.delete(handler as EventHandler)
+  }
+
+  once<T = unknown>(event: EventType, handler: EventHandler<T>): () => void {
+    const onceHandler = (payload: EventPayload<T>) => {
+      handler(payload)
+      this.off(event, onceHandler as EventHandler)
+    }
+    return this.on(event, onceHandler)
+  }
+
+  filter<T = unknown>(
+    event: EventType,
+    predicate: (payload: EventPayload<T>) => boolean,
+    handler: EventHandler<T>
+  ): () => void {
+    if (!this.filters.has(event)) {
+      this.filters.set(event, new Set())
     }
 
-    const listeners = this.rawListeners(type)
+    const filter: EventFilter<T> = { predicate, handler }
+    this.filters.get(event)!.add(filter as EventFilter)
 
-    if (listeners.length === 0) {
-      return false
+    return () => {
+      this.filters.get(event)?.delete(filter as EventFilter)
+    }
+  }
+
+  emit<T = unknown>(type: EventType, data: T, source?: string): void {
+    const payload: EventPayload<T> = {
+      type,
+      data,
+      timestamp: Date.now(),
+      source,
     }
 
-    const ccEvent = args[0] instanceof BaseEvent ? args[0] : null
+    this.history.push(payload)
+    if (this.history.length > this.maxHistory) {
+      this.history.shift()
+    }
 
-    for (const listener of listeners) {
-      listener.apply(this, args)
-
-      if (ccEvent?.didStopImmediatePropagation()) {
-        break
+    this.listeners.get(type)?.forEach((handler) => {
+      try {
+        handler(payload)
+      } catch (error) {
+        console.error(`Event handler error for ${String(type)}:`, error)
       }
+    })
+
+    this.filters.get(type)?.forEach((filter) => {
+      try {
+        if (filter.predicate(payload)) {
+          ;(filter.handler as EventHandler<T>)(payload)
+        }
+      } catch (error) {
+        console.error(`Event filter error for ${String(type)}:`, error)
+      }
+    })
+  }
+
+  getHistory(): ReadonlyArray<EventPayload> {
+    return [...this.history]
+  }
+
+  clearHistory(): void {
+    this.history = []
+  }
+
+  removeAllListeners(event?: EventType): void {
+    if (event) {
+      this.listeners.delete(event)
+      this.filters.delete(event)
+    } else {
+      this.listeners.clear()
+      this.filters.clear()
     }
-
-    return true
   }
 
-  on(type: string | symbol, handler: (...args: unknown[]) => void): this {
-    return super.on(type, handler)
-  }
-
-  once(type: string | symbol, handler: (...args: unknown[]) => void): this {
-    return super.once(type, handler)
-  }
-
-  off(type: string | symbol, handler: (...args: unknown[]) => void): this {
-    return super.off(type, handler)
-  }
-
-  removeAllListeners(type?: string | symbol): this {
-    return super.removeAllListeners(type)
+  listenerCount(event: EventType): number {
+    return this.listeners.get(event)?.size ?? 0
   }
 }
-
-export const globalEventEmitter = new EventEmitter()

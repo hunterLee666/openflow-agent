@@ -1,223 +1,103 @@
-import type { Rectangle, Size } from '../layout/geometry.js'
-import { z } from 'zod'
+import { Frame, type FrameCell } from "./frame"
+import { frameToAnsi } from "./output"
 
-export const TerminalCursorSchema = z.object({
-  x: z.number(),
-  y: z.number(),
-  visible: z.boolean(),
-})
-export type TerminalCursor = z.infer<typeof TerminalCursorSchema>
+export class Screen {
+  private currentFrame: Frame | null = null
+  private rows: number
+  private columns: number
+  private cursorVisible = true
+  private cursorRow = 0
+  private cursorCol = 0
 
-export const CellSchema = z.object({
-  char: z.string(),
-  style: z.number(),
-  hyperlink: z.number(),
-})
-export type Cell = z.infer<typeof CellSchema>
-
-export const ScreenSchema = z.object({
-  width: z.number(),
-  height: z.number(),
-  cells: z.array(z.array(CellSchema)),
-  cursor: TerminalCursorSchema,
-  dirty: z.boolean(),
-})
-export type Screen = z.infer<typeof ScreenSchema>
-
-export class CharPool {
-  private strings: string[] = [' ', '']
-  private stringMap = new Map<string, number>([
-    [' ', 0],
-    ['', 1],
-  ])
-  private ascii: Int32Array
-
-  constructor() {
-    this.ascii = new Int32Array(128).fill(-1)
-    this.ascii[32] = 0
-    this.ascii[0] = 1
+  constructor(rows: number, columns: number) {
+    this.rows = rows
+    this.columns = columns
   }
 
-  intern(char: string): number {
-    if (char.length === 1) {
-      const code = char.charCodeAt(0)
-      if (code < 128) {
-        const cached = this.ascii[code]
-        if (cached !== -1) return cached
-        const index = this.strings.length
-        this.strings.push(char)
-        this.ascii[code] = index
-        return index
+  setSize(rows: number, columns: number): void {
+    this.rows = rows
+    this.columns = columns
+    this.currentFrame = null
+  }
+
+  render(frame: Frame): string {
+    const output = this.diffAndRender(frame)
+    this.currentFrame = frame.clone()
+    return output
+  }
+
+  private diffAndRender(newFrame: Frame): string {
+    if (!this.currentFrame) {
+      return this.fullRender(newFrame)
+    }
+
+    const changes = this.currentFrame.diff(newFrame)
+
+    if (changes.length === 0) {
+      return ""
+    }
+
+    let output = ""
+
+    const changedRows = new Set(changes.map((c) => c.row))
+    for (const row of changedRows) {
+      output += this.moveCursorToRow(row)
+      output += this.renderRow(newFrame.getRow(row))
+    }
+
+    return output
+  }
+
+  private fullRender(frame: Frame): string {
+    let output = this.moveCursorTo(0, 0)
+
+    for (let row = 0; row < this.rows; row++) {
+      output += frameToAnsi([frame.getRow(row)])
+      if (row < this.rows - 1) {
+        output += "\r\n"
       }
     }
-    const existing = this.stringMap.get(char)
-    if (existing !== undefined) return existing
-    const index = this.strings.length
-    this.strings.push(char)
-    this.stringMap.set(char, index)
-    return index
+
+    return output
   }
 
-  get(index: number): string {
-    return this.strings[index] ?? ' '
-  }
-}
-
-export class HyperlinkPool {
-  private strings: string[] = ['']
-  private stringMap = new Map<string, number>()
-
-  intern(hyperlink: string | undefined): number {
-    if (!hyperlink) return 0
-    const existing = this.stringMap.get(hyperlink)
-    if (existing !== undefined) return existing
-    const index = this.strings.length
-    this.strings.push(hyperlink)
-    this.stringMap.set(hyperlink, index)
-    return index
+  private renderRow(row: FrameCell[]): string {
+    return frameToAnsi([row])
   }
 
-  get(id: number): string | undefined {
-    return id === 0 ? undefined : this.strings[id]
-  }
-}
-
-export class StylePool {
-  private ids = new Map<string, number>()
-  private styles: number[][] = []
-  readonly none: number
-
-  constructor() {
-    this.none = this.intern([])
+  private moveCursorTo(row: number, col: number): string {
+    this.cursorRow = row
+    this.cursorCol = col
+    return `\x1b[${row + 1};${col + 1}H`
   }
 
-  intern(styles: number[]): number {
-    const key = styles.length === 0 ? '' : styles.join(',')
-    let id = this.ids.get(key)
-    if (id === undefined) {
-      id = this.styles.length
-      this.styles.push(styles.length === 0 ? [] : styles)
-      this.ids.set(key, id)
-    }
-    return id
+  private moveCursorToRow(row: number): string {
+    return this.moveCursorTo(row, 0)
   }
 
-  get(id: number): number[] {
-    return this.styles[id] ?? []
-  }
-}
-
-export function createScreen(
-  width: number,
-  height: number,
-  stylePool: StylePool,
-  _charPool: CharPool,
-  _hyperlinkPool: HyperlinkPool,
-): Screen {
-  const cells: Cell[][] = []
-  for (let y = 0; y < height; y++) {
-    const row: Cell[] = []
-    for (let x = 0; x < width; x++) {
-      row.push({
-        char: ' ',
-        style: stylePool.none,
-        hyperlink: 0,
-      })
-    }
-    cells.push(row)
+  showCursor(): string {
+    this.cursorVisible = true
+    return "\x1b[?25h"
   }
 
-  return {
-    width,
-    height,
-    cells,
-    cursor: { x: 0, y: 0, visible: true },
-    dirty: true,
-  }
-}
-
-export function clearScreen(screen: Screen, stylePool: StylePool): void {
-  for (let y = 0; y < screen.height; y++) {
-    for (let x = 0; x < screen.width; x++) {
-      screen.cells[y][x] = {
-        char: ' ',
-        style: stylePool.none,
-        hyperlink: 0,
-      }
-    }
-  }
-  screen.dirty = true
-}
-
-export function resizeScreen(
-  screen: Screen,
-  width: number,
-  height: number,
-  stylePool: StylePool,
-): Screen {
-  const newCells: Cell[][] = []
-  for (let y = 0; y < height; y++) {
-    const row: Cell[] = []
-    for (let x = 0; x < width; x++) {
-      if (y < screen.height && x < screen.width) {
-        row.push({ ...screen.cells[y][x] })
-      } else {
-        row.push({
-          char: ' ',
-          style: stylePool.none,
-          hyperlink: 0,
-        })
-      }
-    }
-    newCells.push(row)
+  hideCursor(): string {
+    this.cursorVisible = false
+    return "\x1b[?25l"
   }
 
-  return {
-    width,
-    height,
-    cells: newCells,
-    cursor: { ...screen.cursor },
-    dirty: true,
+  clear(): string {
+    return "\x1b[2J\x1b[H"
   }
-}
 
-export function getCell(screen: Screen, x: number, y: number): Cell | null {
-  if (x < 0 || x >= screen.width || y < 0 || y >= screen.height) {
-    return null
+  clearLine(): string {
+    return "\x1b[2K"
   }
-  return screen.cells[y][x]
-}
 
-export function setCell(
-  screen: Screen,
-  x: number,
-  y: number,
-  char: string,
-  style: number,
-  hyperlink: number = 0,
-): void {
-  if (x < 0 || x >= screen.width || y < 0 || y >= screen.height) {
-    return
+  scrollUp(lines: number): string {
+    return `\x1b[${lines}S`
   }
-  screen.cells[y][x] = { char, style, hyperlink }
-  screen.dirty = true
-}
 
-export function getScreenRect(screen: Screen): Rectangle {
-  return {
-    x: 0,
-    y: 0,
-    width: screen.width,
-    height: screen.height,
-  }
-}
-
-export function cloneScreen(screen: Screen): Screen {
-  return {
-    width: screen.width,
-    height: screen.height,
-    cells: screen.cells.map(row => row.map(cell => ({ ...cell }))),
-    cursor: { ...screen.cursor },
-    dirty: false,
+  scrollDown(lines: number): string {
+    return `\x1b[${lines}T`
   }
 }
