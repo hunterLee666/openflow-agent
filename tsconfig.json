@@ -15,7 +15,11 @@
     "sourceMap": true,
     "lib": ["ES2022", "dom"],
     "types": ["bun-types"],
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["frontend/tui/*"]
+    }
   },
   "include": ["backend/**/*", "frontend/**/*", "tests/**/*"],
   "exclude": ["node_modules", "dist"]

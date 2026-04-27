@@ -33,7 +33,7 @@ const serverArgs = ["run", isDev ? "--watch" : "", "backend/main.tsx", "-k", api
 if (provider) serverArgs.push("-p", provider)
 if (model) serverArgs.push("-m", model)
 if (baseURL) serverArgs.push("-b", baseURL)
-const clientArgs = ["run", isDev ? "--watch" : "", "frontend/tui-v2/index.ts", `ws://localhost:${port}`, provider || "Bailian", model || "qwen2.5-vl-3b-instruct", baseURL || "https://dashscope.aliyuncs.com/compatible-mode/v1"].filter(Boolean)
+const clientArgs = ["run", isDev ? "--watch" : "", "frontend/tui/index.ts", `ws://localhost:${port}`, provider || "Bailian", model || "qwen2.5-vl-3b-instruct", baseURL || "https://dashscope.aliyuncs.com/compatible-mode/v1"].filter(Boolean)
 
 const server = spawn("bun", serverArgs, {
   stdio: ["inherit", "pipe", "pipe"],
