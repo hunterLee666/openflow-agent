@@ -22,6 +22,8 @@ export const MainContent: React.FC<MainContentProps> = ({ isStreaming = false })
   const activeSession = getActiveSession();
   const messages = Array.isArray(activeSession?.messages) ? activeSession.messages : [];
 
+  console.log('[MainContent] Rendering, messages count:', messages.length, messages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content.slice(0, 20) : '?' })));
+
   if (messages.length === 0) {
     return (
       <Panel borderStyle="single">
