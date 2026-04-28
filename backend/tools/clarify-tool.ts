@@ -19,7 +19,7 @@ const ClarifyOutputSchema = z.object({
 
 export function createClarifyTools(): ToolDefinition[] {
   const clarifyTool = defineTool({
-    name: "Clarify",
+    name: "ask_clarification",
     description: `Request clarification from the user when the request is ambiguous, incomplete, or could have multiple interpretations. Use this tool when:
 
 - The user's request has multiple possible interpretations

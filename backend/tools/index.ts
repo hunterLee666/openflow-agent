@@ -124,7 +124,7 @@ export const BUILTIN_TOOL_NAMES = [
   "CronHistory",
   "CronEdit",
   "CronStats",
-  "Clarify",
+  "ask_clarification",
   "MemorySearch",
   "SessionSearch",
   "PathSecurityCheck",
@@ -155,7 +155,7 @@ export const TOOL_GROUPS: Record<string, string[]> = {
   "group:database": ["DatabaseQuery", "DatabaseSchema", "DatabaseMigrate", "DatabaseSeed"],
   "group:ide": ["LintCheck", "FormatCheck", "TypeCheck", "GetDiagnostics", "RunTests"],
   "group:cron": ["CronCreate", "CronList", "CronDelete", "CronPause", "CronResume", "CronRunNow", "CronStatus", "CronHistory", "CronEdit", "CronStats"],
-  "group:intelligence": ["Clarify", "MemorySearch", "SessionSearch", "PathSecurityCheck"],
+  "group:intelligence": ["ask_clarification", "MemorySearch", "SessionSearch", "PathSecurityCheck"],
   "group:agent": ["Delegate", "Skills", "Approval", "Checkpoint", "Interrupt"],
   "group:task": ["TaskCreate", "TaskList", "TaskRunNow", "TaskDelete", "TaskEnable", "TaskDisable"],
 };

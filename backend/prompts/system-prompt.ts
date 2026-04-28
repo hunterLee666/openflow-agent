@@ -103,7 +103,7 @@ export class DefaultSystemPromptBuilder implements SystemPromptBuilder {
       GLOB: "glob",
       GREP: "grep",
       TODO_WRITE: "todo_write",
-      ASK_USER_QUESTION: "ask_user_question",
+      ASK_USER_QUESTION: "ask_clarification",
       AGENT: "agent",
       WEB_SEARCH: "WebSearch",
       TASK: "task",

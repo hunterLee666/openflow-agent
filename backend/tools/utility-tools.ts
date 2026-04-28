@@ -64,7 +64,7 @@ let todoState: TodoState = { todos: [], updatedAt: 0 };
 
 export function createUtilityTools(commandRegistry?: CommandRegistry): ToolDefinition[] {
   const todoWriteTool = createWriteTool({
-    name: "TodoWrite",
+    name: "todo_write",
     description: "Create and manage structured task lists for tracking progress. Use for complex multi-step tasks (3+ steps). EXACTLY ONE task must be 'in_progress' at any time.",
     inputSchema: TodoWriteInputSchema,
     outputSchema: TodoWriteOutputSchema,
