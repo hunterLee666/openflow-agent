@@ -1,4 +1,4 @@
-import type { Theme } from "../tui/components/theme-provider";
+import type { Theme } from "../components/theme-provider";
 
 export const nordTheme: Theme = {
   border: {

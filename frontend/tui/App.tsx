@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Box, Text } from 'ink';
 import { useInput } from './hooks/use-input';
 import { useBridge } from './hooks/use-bridge';
+import { useStreamingState } from './hooks/use-streaming-state';
 import { ThemeProvider } from './components/theme-provider';
 import { CommandPalette, type Command } from './components/command-palette';
 import { HelpScreen } from './components/help-screen';
@@ -13,7 +14,7 @@ import { SettingsPanel, type SettingsSection } from './components/settings-panel
 import { Divider } from './components/divider';
 import { Spinner } from './components/spinner';
 import { SessionProvider, useSessionContext } from './contexts/session-context';
-import { UIProvider, useUIContext } from './contexts/ui-context';
+import { UIProvider, useUIContext, type ThemeName } from './contexts/ui-context';
 import type { QueryRequest } from './api-types';
 
 const AGENTS: AgentOption[] = [
@@ -78,19 +79,30 @@ const CommandBar: React.FC<CommandBarProps> = ({ isSidebarOpen, isLoading }) => 
 };
 
 const AppContent: React.FC = () => {
-  const { state: uiState, togglePalette, toggleSidebar, setHelp, setLoading, setStreaming } = useUIContext();
-  const { state: sessionState, createSession, deleteSession, addMessage, updateMessage, getActiveSession, clearMessages, setSessions, loadSessionMessages, addToolCall, updateToolCall } = useSessionContext();
+  const { state: uiState, togglePalette, toggleSidebar, setHelp, setLoading, setStreaming, setTheme } = useUIContext();
+  const { state: sessionState, createSession, deleteSession, addMessage, updateMessage, getActiveSession, clearMessages, setSessions, addToolCall, updateToolCall } = useSessionContext();
   const [input, setInput] = useState('');
   const [selectedAgent, setSelectedAgent] = useState('assistant');
   const [showSettings, setShowSettings] = useState(false);
   const [showAgentSelector, setShowAgentSelector] = useState(false);
-  const [pendingQuery, setPendingQuery] = useState<{ message: string; sessionId: string; model: string; assistantMessageIndex: number } | null>(null);
+  const [pendingQuery, setPendingQuery] = useState<{ message: string; sessionId: string; model: string; assistantMessageIndex: number; tools?: any[] } | null>(null);
+  const [availableTools, setAvailableTools] = useState<any[]>([]);
   const bridge = useBridge('ws://localhost:8765');
-  const streamingStateRef = useRef<{ sessionId: string; messageIndex: number } | null>(null);
   const bridgeRef = useRef(bridge);
   const hasLoadedSessions = useRef(false);
   const sessionsRef = useRef(sessionState.sessions);
   sessionsRef.current = sessionState.sessions;
+
+  const handleFlush = useCallback((sessionId: string, messageIndex: number, content: string) => {
+    updateMessage(sessionId, messageIndex, { content });
+  }, [updateMessage]);
+
+  const {
+    streamingRef: streamingStateRef,
+    startStreaming,
+    appendChunk,
+    stopStreaming,
+  } = useStreamingState(handleFlush);
 
   useEffect(() => {
     bridgeRef.current = bridge;
@@ -136,28 +148,40 @@ const AppContent: React.FC = () => {
   }, [bridge.isConnected, sessionState.sessions.length, bridge, setSessions]);
 
   useEffect(() => {
+    if (!bridgeRef.current?.isConnected) return;
+
+    console.log('[DEBUG] Bridge connected, loading tools...');
+    bridgeRef.current.getTools().then((response) => {
+      console.log('[DEBUG] Loaded tools:', response.tools?.length);
+      setAvailableTools(response.tools || []);
+    }).catch((err) => {
+      console.error('[DEBUG] Failed to load tools:', err);
+    });
+  }, [bridge.isConnected]);
+
+  useEffect(() => {
     const handleStreamChunk = (event: { chunk: string; contentLength: number; isFirst: boolean }, notificationSessionId?: string) => {
-      const log = `[HANDLE_CHUNK] chunk: "${event.chunk}", isFirst: ${event.isFirst}, streamingState: ${JSON.stringify(streamingStateRef.current)}\n`;
-      require('fs').appendFileSync('/tmp/openflow-debug.log', log);
-      if (streamingStateRef.current) {
-        const { sessionId, messageIndex } = streamingStateRef.current;
-        const session = sessionsRef.current.find((s: any) => s.id === sessionId);
-        if (session && session.messages[messageIndex]) {
-          const currentContent = session.messages[messageIndex].content || '';
-          const newContent = currentContent + event.chunk;
-          require('fs').appendFileSync('/tmp/openflow-debug.log', `[HANDLE_CHUNK] updating session ${sessionId}[${messageIndex}] from "${currentContent}" to "${newContent}"\n`);
-          updateMessage(sessionId, messageIndex, { content: newContent });
-        } else {
-          require('fs').appendFileSync('/tmp/openflow-debug.log', `[HANDLE_CHUNK] ERROR: session or message not found! session=${!!session}, messageIndex=${messageIndex}, messages=${session?.messages?.length}\n`);
-        }
+      console.log('[DEBUG handleStreamChunk] Received chunk:', { 
+        chunkLength: event.chunk.length, 
+        chunkPreview: event.chunk.substring(0, 50),
+        contentLength: event.contentLength,
+        isFirst: event.isFirst,
+        streamingState: streamingStateRef.current,
+        sessionCount: sessionsRef.current.length
+      });
+      
+      const result = appendChunk(event.chunk);
+      if (result === null) {
+        console.log('[DEBUG handleStreamChunk] ERROR: streamingStateRef is null, chunk not appended');
       } else {
-        require('fs').appendFileSync('/tmp/openflow-debug.log', `[HANDLE_CHUNK] ERROR: streamingStateRef.current is null!\n`);
+        console.log('[DEBUG handleStreamChunk] Chunk appended, accumulated length:', result.length);
       }
     };
 
     const handleToolCall = (event: { toolCall: { name: string; arguments?: Record<string, unknown> } }) => {
-      if (streamingStateRef.current) {
-        const { sessionId, messageIndex } = streamingStateRef.current;
+      const streamState = streamingStateRef.current;
+      if (streamState) {
+        const { sessionId, messageIndex } = streamState;
         const toolId = `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         addToolCall(sessionId, messageIndex, {
           id: toolId,
@@ -169,9 +193,10 @@ const AppContent: React.FC = () => {
     };
 
     const handleToolResult = (event: { toolName: string; result: string }) => {
-      if (streamingStateRef.current) {
-        const { sessionId, messageIndex } = streamingStateRef.current;
-        const session = sessionState.sessions.find((s: any) => s.id === sessionId);
+      const streamState = streamingStateRef.current;
+      if (streamState) {
+        const { sessionId, messageIndex } = streamState;
+        const session = sessionsRef.current.find((s: any) => s.id === sessionId);
         if (session && session.messages[messageIndex]?.toolCalls) {
           const toolCalls = session.messages[messageIndex].toolCalls;
           const lastTool = toolCalls[toolCalls.length - 1];
@@ -185,36 +210,50 @@ const AppContent: React.FC = () => {
       }
     };
 
-    bridge.onStreamChunk(handleStreamChunk);
-    bridge.onToolCall(handleToolCall);
-    bridge.onToolResult(handleToolResult);
-  }, [bridge, sessionState.sessions, updateMessage, addToolCall, updateToolCall]);
+    const offStreamChunk = bridge.onStreamChunk(handleStreamChunk);
+    const offToolCall = bridge.onToolCall(handleToolCall);
+    const offToolResult = bridge.onToolResult(handleToolResult);
+    return () => {
+      offStreamChunk();
+      offToolCall();
+      offToolResult();
+    };
+  }, [bridge, sessionsRef, appendChunk, addToolCall, updateToolCall]);
 
   useEffect(() => {
     if (pendingQuery) {
-      const { message, sessionId, model, assistantMessageIndex } = pendingQuery;
-      require('fs').appendFileSync('/tmp/openflow-debug.log', `[PENDING_QUERY] triggering for session=${sessionId}, index=${assistantMessageIndex}, msg="${message}"\n`);
+      const { message, sessionId, model, assistantMessageIndex, tools } = pendingQuery;
+      console.log('[DEBUG pendingQuery useEffect] Processing pendingQuery:', {
+        messageLength: message.length,
+        sessionId,
+        model,
+        assistantMessageIndex
+      });
+      
       setPendingQuery(null);
 
-      streamingStateRef.current = { sessionId, messageIndex: assistantMessageIndex };
-      require('fs').appendFileSync('/tmp/openflow-debug.log', `[PENDING_QUERY] streamingStateRef set: ${JSON.stringify(streamingStateRef.current)}\n`);
+      startStreaming(sessionId, assistantMessageIndex);
+      console.log('[DEBUG pendingQuery useEffect] startStreaming called');
 
-      bridge.streamQuery({ message, threadId: sessionId, model }).catch((error) => {
-        if (streamingStateRef.current?.sessionId === sessionId) {
+      bridge.streamQuery({ message, threadId: sessionId, model, tools }).catch((error) => {
+        console.log('[DEBUG pendingQuery useEffect] streamQuery error:', error);
+        const streamState = streamingStateRef.current;
+        if (streamState?.sessionId === sessionId) {
           updateMessage(sessionId, assistantMessageIndex, {
             content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
           });
         }
-        streamingStateRef.current = null;
+        stopStreaming();
         setLoading(false);
         setStreaming(false);
       }).finally(() => {
-        streamingStateRef.current = null;
+        console.log('[DEBUG pendingQuery useEffect] streamQuery finally');
+        stopStreaming();
         setLoading(false);
         setStreaming(false);
       });
     }
-  }, [pendingQuery, bridge, updateMessage, setLoading, setStreaming]);
+  }, [pendingQuery, bridge, startStreaming, stopStreaming, streamingStateRef, updateMessage, setLoading, setStreaming]);
 
   const handleCommand = useCallback((cmd: Command) => {
     switch (cmd.id) {
@@ -247,18 +286,35 @@ const AppContent: React.FC = () => {
           deleteSession(sessionToDelete.id);
         }
         break;
-      case 'exportSession':
-        console.log('Export session - not implemented');
+      case 'exportSession': {
+        const session = getActiveSession();
+        if (session) {
+          const exportData = {
+            id: session.id,
+            title: session.title,
+            messages: session.messages,
+            createdAt: new Date(session.createdAt).toISOString(),
+            updatedAt: new Date(session.updatedAt).toISOString(),
+          };
+          console.log(JSON.stringify(exportData, null, 2));
+        }
         break;
-      case 'toggleTheme':
-        console.log('Toggle theme - not implemented');
+      }
+      case 'toggleTheme': {
+        const themes: ThemeName[] = ['default', 'one-dark', 'monokai', 'dracula', 'nord', 'solarized'];
+        const currentIndex = themes.indexOf(uiState.currentTheme);
+        const nextIndex = (currentIndex + 1) % themes.length;
+        setTheme(themes[nextIndex]);
         break;
+      }
       case 'reconnect':
         bridge.disconnect().then(() => bridge.connect());
         break;
-      case 'clearHistory':
-        console.log('Clear history - not implemented');
+      case 'clearHistory': {
+        setSessions([]);
+        createSession();
         break;
+      }
       case 'copyLastResponse':
         const lastSession = getActiveSession();
         if (lastSession && lastSession.messages.length > 0) {
@@ -285,13 +341,27 @@ const AppContent: React.FC = () => {
     } else if (key.ctrl && input === 'a') {
       setInput('');
       setShowAgentSelector(true);
+    } else if (key.ctrl && input === 'l') {
+      const activeSession = getActiveSession();
+      if (activeSession) {
+        clearMessages(activeSession.id);
+      }
+    } else if (key.ctrl && input === 'd') {
+      const sessionToDelete = getActiveSession();
+      if (sessionToDelete) {
+        deleteSession(sessionToDelete.id);
+      }
+    } else if (key.ctrl && input === 't') {
+      const themes: ThemeName[] = ['default', 'one-dark', 'monokai', 'dracula', 'nord', 'solarized'];
+      const currentIndex = themes.indexOf(uiState.currentTheme);
+      const nextIndex = (currentIndex + 1) % themes.length;
+      setTheme(themes[nextIndex]);
     }
   });
 
   const handleSubmit = useCallback(async () => {
     if (!input.trim()) return;
     if (!bridge.isConnected) {
-      require('fs').appendFileSync('/tmp/openflow-debug.log', `[HANDLE_SUBMIT] Error: Not connected to server\n`);
       console.error('Not connected to server');
       return;
     }
@@ -301,7 +371,13 @@ const AppContent: React.FC = () => {
     const sessionId = newSession.id;
 
     const existingMessageCount = activeSession?.messages.length ?? 0;
-    require('fs').appendFileSync('/tmp/openflow-debug.log', `[HANDLE_SUBMIT] activeSession=${!!activeSession}, sessionId=${sessionId}, existingMessageCount=${existingMessageCount}\n`);
+
+    console.log('[DEBUG handleSubmit] Before adding messages:', {
+      activeSessionId: activeSession?.id,
+      newSessionId: sessionId,
+      existingMessageCount,
+      inputLength: input.length
+    });
 
     addMessage(sessionId, {
       role: 'user',
@@ -315,7 +391,14 @@ const AppContent: React.FC = () => {
 
     const assistantMessageIndex = existingMessageCount + 1;
 
-    setPendingQuery({ message: input, sessionId, model: selectedAgent, assistantMessageIndex });
+    console.log('[DEBUG handleSubmit] Setting pendingQuery:', {
+      message: input.substring(0, 50),
+      sessionId,
+      model: selectedAgent,
+      assistantMessageIndex
+    });
+
+    setPendingQuery({ message: input, sessionId, model: selectedAgent, assistantMessageIndex, tools: availableTools });
 
     setInput('');
     setLoading(true);

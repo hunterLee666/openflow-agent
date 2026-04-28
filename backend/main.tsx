@@ -187,7 +187,7 @@ OpenFlow Server - AI 编码助手服务端
   });
 
   bridge.registerHandler("streamQuery", async (params: unknown, sessionId: string) => {
-    const { message, model } = params as { message: string; model?: string };
+    const { message, model, tools } = params as { message: string; model?: string; tools?: any[] };
 
     if (!message) {
       throw new Error("消息内容不能为空");
@@ -202,6 +202,12 @@ OpenFlow Server - AI 编码助手服务端
     const queryOptions: any = { message, threadId: sessionId };
     if (model) {
       queryOptions.model = model;
+    }
+    if (tools && tools.length > 0) {
+      queryOptions.tools = tools;
+      console.log(`[Session ${sessionId}] 传递 ${tools.length} 个工具给 LLM:`, tools.map((t: any) => t.name));
+    } else {
+      console.log(`[Session ${sessionId}] WARNING: tools 为空或未定义!`);
     }
 
     try {

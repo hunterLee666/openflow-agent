@@ -44,17 +44,17 @@ type DatabaseConstructor = new (path: string) => Database;
 
 let DatabaseClass: DatabaseConstructor | null = null;
 
-try {
-  const { default: Database } = await import('better-sqlite3');
-  DatabaseClass = Database as unknown as DatabaseConstructor;
-} catch {
+async function initDatabase() {
   try {
     const { Database: BunDatabase } = await import('bun:sqlite');
     DatabaseClass = BunDatabase as unknown as DatabaseConstructor;
-  } catch {
-    // No SQLite available
+    return;
+  } catch (e) {
+    throw new Error('bun:sqlite is not available. Please use Bun runtime.');
   }
 }
+
+await initDatabase();
 
 export class SQLiteStorage {
   private db: Database | null = null;
@@ -66,7 +66,7 @@ export class SQLiteStorage {
 
   async initialize(): Promise<void> {
     if (!DatabaseClass) {
-      throw new Error('No SQLite implementation available. Install better-sqlite3 or use Bun runtime.');
+      throw new Error('bun:sqlite is not available. Please use Bun runtime.');
     }
 
     const dir = join(this.dbPath, '..');

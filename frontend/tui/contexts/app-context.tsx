@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useReducer, useCallback } from "react"
 import type { ReactNode } from "react"
-import type { Message } from "@/types"
-import { globalDispatcher, EventTypes } from "@/events"
+import type { Message } from "../../types"
+import { globalDispatcher, EventTypes } from "../events"
 
 export interface AppState {
   messages: Message[]

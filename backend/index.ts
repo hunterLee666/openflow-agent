@@ -97,8 +97,8 @@ export { SkillRegistry, createAgentskillsIoCompatibleManifest, SKILL_FILE_NAMES,
 export type { SkillManifest, SkillDefinition, SkillRegistryEntry } from "./skills/skill-registry.js";
 export { ContextFileDiscovery, buildSystemPromptWithContext, CONTEXT_FILE_DEFS } from "./context/context-discovery.js";
 export type { ContextFile, ContextFileType } from "./context/context-discovery.js";
-export { CheckpointSystem, createCheckpointSystem } from "./checkpoints/checkpoint-system.js";
-export type { FileSnapshot, Checkpoint, RollbackResult, CheckpointConfig } from "./checkpoints/checkpoint-system.js";
+export { CheckpointSystem, createCheckpointSystem, CheckpointManager, createCheckpointManager } from "./checkpoints/index.js";
+export type { FileSnapshot, Checkpoint, RollbackResult, CheckpointConfig, CheckpointManagerConfig } from "./checkpoints/index.js";
 export { TaskScheduler, createTaskScheduler } from "./scheduler/task-scheduler.js";
 export type { ScheduledTask, TaskExecutionResult, TaskSchedulerConfig } from "./scheduler/task-scheduler.js";
 export { CronScheduler, createCronScheduler } from "./scheduler/cron-scheduler.js";

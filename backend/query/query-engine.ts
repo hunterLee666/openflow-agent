@@ -324,6 +324,14 @@ async function prepareMessagesWithCompaction(
 
 async function injectSystemIfNeeded(messages: Message[], systemPrompt?: string): Promise<Message[]> {
   const system = systemPrompt || "You are a helpful assistant.";
+
+  if (system.includes("CRITICAL: When to Use Tools")) {
+    console.log("[DEBUG query-engine] System prompt includes NEW tool enforcement content!");
+  } else {
+    console.log("[DEBUG query-engine] WARNING: System prompt does NOT include tool enforcement content!");
+    console.log("[DEBUG query-engine] System prompt preview:", system.slice(0, 500));
+  }
+
   if (messages[0]?.role === "system") {
     return [{ role: "system", content: system }, ...messages.slice(1)];
   }

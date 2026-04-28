@@ -1,4 +1,4 @@
-import { createTheme } from "../tui/components/theme-provider";
+import { createTheme } from "../components/theme-provider";
 
 /**
  * WCAG AA high-contrast theme — dark variant (white text on black).

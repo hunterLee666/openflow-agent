@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { useTheme } from "./theme-provider";
 import { useInput } from "../hooks/use-input";
+import { ToolCallList, type ToolCallItem } from "./tool-call-list";
 
 export type ChatRole = "user" | "assistant" | "system" | "error";
 
@@ -13,6 +14,7 @@ export interface ChatMessageProps {
   timestamp?: Date;
   streaming?: boolean;
   collapsed?: boolean;
+  toolCalls?: ToolCallItem[];
   children?: ReactNode;
 }
 
@@ -32,6 +34,7 @@ export const ChatMessage = ({
   timestamp,
   streaming = false,
   collapsed: initialCollapsed = false,
+  toolCalls,
   children,
 }: ChatMessageProps) => {
   const theme = useTheme();
@@ -119,6 +122,10 @@ export const ChatMessage = ({
       </Box>
 
       {renderContent()}
+
+      {toolCalls && toolCalls.length > 0 && (
+        <ToolCallList toolCalls={toolCalls} />
+      )}
     </Box>
   );
 };

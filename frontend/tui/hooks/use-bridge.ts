@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type {
   QueryRequest,
   QueryResponse,
@@ -38,9 +38,9 @@ export interface BridgeClient {
   disconnect(): Promise<void>;
   query(request: QueryRequest): Promise<QueryResponse>;
   streamQuery(request: QueryRequest): Promise<QueryResponse>;
-  onStreamChunk?: (callback: (event: StreamChunk, sessionId?: string) => void) => void;
-  onToolCall?: (callback: (event: ToolCallEvent, sessionId?: string) => void) => void;
-  onToolResult?: (callback: (event: ToolResultEvent, sessionId?: string) => void) => void;
+  onStreamChunk(callback: (event: StreamChunk, sessionId?: string) => void): () => void;
+  onToolCall(callback: (event: ToolCallEvent, sessionId?: string) => void): () => void;
+  onToolResult(callback: (event: ToolResultEvent, sessionId?: string) => void): () => void;
   listSessions(): Promise<ListSessionsResponse>;
   getSession(threadId: string): Promise<GetSessionResponse>;
   deleteSession(threadId: string): Promise<DeleteSessionResponse>;
@@ -113,8 +113,6 @@ export function createBridgeClient(url: string): BridgeClient {
             }
 
             if (method === 'stream_chunk' && result) {
-              const debugLog = `[BRIDGE] stream_chunk: ${JSON.stringify(result)}, sessionId: ${message.sessionId}\n`;
-              require('fs').appendFileSync('/tmp/openflow-debug.log', debugLog);
               for (const cb of streamChunkCallbacks) {
                 cb(result as StreamChunk, message.sessionId);
               }
@@ -200,14 +198,26 @@ export function createBridgeClient(url: string): BridgeClient {
 
   const onStreamChunk = (callback: (event: StreamChunk, sessionId?: string) => void) => {
     streamChunkCallbacks.push(callback);
+    return () => {
+      const index = streamChunkCallbacks.indexOf(callback);
+      if (index > -1) streamChunkCallbacks.splice(index, 1);
+    };
   };
 
   const onToolCall = (callback: (event: ToolCallEvent, sessionId?: string) => void) => {
     toolCallCallbacks.push(callback);
+    return () => {
+      const index = toolCallCallbacks.indexOf(callback);
+      if (index > -1) toolCallCallbacks.splice(index, 1);
+    };
   };
 
   const onToolResult = (callback: (event: ToolResultEvent, sessionId?: string) => void) => {
     toolResultCallbacks.push(callback);
+    return () => {
+      const index = toolResultCallbacks.indexOf(callback);
+      if (index > -1) toolResultCallbacks.splice(index, 1);
+    };
   };
 
   return {
@@ -238,9 +248,9 @@ export interface UseBridgeReturn {
   disconnect: () => Promise<void>;
   query: (request: QueryRequest) => Promise<QueryResponse>;
   streamQuery: (request: QueryRequest) => Promise<QueryResponse>;
-  onStreamChunk: (callback: (event: StreamChunk, sessionId?: string) => void) => void;
-  onToolCall: (callback: (event: ToolCallEvent, sessionId?: string) => void) => void;
-  onToolResult: (callback: (event: ToolResultEvent, sessionId?: string) => void) => void;
+  onStreamChunk: (callback: (event: StreamChunk, sessionId?: string) => void) => () => void;
+  onToolCall: (callback: (event: ToolCallEvent, sessionId?: string) => void) => () => void;
+  onToolResult: (callback: (event: ToolResultEvent, sessionId?: string) => void) => () => void;
   listSessions: () => Promise<ListSessionsResponse>;
   getSession: (threadId: string) => Promise<GetSessionResponse>;
   deleteSession: (threadId: string) => Promise<DeleteSessionResponse>;
@@ -287,7 +297,7 @@ export function useBridge(url: string = DEFAULT_WS_URL): UseBridgeReturn {
     };
   }, []);
 
-  return {
+  return useMemo(() => ({
     client,
     isConnected: client?.isConnected ?? false,
     isConnecting,
@@ -296,13 +306,13 @@ export function useBridge(url: string = DEFAULT_WS_URL): UseBridgeReturn {
     disconnect,
     query: client?.query.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
     streamQuery: client?.streamQuery.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
-    onStreamChunk: client ? (client as any).onStreamChunk : (() => {}),
-    onToolCall: client ? (client as any).onToolCall : (() => {}),
-    onToolResult: client ? (client as any).onToolResult : (() => {}),
+    onStreamChunk: client ? (client as any).onStreamChunk : (() => () => {}),
+    onToolCall: client ? (client as any).onToolCall : (() => () => {}),
+    onToolResult: client ? (client as any).onToolResult : (() => () => {}),
     listSessions: client?.listSessions.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
     getSession: client?.getSession.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
     deleteSession: client?.deleteSession.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
     getTools: client?.getTools.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
     getAgents: client?.getAgents.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
-  };
+  }), [client, isConnecting, error, connect, disconnect]);
 }

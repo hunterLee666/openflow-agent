@@ -22,6 +22,11 @@ export const QueryRequestSchema = z.object({
   message: z.string(),
   threadId: z.string().optional(),
   model: z.string().optional(),
+  tools: z.array(z.object({
+    name: z.string(),
+    description: z.string().optional(),
+    parameters: z.record(z.string(), z.unknown()).optional(),
+  })).optional(),
 });
 
 export type QueryRequest = z.infer<typeof QueryRequestSchema>;

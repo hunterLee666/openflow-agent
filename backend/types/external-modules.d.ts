@@ -1,21 +1,3 @@
-declare module "better-sqlite3" {
-  interface Statement {
-    run(...params: unknown[]): { changes: number };
-    get(...params: unknown[]): Record<string, unknown> | undefined;
-    all(...params: unknown[]): Array<Record<string, unknown>>;
-  }
-
-  interface Database {
-    prepare(sql: string): Statement;
-    exec(sql: string): void;
-    close(): void;
-    transaction<T>(fn: () => T): () => T;
-  }
-
-  const Database: new (path: string) => Database;
-  export default Database;
-}
-
 declare module "node-telegram-bot-api" {
   import { EventEmitter } from "events";
 

@@ -335,6 +335,9 @@ export class LLMClient {
           parameters: t.parameters,
         },
       }));
+      console.log("[DEBUG LLM client] Tools being sent to API:", tools.map(t => t.name));
+    } else {
+      console.log("[DEBUG LLM client] No tools being sent to API!");
     }
 
     if (this.config.requiresThinkingFlag) {

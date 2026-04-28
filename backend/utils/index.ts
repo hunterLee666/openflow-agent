@@ -42,3 +42,12 @@ export {
   type DegradationConfig,
   type DegradationLevel,
 } from "./degradation-ladder.js";
+
+export {
+  TemplateRenderer,
+  renderTemplate,
+  extractTemplateVariables,
+  validateTemplate,
+  type TemplateContext,
+  type TemplateRenderOptions,
+} from "./template-renderer.js";

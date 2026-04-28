@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { createRequire } from "node:module";
 import { EventEmitter } from "node:events";
 import { WorkflowEngine, WorkflowDefinition, WorkflowResult, WorkflowMode, WorkflowStep, WorkflowStepType } from "./workflow-engine.js";
+import { AgentConfigYamlSchema, parseAgentConfigYaml } from "./agent-config.js";
 import { z } from "zod";
 
 const execAsync = promisify(exec);
@@ -138,7 +139,15 @@ export interface AgentPackage {
   name: string;
   description: string;
   systemPrompt: string;
-  frontMatter: AgentFrontMatter;
+  frontMatter?: AgentFrontMatter;
+  tools?: string[] | null;
+  restrictedTools?: string[];
+  model?: string;
+  skills?: string[] | null;
+  maxTurns?: number;
+  timeoutSeconds?: number;
+  temperature?: number;
+  maxTokens?: number;
   source: string;
 }
 
@@ -774,6 +783,11 @@ export class UnifiedEngine extends EventEmitter {
     await this.validatePath(absolutePath);
 
     const content = await readFile(absolutePath, "utf-8");
+
+    if (agentPath.endsWith("config.yaml") || agentPath.endsWith("config.yml")) {
+      return this.loadAgentsFromConfig(absolutePath, content, source);
+    }
+
     const frontMatter = this.parseFrontMatter(content) as AgentFrontMatter;
     const body = content.replace(/^---\n[\s\S]*?\n---/, "").trim();
 
@@ -784,6 +798,42 @@ export class UnifiedEngine extends EventEmitter {
       frontMatter,
       source,
     };
+  }
+
+  private async loadAgentsFromConfig(configPath: string, content: string, source: string): Promise<AgentPackage> {
+    const config = parseAgentConfigYaml(content);
+    const defaults = config.defaults;
+
+    const agentsDir = dirname(configPath);
+    const firstAgentName = Object.keys(config.agents || {})[0];
+
+    if (!firstAgentName) {
+      throw new Error(`No agents defined in ${configPath}`);
+    }
+
+    const firstAgent = config.agents![firstAgentName];
+    const merged = {
+      name: firstAgentName,
+      description: firstAgent.description,
+      systemPrompt: firstAgent.system_prompt,
+      tools: firstAgent.tools ?? defaults?.tools,
+      model: firstAgent.model ?? defaults?.model,
+      skills: firstAgent.skills ?? defaults?.skills,
+      restrictedTools: firstAgent.disallowed_tools,
+      maxTurns: firstAgent.max_turns ?? defaults?.max_turns,
+      timeoutSeconds: firstAgent.timeout_seconds ?? defaults?.timeout_seconds,
+      temperature: firstAgent.temperature ?? defaults?.temperature,
+      maxTokens: firstAgent.max_tokens ?? defaults?.max_tokens,
+      source,
+    };
+
+    this.emit("agents:config:loaded", {
+      configPath,
+      agents: config.agents || {},
+      defaults,
+    });
+
+    return merged;
   }
 
   private substituteArguments(
@@ -938,6 +988,7 @@ export class UnifiedEngine extends EventEmitter {
 
   private async findAgentFiles(): Promise<string[]> {
     const files: string[] = [];
+    const configFiles: string[] = [];
 
     const searchPaths = [
       join(this.workspaceRoot, ".openflow", "agents"),
@@ -949,12 +1000,20 @@ export class UnifiedEngine extends EventEmitter {
         await access(basePath);
         const mdFiles = await this.findMarkdownFiles(basePath);
         files.push(...mdFiles);
+
+        const configPath = join(basePath, "config.yaml");
+        try {
+          await access(configPath);
+          configFiles.push(configPath);
+        } catch {
+          // config.yaml is optional
+        }
       } catch {
         // Directory doesn't exist, skip
       }
     }
 
-    return files;
+    return [...configFiles, ...files];
   }
 
   private async findSubdirectories(dirPath: string): Promise<string[]> {

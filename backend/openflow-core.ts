@@ -48,6 +48,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { CronScheduler } from "./scheduler/cron-scheduler.js";
+import { TaskScheduler, createTaskScheduler } from "./scheduler/task-scheduler.js";
+import { CheckpointManager, createCheckpointManager } from "./checkpoints/index.js";
 import { MessagingGateway, createMessagingGateway } from "./messaging/index.js";
 import type { GatewayConfig, PlatformMessage, PlatformType } from "./messaging/index.js";
 import { PermissionSystem } from "./permissions/index.js";
@@ -124,6 +126,7 @@ export class OpenFlowCore {
   private hookSystem: HookSystem;
   private systemPromptBuilder: DefaultSystemPromptBuilder;
   private cacheMonitor: PromptCacheMonitor;
+  private systemPromptCache: PromptCache;
   private tokenBudgetInjector: TokenBudgetInjector;
   private logger: Logger;
   private metricsCollector: MetricsCollector;
@@ -131,6 +134,8 @@ export class OpenFlowCore {
   private tokenRefreshScheduler: TokenRefreshScheduler;
   private commandRegistry: CommandRegistry;
   private cronScheduler: CronScheduler;
+  private taskScheduler: TaskScheduler;
+  private checkpointManager: CheckpointManager;
   private messagingGateway: MessagingGateway | null = null;
   private permissionSystem: PermissionSystem | null = null;
   private openflowMdLoader: OpenflowMdLoader;
@@ -208,6 +213,8 @@ export class OpenFlowCore {
 
     this.systemPromptBuilder.setCacheMonitor(this.cacheMonitor);
 
+    this.systemPromptCache = new Map();
+
     this.openflowMdLoader = createOpenflowMdLoader();
     this.dualModelRetriever = createDualModelRetriever({
       maxInject: 5,
@@ -252,6 +259,12 @@ export class OpenFlowCore {
 
     this.commandRegistry = createCommandRegistry();
     this.cronScheduler = new CronScheduler();
+    this.taskScheduler = createTaskScheduler();
+    this.checkpointManager = createCheckpointManager(config.workspaceRoot, {
+      enabled: true,
+      maxCheckpoints: 50,
+      maxAgeMs: 7 * 24 * 60 * 60 * 1000,
+    });
 
     if (config.llmConfig?.apiKey) {
       const sessionId = config.sessionId || `session_${Date.now()}`;
@@ -291,11 +304,23 @@ export class OpenFlowCore {
 
     const tasks = [
       createPrefetchTask("memory_core", async () => {
-        await this.memoryCore.initialize();
-      }, { critical: true, timeoutMs: 10000 }),
+        try {
+          await this.memoryCore.initialize();
+        } catch (error) {
+          console.warn('memory_core initialization failed, continuing anyway:', error);
+        }
+      }, { critical: false, timeoutMs: 10000 }),
 
       createPrefetchTask("cron_scheduler", async () => {
         await this.cronScheduler.initialize();
+      }, { critical: false, timeoutMs: 5000 }),
+
+      createPrefetchTask("task_scheduler", async () => {
+        await this.taskScheduler.initialize();
+      }, { critical: false, timeoutMs: 5000 }),
+
+      createPrefetchTask("checkpoint_manager", async () => {
+        await this.checkpointManager.initialize();
       }, { critical: false, timeoutMs: 5000 }),
 
       createPrefetchTask("layered_config", async () => {
@@ -617,6 +642,10 @@ export class OpenFlowCore {
     return this.cronScheduler;
   }
 
+  getTaskScheduler(): TaskScheduler {
+    return this.taskScheduler;
+  }
+
   getCommandRegistry(): CommandRegistry {
     return this.commandRegistry;
   }
@@ -662,7 +691,7 @@ export class OpenFlowCore {
   }
 
   getTools(): ToolDefinition[] {
-    return createAllTools(this.config.workspaceRoot, this.commandRegistry, this.cronScheduler);
+    return createAllTools(this.config.workspaceRoot, this.commandRegistry, this.cronScheduler, this.taskScheduler);
   }
 
   async chat(
@@ -749,6 +778,19 @@ export class OpenFlowCore {
     return this.cacheMonitor;
   }
 
+  invalidateSystemPromptCache(reason?: string): void {
+    const size = this.systemPromptCache.size;
+    this.systemPromptCache.clear();
+    this.logger.info(`System prompt cache invalidated (${size} entries cleared)${reason ? `: ${reason}` : ""}`);
+  }
+
+  getSystemPromptCacheStats(): { size: number; entries: string[] } {
+    return {
+      size: this.systemPromptCache.size,
+      entries: Array.from(this.systemPromptCache.keys()),
+    };
+  }
+
   getTokenBudgetInjector(): TokenBudgetInjector {
     return this.tokenBudgetInjector;
   }
@@ -767,6 +809,14 @@ export class OpenFlowCore {
 
   getTokenRefreshScheduler(): TokenRefreshScheduler {
     return this.tokenRefreshScheduler;
+  }
+
+  getCheckpointManager(): CheckpointManager {
+    return this.checkpointManager;
+  }
+
+  newCheckpointTurn(): void {
+    this.checkpointManager.newTurn();
   }
 
   // 工具方法
@@ -788,18 +838,22 @@ export class OpenFlowCore {
       openflowMdStack: openflowMdResult.mergedContent,
       memoryWarnings,
     };
-    const cache: PromptCache = new Map();
-    return this.systemPromptBuilder.build(ctx, cache);
+    return this.systemPromptBuilder.build(ctx, this.systemPromptCache);
   }
 
   async buildSystemPromptWithMemory(
     sessionId: string,
-    userQuery: string
+    userQuery: string,
+    llmTools?: Array<{ name: string; description: string; isReadOnly?: boolean; parameters?: Record<string, unknown> }>
   ): Promise<string> {
-    const tools = this.subAgentSystem.getAllStatuses().map((s: any) => ({
+    const subAgentTools = this.subAgentSystem.getAllStatuses().map((s: any) => ({
       name: s.id,
       description: s.type,
     }));
+
+    const allTools = llmTools
+      ? [...llmTools, ...subAgentTools]
+      : subAgentTools;
 
     const openflowMdResult = await this.openflowMdLoader.loadStack(this.config.workspaceRoot);
     const memoryWarnings = [...openflowMdResult.warnings];
@@ -839,7 +893,7 @@ export class OpenFlowCore {
 
     const ctx: PromptContext = {
       config: {},
-      tools,
+      tools: allTools,
       cwd: this.config.workspaceRoot,
       turn: 0,
       sessionId,
@@ -847,8 +901,7 @@ export class OpenFlowCore {
       memoryInjections,
       memoryWarnings,
     };
-    const cache: PromptCache = new Map();
-    return this.systemPromptBuilder.build(ctx, cache);
+    return this.systemPromptBuilder.build(ctx, this.systemPromptCache);
   }
 
   async executeToolWithGovernance(
@@ -869,6 +922,14 @@ export class OpenFlowCore {
         maskSensitiveOutputs: this.config.governanceConfig?.maskSensitiveOutputs ?? true,
       },
     };
+
+    const fileMutatingTools = ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash"];
+    const sessionId = this.config.sessionId || "default";
+
+    if (fileMutatingTools.includes(toolName)) {
+      const workingDir = ctx.cwd;
+      await this.checkpointManager.ensureCheckpoint(sessionId, workingDir, `before ${toolName}`);
+    }
 
     const result = await this.governancePipeline.execute(toolName, input, handler, ctx);
 
@@ -954,7 +1015,23 @@ export class OpenFlowCore {
       throw new Error("LLM client not initialized");
     }
 
+    const clientTools = input.tools?.map((t) => ({
+      name: t.name,
+      description: t.description || "",
+        isConcurrencySafe: false,
+        inputSchema: t.parameters || {},
+      })) || [];
+
+    const essentialToolNames = ['WebSearch', 'WebFetch', 'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep'];
     const allTools = this.getTools();
+    const filteredTools = allTools.filter((t: any) => essentialToolNames.includes(t.name));
+    const toolsForPrompt: any[] = clientTools.length > 0 ? clientTools : (filteredTools.length > 0 ? filteredTools : allTools.slice(0, 5));
+
+    console.log(`[DEBUG openflow-core] Using ${toolsForPrompt.length} tools for prompt (filtered from ${allTools.length})`);
+    console.log(`[DEBUG openflow-core] clientTools count: ${clientTools.length}, filteredTools count: ${filteredTools.length}`);
+    if (toolsForPrompt.length > 0 && toolsForPrompt.length <= 10) {
+      console.log(`[DEBUG openflow-core] Tools in prompt:`, toolsForPrompt.map((t: any) => t.name));
+    }
 
     const toolRegistry: QueryToolRegistry = {
       list: () => {
@@ -1008,8 +1085,16 @@ export class OpenFlowCore {
 
     const systemPrompt = input.systemPrompt || await this.buildSystemPromptWithMemory(
       input.threadId || "default",
-      input.message
+      input.message,
+      toolsForPrompt.map((t: any) => ({
+        name: t.name,
+        description: t.description,
+        isReadOnly: t.isConcurrencySafe ?? false,
+        parameters: t.inputSchema as Record<string, unknown> | undefined,
+      }))
     );
+
+    console.log(`[DEBUG openflow-core] buildSystemPromptWithMemory called with ${toolsForPrompt.length} tools`);
 
     await this.autoMemoryExtractor.observe(
       input.message,

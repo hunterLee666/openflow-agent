@@ -33,6 +33,11 @@ export interface AssetFile {
   metadata?: Record<string, unknown>;
 }
 
+export interface SkillDocumentation {
+  sop?: AssetFile;
+  troubleshooting?: AssetFile;
+}
+
 export interface SkillPackage {
   name: string;
   description: string;
@@ -45,6 +50,7 @@ export interface SkillPackage {
     nodejs?: string;
     python?: string;
   };
+  documentation?: SkillDocumentation;
 }
 
 export interface CommandPackage {
@@ -59,9 +65,16 @@ export interface AgentPackage {
   name: string;
   description: string;
   systemPrompt: string;
-  tools?: string[];
+  frontMatter?: Record<string, unknown>;
+  tools?: string[] | null;
+  restrictedTools?: string[];
   model?: string;
-  skills?: string[];
+  skills?: string[] | null;
+  maxTurns?: number;
+  timeoutSeconds?: number;
+  temperature?: number;
+  maxTokens?: number;
+  source?: string;
 }
 
 export enum SecurityLevel {
@@ -174,6 +187,8 @@ export class AssetLoader {
     const templates = await this.scanDirectory(join(absoluteDir, "templates"), () => true);
     const assets = await this.scanDirectory(join(absoluteDir, "assets"), () => true);
 
+    const documentation = await this.loadSkillDocumentation(absoluteDir);
+
     const frontMatter = this.parseFrontMatter(skillMd.content || "");
 
     return {
@@ -185,7 +200,28 @@ export class AssetLoader {
       templates,
       assets,
       compatibility: frontMatter.compatibility as { nodejs?: string; python?: string } | undefined,
+      documentation,
     };
+  }
+
+  private async loadSkillDocumentation(skillDir: string): Promise<SkillDocumentation | undefined> {
+    const documentation: SkillDocumentation = {};
+
+    const sopPath = join(skillDir, "SOP.md");
+    try {
+      documentation.sop = await this.loadMarkdownFile(sopPath);
+    } catch {
+      // SOP.md is optional
+    }
+
+    const troubleshootingPath = join(skillDir, "troubleshooting.md");
+    try {
+      documentation.troubleshooting = await this.loadMarkdownFile(troubleshootingPath);
+    } catch {
+      // troubleshooting.md is optional
+    }
+
+    return Object.keys(documentation).length > 0 ? documentation : undefined;
   }
 
   async loadCommandPackage(commandDir: string): Promise<CommandPackage> {

@@ -14,7 +14,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "lib": ["ES2022", "dom"],
+    "lib": ["ES2023", "dom"],
     "types": ["bun-types"],
     "resolveJsonModule": true,
     "baseUrl": ".",
