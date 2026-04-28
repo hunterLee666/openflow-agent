@@ -15,11 +15,18 @@ interface PendingRequest<T = unknown> {
   reject: (reason: Error) => void;
 }
 
+export interface StreamChunk {
+  chunk: string;
+  contentLength: number;
+  isFirst: boolean;
+}
+
 export interface BridgeClient {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   query(request: QueryRequest): Promise<QueryResponse>;
   streamQuery(request: QueryRequest): Promise<QueryResponse>;
+  onStreamChunk?: (callback: (event: StreamChunk, sessionId?: string) => void) => void;
   listSessions(): Promise<ListSessionsResponse>;
   getSession(threadId: string): Promise<GetSessionResponse>;
   deleteSession(threadId: string): Promise<DeleteSessionResponse>;
@@ -32,6 +39,7 @@ export function createBridgeClient(url: string): BridgeClient {
   let ws: WebSocket | null = null;
   let connected = false;
   const pendingRequests = new Map<string, PendingRequest>();
+  const streamChunkCallbacks: Array<(event: StreamChunk, sessionId?: string) => void> = [];
   let reconnectAttempts = 0;
   const maxReconnectAttempts = 5;
 
@@ -63,12 +71,14 @@ export function createBridgeClient(url: string): BridgeClient {
             let id = message.id;
             let result = message.result;
             let error = message.error;
+            let method = message.method;
 
             if (typeof message.payload === 'string') {
               const parsed = JSON.parse(message.payload);
               id = parsed.id;
               result = parsed.result;
               error = parsed.error;
+              method = parsed.method;
             }
 
             if (id) {
@@ -77,6 +87,13 @@ export function createBridgeClient(url: string): BridgeClient {
               } else if (id.startsWith('err_')) {
                 id = id.substring(4);
               }
+            }
+
+            if (method === 'stream_chunk' && result) {
+              for (const cb of streamChunkCallbacks) {
+                cb(result as StreamChunk, message.sessionId);
+              }
+              return;
             }
 
             if (id && pendingRequests.has(id)) {
@@ -139,11 +156,16 @@ export function createBridgeClient(url: string): BridgeClient {
     });
   };
 
+  const onStreamChunk = (callback: (event: StreamChunk, sessionId?: string) => void) => {
+    streamChunkCallbacks.push(callback);
+  };
+
   return {
     connect,
     disconnect,
     query: (request: QueryRequest) => call<QueryResponse>('query', request),
     streamQuery: (request: QueryRequest) => call<QueryResponse>('streamQuery', request),
+    onStreamChunk,
     listSessions: () => call<ListSessionsResponse>('listSessions'),
     getSession: (threadId: string) => call<GetSessionResponse>('getSession', { threadId }),
     deleteSession: (threadId: string) => call<DeleteSessionResponse>('deleteSession', { threadId }),
@@ -164,6 +186,7 @@ export interface UseBridgeReturn {
   disconnect: () => Promise<void>;
   query: (request: QueryRequest) => Promise<QueryResponse>;
   streamQuery: (request: QueryRequest) => Promise<QueryResponse>;
+  onStreamChunk: (callback: (event: StreamChunk, sessionId?: string) => void) => void;
   listSessions: () => Promise<ListSessionsResponse>;
   getSession: (threadId: string) => Promise<GetSessionResponse>;
   deleteSession: (threadId: string) => Promise<DeleteSessionResponse>;
@@ -219,6 +242,7 @@ export function useBridge(url: string = DEFAULT_WS_URL): UseBridgeReturn {
     disconnect,
     query: client?.query.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
     streamQuery: client?.streamQuery.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
+    onStreamChunk: client ? (client as any).onStreamChunk : (() => {}),
     listSessions: client?.listSessions.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
     getSession: client?.getSession.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
     deleteSession: client?.deleteSession.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),

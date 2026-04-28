@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Box, Text } from 'ink';
 import { useInput } from './hooks/use-input';
 import { useBridge } from './hooks/use-bridge';
@@ -70,20 +70,58 @@ const CommandBar: React.FC<CommandBarProps> = ({ isSidebarOpen, isLoading }) => 
 };
 
 const AppContent: React.FC = () => {
-  const { state: uiState, togglePalette, toggleSidebar, setHelp, setLoading, setStreaming, state } = useUIContext();
-  const { createSession, addMessage, getActiveSession, clearMessages } = useSessionContext();
+  const { state: uiState, togglePalette, toggleSidebar, setHelp, setLoading, setStreaming } = useUIContext();
+  const { state: sessionState, createSession, addMessage, updateMessage, getActiveSession, clearMessages, setSessions, loadSessionMessages } = useSessionContext();
   const [input, setInput] = useState('');
   const [selectedAgent, setSelectedAgent] = useState('assistant');
   const [showSettings, setShowSettings] = useState(false);
   const [showAgentSelector, setShowAgentSelector] = useState(false);
   const bridge = useBridge('ws://localhost:8765');
+  const streamingStateRef = useRef<{ sessionId: string; messageIndex: number } | null>(null);
 
   useEffect(() => {
     bridge.connect().catch(console.error);
     return () => {
       bridge.disconnect().catch(console.error);
     };
-  }, []);
+  }, [bridge]);
+
+  useEffect(() => {
+    if (bridge.isConnected && sessionState.sessions.length === 0) {
+      bridge.listSessions().then(async (response) => {
+        if (response.sessions && response.sessions.length > 0) {
+          const sessionsWithMessages = await Promise.all(
+            response.sessions.map(async (s: any) => {
+              const msgResponse = await bridge.getSession(s.id);
+              return {
+                id: s.id,
+                title: s.title || `Session ${s.id.slice(-4)}`,
+                messages: msgResponse.messages || [],
+                createdAt: s.startedAt || Date.now(),
+                updatedAt: s.endedAt || Date.now(),
+              };
+            })
+          );
+          setSessions(sessionsWithMessages);
+        }
+      }).catch(console.error);
+    }
+  }, [bridge.isConnected, sessionState.sessions.length, bridge, setSessions]);
+
+  useEffect(() => {
+    const handleStreamChunk = (event: { chunk: string; contentLength: number; isFirst: boolean }) => {
+      if (streamingStateRef.current) {
+        const { sessionId, messageIndex } = streamingStateRef.current;
+        const session = sessionState.sessions.find((s: any) => s.id === sessionId);
+        if (session && session.messages[messageIndex]) {
+          const currentContent = session.messages[messageIndex].content || '';
+          updateMessage(sessionId, messageIndex, { content: currentContent + event.chunk });
+        }
+      }
+    };
+
+    bridge.onStreamChunk(handleStreamChunk);
+  }, [bridge, sessionState.sessions, updateMessage]);
 
   const handleCommand = useCallback((cmd: Command) => {
     switch (cmd.id) {
@@ -144,6 +182,13 @@ const AppContent: React.FC = () => {
       content: input,
     });
 
+    const assistantMessageIndex = sessionState.sessions.find(s => s.id === sessionId)?.messages.length ?? 0;
+    addMessage(sessionId, {
+      role: 'assistant',
+      content: '',
+    });
+    streamingStateRef.current = { sessionId, messageIndex: assistantMessageIndex };
+
     setInput('');
     setLoading(true);
     setStreaming(true);
@@ -154,22 +199,19 @@ const AppContent: React.FC = () => {
         threadId: sessionId,
       };
 
-      const response = await bridge.streamQuery(request);
-
-      addMessage(sessionId, {
-        role: 'assistant',
-        content: response.content || 'No response',
-      });
+      await bridge.streamQuery(request);
     } catch (error) {
-      addMessage(sessionId, {
-        role: 'assistant',
-        content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      });
+      if (streamingStateRef.current?.sessionId === sessionId) {
+        updateMessage(sessionId, assistantMessageIndex, {
+          content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        });
+      }
     } finally {
+      streamingStateRef.current = null;
       setLoading(false);
       setStreaming(false);
     }
-  }, [input, bridge, getActiveSession, createSession, addMessage, setLoading, setStreaming]);
+  }, [input, bridge, getActiveSession, createSession, addMessage, updateMessage, setLoading, setStreaming, sessionState.sessions]);
 
   const settingsSections: SettingsSection[] = useMemo(() => [
     {
@@ -179,7 +221,7 @@ const AppContent: React.FC = () => {
           id: 'theme',
           label: 'Theme',
           type: 'select',
-          value: state.currentTheme,
+          value: uiState.currentTheme,
           options: [
             { value: 'default', label: 'Default' },
             { value: 'one-dark', label: 'One Dark' },
@@ -203,7 +245,7 @@ const AppContent: React.FC = () => {
         },
       ],
     },
-  ], [state.currentTheme, selectedAgent]);
+  ], [uiState.currentTheme, selectedAgent]);
 
   if (uiState.isHelpOpen) {
     return <HelpScreen title="Help" description="OpenFlow CLI Help">Use Ctrl+K for commands</HelpScreen>;

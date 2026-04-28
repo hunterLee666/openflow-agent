@@ -192,11 +192,21 @@ OpenFlow Server - AI 编码助手服务端
     }
 
     const chunks: string[] = [];
+    let contentLength = 0;
+
     const result = await core.executeQuery(
       { message, threadId: sessionId },
-      (event) => {
+      async (event) => {
         if (event.kind === "assistant_text_delta" || event.kind === "completion") {
-          chunks.push(event.text || "");
+          const text = event.text || "";
+          chunks.push(text);
+          contentLength += text.length;
+
+          await bridge.sendNotification("stream_chunk", {
+            chunk: text,
+            contentLength,
+            isFirst: chunks.length === 1,
+          }, sessionId);
         }
       }
     );

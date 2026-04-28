@@ -30,6 +30,8 @@ type SessionAction =
   | { type: 'DELETE_SESSION'; payload: string }
   | { type: 'SET_ACTIVE_SESSION'; payload: string | null }
   | { type: 'ADD_MESSAGE'; payload: { sessionId: string; message: Message } }
+  | { type: 'UPDATE_MESSAGE'; payload: { sessionId: string; messageId: number; updates: Partial<Message> } }
+  | { type: 'SET_SESSION_MESSAGES'; payload: { sessionId: string; messages: Message[] } }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'UPDATE_METRICS'; payload: Partial<SessionMetrics> }
@@ -88,6 +90,32 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         },
       };
 
+    case 'UPDATE_MESSAGE':
+      return {
+        ...state,
+        sessions: state.sessions.map((s) =>
+          s.id === action.payload.sessionId
+            ? {
+                ...s,
+                messages: s.messages.map((m, i) =>
+                  i === action.payload.messageId ? { ...m, ...action.payload.updates } : m
+                ),
+                updatedAt: Date.now(),
+              }
+            : s
+        ),
+      };
+
+    case 'SET_SESSION_MESSAGES':
+      return {
+        ...state,
+        sessions: state.sessions.map((s) =>
+          s.id === action.payload.sessionId
+            ? { ...s, messages: action.payload.messages, updatedAt: Date.now() }
+            : s
+        ),
+      };
+
     case 'SET_LOADING':
       return { ...state, isLoading: action.payload };
 
@@ -131,6 +159,9 @@ interface SessionContextType {
   deleteSession: (id: string) => void;
   setActiveSession: (id: string | null) => void;
   addMessage: (sessionId: string, message: Message) => void;
+  updateMessage: (sessionId: string, messageId: number, updates: Partial<Message>) => void;
+  setSessions: (sessions: Session[]) => void;
+  loadSessionMessages: (sessionId: string, messages: Message[]) => void;
   updateSession: (id: string, updates: Partial<Session>) => void;
   clearMessages: (sessionId: string) => void;
   getActiveSession: () => Session | null;
@@ -177,6 +208,18 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
     dispatch({ type: 'ADD_MESSAGE', payload: { sessionId, message } });
   }, []);
 
+  const updateMessage = useCallback((sessionId: string, messageId: number, updates: Partial<Message>) => {
+    dispatch({ type: 'UPDATE_MESSAGE', payload: { sessionId, messageId, updates } });
+  }, []);
+
+  const setSessions = useCallback((sessions: Session[]) => {
+    dispatch({ type: 'SET_SESSIONS', payload: sessions });
+  }, []);
+
+  const loadSessionMessages = useCallback((sessionId: string, messages: Message[]) => {
+    dispatch({ type: 'SET_SESSION_MESSAGES', payload: { sessionId, messages } });
+  }, []);
+
   const updateSession = useCallback((id: string, updates: Partial<Session>) => {
     dispatch({ type: 'UPDATE_SESSION', payload: { id, updates } });
   }, []);
@@ -196,6 +239,9 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
     deleteSession,
     setActiveSession,
     addMessage,
+    updateMessage,
+    setSessions,
+    loadSessionMessages,
     updateSession,
     clearMessages,
     getActiveSession,
