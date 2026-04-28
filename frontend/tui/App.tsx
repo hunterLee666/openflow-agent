@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { flushSync } from 'react-dom';
 import { Box, Text } from 'ink';
 import { useInput } from './hooks/use-input';
 import { useBridge } from './hooks/use-bridge';
@@ -85,11 +84,11 @@ const AppContent: React.FC = () => {
   const [selectedAgent, setSelectedAgent] = useState('assistant');
   const [showSettings, setShowSettings] = useState(false);
   const [showAgentSelector, setShowAgentSelector] = useState(false);
+  const [pendingQuery, setPendingQuery] = useState<{ message: string; sessionId: string; model: string } | null>(null);
   const bridge = useBridge('ws://localhost:8765');
   const streamingStateRef = useRef<{ sessionId: string; messageIndex: number } | null>(null);
   const bridgeRef = useRef(bridge);
   const hasLoadedSessions = useRef(false);
-  const pendingQueryRef = useRef<{ message: string; sessionId: string; model: string } | null>(null);
 
   useEffect(() => {
     bridgeRef.current = bridge;
@@ -135,12 +134,9 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     const handleStreamChunk = (event: { chunk: string; contentLength: number; isFirst: boolean }, notificationSessionId?: string) => {
-      console.log('[handleStreamChunk] Received chunk:', event.chunk, 'isFirst:', event.isFirst, 'notificationSessionId:', notificationSessionId);
       if (streamingStateRef.current) {
         const { sessionId, messageIndex } = streamingStateRef.current;
-        console.log('[handleStreamChunk] streamingStateRef sessionId:', sessionId, 'messageIndex:', messageIndex);
         const session = sessionState.sessions.find((s: any) => s.id === sessionId);
-        console.log('[handleStreamChunk] Found session:', session ? 'yes' : 'no', 'session messages count:', session?.messages?.length);
         if (session && session.messages[messageIndex]) {
           const currentContent = session.messages[messageIndex].content || '';
           updateMessage(sessionId, messageIndex, { content: currentContent + event.chunk });
@@ -184,9 +180,9 @@ const AppContent: React.FC = () => {
   }, [bridge, sessionState.sessions, updateMessage, addToolCall, updateToolCall]);
 
   useEffect(() => {
-    if (pendingQueryRef.current && sessionState.sessions.length > 0) {
-      const { message, sessionId, model } = pendingQueryRef.current;
-      pendingQueryRef.current = null;
+    if (pendingQuery) {
+      const { message, sessionId, model } = pendingQuery;
+      setPendingQuery(null);
 
       const assistantMessageIndex = sessionState.sessions.find(s => s.id === sessionId)?.messages.length ?? 0;
       streamingStateRef.current = { sessionId, messageIndex: assistantMessageIndex };
@@ -196,11 +192,17 @@ const AppContent: React.FC = () => {
           updateMessage(sessionId, assistantMessageIndex, {
             content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
           });
-          streamingStateRef.current = null;
         }
+        streamingStateRef.current = null;
+        setLoading(false);
+        setStreaming(false);
+      }).finally(() => {
+        streamingStateRef.current = null;
+        setLoading(false);
+        setStreaming(false);
       });
     }
-  }, [sessionState.sessions, bridge, updateMessage]);
+  }, [pendingQuery, sessionState.sessions, bridge, updateMessage, setLoading, setStreaming]);
 
   const handleCommand = useCallback((cmd: Command) => {
     switch (cmd.id) {
@@ -294,12 +296,12 @@ const AppContent: React.FC = () => {
       content: '',
     });
 
-    pendingQueryRef.current = { message: input, sessionId, model: selectedAgent };
+    setPendingQuery({ message: input, sessionId, model: selectedAgent });
 
     setInput('');
     setLoading(true);
     setStreaming(true);
-  }, [input, bridge, getActiveSession, createSession, addMessage, setLoading, setStreaming]);
+  }, [input, bridge, getActiveSession, createSession, addMessage, setPendingQuery, setLoading, setStreaming]);
 
   const settingsSections: SettingsSection[] = useMemo(() => [
     {

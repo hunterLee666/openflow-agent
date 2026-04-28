@@ -113,7 +113,6 @@ export function createBridgeClient(url: string): BridgeClient {
             }
 
             if (method === 'stream_chunk' && result) {
-              console.log(`[Bridge Client] Received stream_chunk:`, result);
               for (const cb of streamChunkCallbacks) {
                 cb(result as StreamChunk, message.sessionId);
               }
