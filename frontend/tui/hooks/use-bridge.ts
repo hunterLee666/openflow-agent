@@ -99,6 +99,9 @@ export function createBridgeClient(url: string): BridgeClient {
               result = parsed.result;
               error = parsed.error;
               method = parsed.method;
+              if (parsed.params) {
+                result = parsed.params;
+              }
             }
 
             if (id) {
@@ -110,6 +113,7 @@ export function createBridgeClient(url: string): BridgeClient {
             }
 
             if (method === 'stream_chunk' && result) {
+              console.log(`[Bridge Client] Received stream_chunk:`, result);
               for (const cb of streamChunkCallbacks) {
                 cb(result as StreamChunk, message.sessionId);
               }
