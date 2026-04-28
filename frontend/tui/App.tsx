@@ -86,6 +86,12 @@ const AppContent: React.FC = () => {
   const [showAgentSelector, setShowAgentSelector] = useState(false);
   const bridge = useBridge('ws://localhost:8765');
   const streamingStateRef = useRef<{ sessionId: string; messageIndex: number } | null>(null);
+  const bridgeRef = useRef(bridge);
+  const hasLoadedSessions = useRef(false);
+
+  useEffect(() => {
+    bridgeRef.current = bridge;
+  }, [bridge]);
 
   useEffect(() => {
     bridge.connect().catch(console.error);
@@ -95,25 +101,27 @@ const AppContent: React.FC = () => {
   }, [bridge]);
 
   useEffect(() => {
-    if (bridge.isConnected && sessionState.sessions.length === 0) {
-      bridge.listSessions().then(async (response) => {
-        if (response.sessions && response.sessions.length > 0) {
-          const sessionsWithMessages = await Promise.all(
-            response.sessions.map(async (s: any) => {
-              const msgResponse = await bridge.getSession(s.id);
-              return {
-                id: s.id,
-                title: s.title || `Session ${s.id.slice(-4)}`,
-                messages: msgResponse.messages || [],
-                createdAt: s.startedAt || Date.now(),
-                updatedAt: s.endedAt || Date.now(),
-              };
-            })
-          );
-          setSessions(sessionsWithMessages);
-        }
-      }).catch(console.error);
-    }
+    if (hasLoadedSessions.current) return;
+    if (!bridge.isConnected || sessionState.sessions.length > 0) return;
+
+    hasLoadedSessions.current = true;
+    bridge.listSessions().then(async (response) => {
+      if (response.sessions && response.sessions.length > 0) {
+        const sessionsWithMessages = await Promise.all(
+          response.sessions.map(async (s: any) => {
+            const msgResponse = await bridge.getSession(s.id);
+            return {
+              id: s.id,
+              title: s.title || `Session ${s.id.slice(-4)}`,
+              messages: msgResponse.messages || [],
+              createdAt: s.startedAt || Date.now(),
+              updatedAt: s.endedAt || Date.now(),
+            };
+          })
+        );
+        setSessions(sessionsWithMessages);
+      }
+    }).catch(console.error);
   }, [bridge.isConnected, sessionState.sessions.length, bridge, setSessions]);
 
   useEffect(() => {
