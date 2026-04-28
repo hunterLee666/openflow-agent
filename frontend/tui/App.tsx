@@ -84,7 +84,7 @@ const AppContent: React.FC = () => {
   const [selectedAgent, setSelectedAgent] = useState('assistant');
   const [showSettings, setShowSettings] = useState(false);
   const [showAgentSelector, setShowAgentSelector] = useState(false);
-  const [pendingQuery, setPendingQuery] = useState<{ message: string; sessionId: string; model: string } | null>(null);
+  const [pendingQuery, setPendingQuery] = useState<{ message: string; sessionId: string; model: string; sessionExists?: boolean } | null>(null);
   const bridge = useBridge('ws://localhost:8765');
   const streamingStateRef = useRef<{ sessionId: string; messageIndex: number } | null>(null);
   const bridgeRef = useRef(bridge);
@@ -181,10 +181,15 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     if (pendingQuery) {
-      const { message, sessionId, model } = pendingQuery;
+      const { message, sessionId, model, sessionExists } = pendingQuery;
       setPendingQuery(null);
 
-      const assistantMessageIndex = sessionState.sessions.find(s => s.id === sessionId)?.messages.length ?? 0;
+      let assistantMessageIndex: number;
+      if (sessionExists) {
+        assistantMessageIndex = 1;
+      } else {
+        assistantMessageIndex = sessionState.sessions.find(s => s.id === sessionId)?.messages.length ?? 0;
+      }
       streamingStateRef.current = { sessionId, messageIndex: assistantMessageIndex };
 
       bridge.streamQuery({ message, threadId: sessionId, model }).catch((error) => {
@@ -284,7 +289,8 @@ const AppContent: React.FC = () => {
     }
 
     const activeSession = getActiveSession();
-    const sessionId = activeSession?.id || createSession().id;
+    const newSession = activeSession || createSession();
+    const sessionId = newSession.id;
 
     addMessage(sessionId, {
       role: 'user',
@@ -296,7 +302,7 @@ const AppContent: React.FC = () => {
       content: '',
     });
 
-    setPendingQuery({ message: input, sessionId, model: selectedAgent });
+    setPendingQuery({ message: input, sessionId, model: selectedAgent, sessionExists: true });
 
     setInput('');
     setLoading(true);

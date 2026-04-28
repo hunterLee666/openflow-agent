@@ -246,6 +246,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
       updatedAt: Date.now(),
     };
     dispatch({ type: 'ADD_SESSION', payload: newSession });
+    dispatch({ type: 'SET_ACTIVE_SESSION', payload: newSession.id });
     return newSession;
   }, [state.sessions.length]);
 
