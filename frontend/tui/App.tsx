@@ -89,6 +89,8 @@ const AppContent: React.FC = () => {
   const streamingStateRef = useRef<{ sessionId: string; messageIndex: number } | null>(null);
   const bridgeRef = useRef(bridge);
   const hasLoadedSessions = useRef(false);
+  const sessionsRef = useRef(sessionState.sessions);
+  sessionsRef.current = sessionState.sessions;
 
   useEffect(() => {
     bridgeRef.current = bridge;
@@ -136,7 +138,7 @@ const AppContent: React.FC = () => {
     const handleStreamChunk = (event: { chunk: string; contentLength: number; isFirst: boolean }, notificationSessionId?: string) => {
       if (streamingStateRef.current) {
         const { sessionId, messageIndex } = streamingStateRef.current;
-        const session = sessionState.sessions.find((s: any) => s.id === sessionId);
+        const session = sessionsRef.current.find((s: any) => s.id === sessionId);
         if (session && session.messages[messageIndex]) {
           const currentContent = session.messages[messageIndex].content || '';
           updateMessage(sessionId, messageIndex, { content: currentContent + event.chunk });
