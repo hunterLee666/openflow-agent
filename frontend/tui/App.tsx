@@ -252,6 +252,7 @@ const AppContent: React.FC = () => {
     } else if (key.ctrl && input === ',') {
       setShowSettings(true);
     } else if (key.ctrl && input === 'a') {
+      setInput('');
       setShowAgentSelector(true);
     }
   });
