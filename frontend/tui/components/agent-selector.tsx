@@ -41,9 +41,13 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
     } else if (key.downArrow) {
       setFocusIndex((prev) => Math.min(agents.length - 1, prev + 1));
     } else if (key.return) {
-      const agent = agents[focusIndex];
-      if (agent) {
-        handleSelect(agent.id);
+      if (!isOpen) {
+        setIsOpen(true);
+      } else {
+        const agent = agents[focusIndex];
+        if (agent) {
+          handleSelect(agent.id);
+        }
       }
     } else if (key.escape) {
       setIsOpen(false);
