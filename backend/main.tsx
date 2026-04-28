@@ -207,6 +207,15 @@ OpenFlow Server - AI 编码助手服务端
             contentLength,
             isFirst: chunks.length === 1,
           }, sessionId);
+        } else if (event.kind === "tool_call") {
+          await bridge.sendNotification("tool_call", {
+            toolCall: event.toolCall,
+          }, sessionId);
+        } else if (event.kind === "tool_result") {
+          await bridge.sendNotification("tool_result", {
+            toolName: event.toolName,
+            result: event.result,
+          }, sessionId);
         }
       }
     );

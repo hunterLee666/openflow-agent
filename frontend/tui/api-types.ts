@@ -1,10 +1,19 @@
 import { z } from 'zod';
 
+export const ToolCallSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  arguments: z.record(z.string(), z.unknown()).optional(),
+  result: z.string().optional(),
+  status: z.enum(['pending', 'running', 'success', 'error']).optional(),
+});
+
 export const MessageSchema = z.object({
   role: z.enum(['system', 'user', 'assistant', 'tool']),
   content: z.union([z.string(), z.array(z.unknown())]),
   name: z.string().optional(),
   tool_call_id: z.string().optional(),
+  toolCalls: z.array(ToolCallSchema).optional(),
 });
 
 export type Message = z.infer<typeof MessageSchema>;

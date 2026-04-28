@@ -21,12 +21,26 @@ export interface StreamChunk {
   isFirst: boolean;
 }
 
+export interface ToolCallEvent {
+  toolCall: {
+    name: string;
+    arguments?: Record<string, unknown>;
+  };
+}
+
+export interface ToolResultEvent {
+  toolName: string;
+  result: string;
+}
+
 export interface BridgeClient {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   query(request: QueryRequest): Promise<QueryResponse>;
   streamQuery(request: QueryRequest): Promise<QueryResponse>;
   onStreamChunk?: (callback: (event: StreamChunk, sessionId?: string) => void) => void;
+  onToolCall?: (callback: (event: ToolCallEvent, sessionId?: string) => void) => void;
+  onToolResult?: (callback: (event: ToolResultEvent, sessionId?: string) => void) => void;
   listSessions(): Promise<ListSessionsResponse>;
   getSession(threadId: string): Promise<GetSessionResponse>;
   deleteSession(threadId: string): Promise<DeleteSessionResponse>;
@@ -40,6 +54,8 @@ export function createBridgeClient(url: string): BridgeClient {
   let connected = false;
   const pendingRequests = new Map<string, PendingRequest>();
   const streamChunkCallbacks: Array<(event: StreamChunk, sessionId?: string) => void> = [];
+  const toolCallCallbacks: Array<(event: ToolCallEvent, sessionId?: string) => void> = [];
+  const toolResultCallbacks: Array<(event: ToolResultEvent, sessionId?: string) => void> = [];
   let reconnectAttempts = 0;
   const maxReconnectAttempts = 5;
 
@@ -92,6 +108,20 @@ export function createBridgeClient(url: string): BridgeClient {
             if (method === 'stream_chunk' && result) {
               for (const cb of streamChunkCallbacks) {
                 cb(result as StreamChunk, message.sessionId);
+              }
+              return;
+            }
+
+            if (method === 'tool_call' && result) {
+              for (const cb of toolCallCallbacks) {
+                cb(result as ToolCallEvent, message.sessionId);
+              }
+              return;
+            }
+
+            if (method === 'tool_result' && result) {
+              for (const cb of toolResultCallbacks) {
+                cb(result as ToolResultEvent, message.sessionId);
               }
               return;
             }
@@ -160,12 +190,22 @@ export function createBridgeClient(url: string): BridgeClient {
     streamChunkCallbacks.push(callback);
   };
 
+  const onToolCall = (callback: (event: ToolCallEvent, sessionId?: string) => void) => {
+    toolCallCallbacks.push(callback);
+  };
+
+  const onToolResult = (callback: (event: ToolResultEvent, sessionId?: string) => void) => {
+    toolResultCallbacks.push(callback);
+  };
+
   return {
     connect,
     disconnect,
     query: (request: QueryRequest) => call<QueryResponse>('query', request),
     streamQuery: (request: QueryRequest) => call<QueryResponse>('streamQuery', request),
     onStreamChunk,
+    onToolCall,
+    onToolResult,
     listSessions: () => call<ListSessionsResponse>('listSessions'),
     getSession: (threadId: string) => call<GetSessionResponse>('getSession', { threadId }),
     deleteSession: (threadId: string) => call<DeleteSessionResponse>('deleteSession', { threadId }),
@@ -187,6 +227,8 @@ export interface UseBridgeReturn {
   query: (request: QueryRequest) => Promise<QueryResponse>;
   streamQuery: (request: QueryRequest) => Promise<QueryResponse>;
   onStreamChunk: (callback: (event: StreamChunk, sessionId?: string) => void) => void;
+  onToolCall: (callback: (event: ToolCallEvent, sessionId?: string) => void) => void;
+  onToolResult: (callback: (event: ToolResultEvent, sessionId?: string) => void) => void;
   listSessions: () => Promise<ListSessionsResponse>;
   getSession: (threadId: string) => Promise<GetSessionResponse>;
   deleteSession: (threadId: string) => Promise<DeleteSessionResponse>;
@@ -243,6 +285,8 @@ export function useBridge(url: string = DEFAULT_WS_URL): UseBridgeReturn {
     query: client?.query.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
     streamQuery: client?.streamQuery.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
     onStreamChunk: client ? (client as any).onStreamChunk : (() => {}),
+    onToolCall: client ? (client as any).onToolCall : (() => {}),
+    onToolResult: client ? (client as any).onToolResult : (() => {}),
     listSessions: client?.listSessions.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
     getSession: client?.getSession.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),
     deleteSession: client?.deleteSession.bind(client) ?? (() => Promise.reject(new Error('Not connected'))),

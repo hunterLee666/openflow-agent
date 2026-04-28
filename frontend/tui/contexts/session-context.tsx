@@ -23,6 +23,14 @@ interface SessionState {
   metrics: SessionMetrics;
 }
 
+type ToolCallItem = {
+  id: string;
+  name: string;
+  arguments?: Record<string, unknown>;
+  result?: string;
+  status?: 'pending' | 'running' | 'success' | 'error';
+};
+
 type SessionAction =
   | { type: 'SET_SESSIONS'; payload: Session[] }
   | { type: 'ADD_SESSION'; payload: Session }
@@ -32,6 +40,8 @@ type SessionAction =
   | { type: 'ADD_MESSAGE'; payload: { sessionId: string; message: Message } }
   | { type: 'UPDATE_MESSAGE'; payload: { sessionId: string; messageId: number; updates: Partial<Message> } }
   | { type: 'SET_SESSION_MESSAGES'; payload: { sessionId: string; messages: Message[] } }
+  | { type: 'ADD_TOOL_CALL'; payload: { sessionId: string; messageId: number; toolCall: ToolCallItem } }
+  | { type: 'UPDATE_TOOL_CALL'; payload: { sessionId: string; messageId: number; toolCallId: string; updates: Partial<ToolCallItem> } }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'UPDATE_METRICS'; payload: Partial<SessionMetrics> }
@@ -116,6 +126,47 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         ),
       };
 
+    case 'ADD_TOOL_CALL':
+      return {
+        ...state,
+        sessions: state.sessions.map((s) =>
+          s.id === action.payload.sessionId
+            ? {
+                ...s,
+                messages: s.messages.map((m, i) =>
+                  i === action.payload.messageId
+                    ? { ...m, toolCalls: [...(m.toolCalls || []), action.payload.toolCall] }
+                    : m
+                ),
+                updatedAt: Date.now(),
+              }
+            : s
+        ),
+      };
+
+    case 'UPDATE_TOOL_CALL':
+      return {
+        ...state,
+        sessions: state.sessions.map((s) =>
+          s.id === action.payload.sessionId
+            ? {
+                ...s,
+                messages: s.messages.map((m, i) =>
+                  i === action.payload.messageId
+                    ? {
+                        ...m,
+                        toolCalls: m.toolCalls?.map((tc: any) =>
+                          tc.id === action.payload.toolCallId ? { ...tc, ...action.payload.updates } : tc
+                        ),
+                      }
+                    : m
+                ),
+                updatedAt: Date.now(),
+              }
+            : s
+        ),
+      };
+
     case 'SET_LOADING':
       return { ...state, isLoading: action.payload };
 
@@ -162,6 +213,8 @@ interface SessionContextType {
   updateMessage: (sessionId: string, messageId: number, updates: Partial<Message>) => void;
   setSessions: (sessions: Session[]) => void;
   loadSessionMessages: (sessionId: string, messages: Message[]) => void;
+  addToolCall: (sessionId: string, messageId: number, toolCall: ToolCallItem) => void;
+  updateToolCall: (sessionId: string, messageId: number, toolCallId: string, updates: Partial<ToolCallItem>) => void;
   updateSession: (id: string, updates: Partial<Session>) => void;
   clearMessages: (sessionId: string) => void;
   getActiveSession: () => Session | null;
@@ -220,6 +273,14 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
     dispatch({ type: 'SET_SESSION_MESSAGES', payload: { sessionId, messages } });
   }, []);
 
+  const addToolCall = useCallback((sessionId: string, messageId: number, toolCall: ToolCallItem) => {
+    dispatch({ type: 'ADD_TOOL_CALL', payload: { sessionId, messageId, toolCall } });
+  }, []);
+
+  const updateToolCall = useCallback((sessionId: string, messageId: number, toolCallId: string, updates: Partial<ToolCallItem>) => {
+    dispatch({ type: 'UPDATE_TOOL_CALL', payload: { sessionId, messageId, toolCallId, updates } });
+  }, []);
+
   const updateSession = useCallback((id: string, updates: Partial<Session>) => {
     dispatch({ type: 'UPDATE_SESSION', payload: { id, updates } });
   }, []);
@@ -242,6 +303,8 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
     updateMessage,
     setSessions,
     loadSessionMessages,
+    addToolCall,
+    updateToolCall,
     updateSession,
     clearMessages,
     getActiveSession,

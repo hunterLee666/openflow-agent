@@ -71,7 +71,7 @@ const CommandBar: React.FC<CommandBarProps> = ({ isSidebarOpen, isLoading }) => 
 
 const AppContent: React.FC = () => {
   const { state: uiState, togglePalette, toggleSidebar, setHelp, setLoading, setStreaming } = useUIContext();
-  const { state: sessionState, createSession, addMessage, updateMessage, getActiveSession, clearMessages, setSessions, loadSessionMessages } = useSessionContext();
+  const { state: sessionState, createSession, addMessage, updateMessage, getActiveSession, clearMessages, setSessions, loadSessionMessages, addToolCall, updateToolCall } = useSessionContext();
   const [input, setInput] = useState('');
   const [selectedAgent, setSelectedAgent] = useState('assistant');
   const [showSettings, setShowSettings] = useState(false);
@@ -120,8 +120,40 @@ const AppContent: React.FC = () => {
       }
     };
 
+    const handleToolCall = (event: { toolCall: { name: string; arguments?: Record<string, unknown> } }) => {
+      if (streamingStateRef.current) {
+        const { sessionId, messageIndex } = streamingStateRef.current;
+        const toolId = `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        addToolCall(sessionId, messageIndex, {
+          id: toolId,
+          name: event.toolCall.name,
+          arguments: event.toolCall.arguments,
+          status: 'running',
+        });
+      }
+    };
+
+    const handleToolResult = (event: { toolName: string; result: string }) => {
+      if (streamingStateRef.current) {
+        const { sessionId, messageIndex } = streamingStateRef.current;
+        const session = sessionState.sessions.find((s: any) => s.id === sessionId);
+        if (session && session.messages[messageIndex]?.toolCalls) {
+          const toolCalls = session.messages[messageIndex].toolCalls;
+          const lastTool = toolCalls[toolCalls.length - 1];
+          if (lastTool && lastTool.name === event.toolName) {
+            updateToolCall(sessionId, messageIndex, lastTool.id, {
+              result: event.result,
+              status: 'success',
+            });
+          }
+        }
+      }
+    };
+
     bridge.onStreamChunk(handleStreamChunk);
-  }, [bridge, sessionState.sessions, updateMessage]);
+    bridge.onToolCall(handleToolCall);
+    bridge.onToolResult(handleToolResult);
+  }, [bridge, sessionState.sessions, updateMessage, addToolCall, updateToolCall]);
 
   const handleCommand = useCallback((cmd: Command) => {
     switch (cmd.id) {
