@@ -173,6 +173,8 @@ export class BridgeMain extends EventEmitter {
   }
 
   private async handleRequest(request: RpcRequest): Promise<void> {
+    console.log(`[Bridge] handleRequest: method=${request.method}, id=${request.id}`);
+
     if (request.method === 'handshake') {
       await this.handleHandshake(request);
       return;
@@ -207,12 +209,15 @@ export class BridgeMain extends EventEmitter {
     }
 
     try {
+      console.log(`[Bridge] 执行 handler: ${request.method}`);
       const result = await this.sessionRunner.executeInSession(sessionId, async () => {
         return handler(request.params, sessionId);
       });
+      console.log(`[Bridge] handler 完成: ${request.method}`);
 
       await this.sendResponse(request.id, result);
     } catch (error) {
+      console.error(`[Bridge] handler 错误: ${request.method}`, error);
       const message = error instanceof Error ? error.message : String(error);
       await this.sendError(request.id, RpcErrorCode.INTERNAL_ERROR, message);
     }
@@ -250,8 +255,11 @@ export class BridgeMain extends EventEmitter {
 
   private async sendResponse(id: string, result: unknown): Promise<void> {
     if (!this.transport) {
+      console.error(`[Bridge] sendResponse: transport not available`);
       return;
     }
+
+    console.log(`[Bridge] sendResponse: id=${id}, result type=${typeof result}`);
 
     const response: RpcResponse = createRpcResponse(id, result);
     await this.transport.send({
@@ -261,6 +269,8 @@ export class BridgeMain extends EventEmitter {
       payload: JSON.stringify(response),
       timestamp: new Date(),
     });
+
+    console.log(`[Bridge] sendResponse 完成: id=${id}`);
   }
 
   private async sendError(id: string, code: number, message: string, data?: unknown): Promise<void> {

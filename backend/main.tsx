@@ -193,6 +193,8 @@ OpenFlow Server - AI 编码助手服务端
       throw new Error("消息内容不能为空");
     }
 
+    console.log(`[Session ${sessionId}] streamQuery 开始处理: ${message.substring(0, 50)}...`);
+
     const chunks: string[] = [];
     let contentLength = 0;
 
@@ -201,38 +203,45 @@ OpenFlow Server - AI 编码助手服务端
       queryOptions.model = model;
     }
 
-    const result = await core.executeQuery(
-      queryOptions,
-      async (event) => {
-        if (event.kind === "assistant_text_delta" || event.kind === "completion") {
-          const text = event.text || "";
-          chunks.push(text);
-          contentLength += text.length;
+    try {
+      const result = await core.executeQuery(
+        queryOptions,
+        async (event) => {
+          if (event.kind === "assistant_text_delta" || event.kind === "completion") {
+            const text = event.text || "";
+            chunks.push(text);
+            contentLength += text.length;
 
-          await bridge.sendNotification("stream_chunk", {
-            chunk: text,
-            contentLength,
-            isFirst: chunks.length === 1,
-          }, sessionId);
-        } else if (event.kind === "tool_call") {
-          await bridge.sendNotification("tool_call", {
-            toolCall: event.toolCall,
-          }, sessionId);
-        } else if (event.kind === "tool_result") {
-          await bridge.sendNotification("tool_result", {
-            toolName: event.toolName,
-            result: event.result,
-          }, sessionId);
+            await bridge.sendNotification("stream_chunk", {
+              chunk: text,
+              contentLength,
+              isFirst: chunks.length === 1,
+            }, sessionId);
+          } else if (event.kind === "tool_call") {
+            await bridge.sendNotification("tool_call", {
+              toolCall: event.toolCall,
+            }, sessionId);
+          } else if (event.kind === "tool_result") {
+            await bridge.sendNotification("tool_result", {
+              toolName: event.toolName,
+              result: event.result,
+            }, sessionId);
+          }
         }
-      }
-    );
+      );
 
-    return {
-      content: chunks.join("") || result.content,
-      threadId: result.threadId,
-      turn: result.turn,
-      usage: result.usage,
-    };
+      console.log(`[Session ${sessionId}] streamQuery 完成，共 ${chunks.length} 个 chunks`);
+
+      return {
+        content: chunks.join("") || result.content,
+        threadId: result.threadId,
+        turn: result.turn,
+        usage: result.usage,
+      };
+    } catch (error) {
+      console.error(`[Session ${sessionId}] streamQuery 错误:`, error);
+      throw error;
+    }
   });
 
   bridge.registerHandler("listSessions", async (_params: unknown, sessionId: string) => {
