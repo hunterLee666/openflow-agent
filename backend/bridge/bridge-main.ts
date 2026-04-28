@@ -288,7 +288,12 @@ export class BridgeMain extends EventEmitter {
   }
 
   async sendNotification(method: string, params: unknown = undefined, sessionId?: string): Promise<void> {
-    if (!this.transport) return;
+    if (!this.transport) {
+      console.error(`[Bridge] sendNotification: transport not available`);
+      return;
+    }
+
+    console.log(`[Bridge] sendNotification: method=${method}, sessionId=${sessionId}`);
 
     const notification: RpcNotification = { type: 'notification', method, params, sessionId };
     await this.transport.send({
@@ -298,6 +303,8 @@ export class BridgeMain extends EventEmitter {
       payload: JSON.stringify(notification),
       timestamp: new Date(),
     });
+
+    console.log(`[Bridge] sendNotification 完成: method=${method}`);
   }
 
   getMetrics(): BridgeMetrics {

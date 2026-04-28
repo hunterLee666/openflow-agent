@@ -197,6 +197,7 @@ OpenFlow Server - AI 编码助手服务端
 
     const chunks: string[] = [];
     let contentLength = 0;
+    let eventCount = 0;
 
     const queryOptions: any = { message, threadId: sessionId };
     if (model) {
@@ -204,13 +205,17 @@ OpenFlow Server - AI 编码助手服务端
     }
 
     try {
+      console.log(`[Session ${sessionId}] 调用 core.executeQuery...`);
       const result = await core.executeQuery(
         queryOptions,
         async (event) => {
+          eventCount++;
+          console.log(`[Session ${sessionId}] 收到事件 ${eventCount}: ${event.kind}`);
           if (event.kind === "assistant_text_delta" || event.kind === "completion") {
             const text = event.text || "";
             chunks.push(text);
             contentLength += text.length;
+            console.log(`[Session ${sessionId}] 发送 stream_chunk: ${text.substring(0, 20)}...`);
 
             await bridge.sendNotification("stream_chunk", {
               chunk: text,
@@ -230,7 +235,7 @@ OpenFlow Server - AI 编码助手服务端
         }
       );
 
-      console.log(`[Session ${sessionId}] streamQuery 完成，共 ${chunks.length} 个 chunks`);
+      console.log(`[Session ${sessionId}] streamQuery 完成，共 ${eventCount} 个事件, ${chunks.length} 个 chunks`);
 
       return {
         content: chunks.join("") || result.content,
