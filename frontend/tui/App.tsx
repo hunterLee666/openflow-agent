@@ -30,6 +30,14 @@ const COMMANDS: Command[] = [
   { id: 'newSession', label: 'New Session', shortcut: 'Ctrl+N', group: 'Session', onSelect: () => {} },
   { id: 'toggleSidebar', label: 'Toggle Sidebar', shortcut: 'Ctrl+B', group: 'View', onSelect: () => {} },
   { id: 'selectAgent', label: 'Select Agent', shortcut: 'Ctrl+A', group: 'Agent', onSelect: () => {} },
+  { id: 'deleteSession', label: 'Delete Session', shortcut: 'Ctrl+D', group: 'Session', onSelect: () => {} },
+  { id: 'exportSession', label: 'Export Session', shortcut: 'Ctrl+E', group: 'Session', onSelect: () => {} },
+  { id: 'toggleTheme', label: 'Toggle Theme', shortcut: 'Ctrl+T', group: 'Appearance', onSelect: () => {} },
+  { id: 'toggleSidebar2', label: 'Toggle Sidebar', shortcut: 'Ctrl+S', group: 'View', onSelect: () => {} },
+  { id: 'showShortcuts', label: 'Show Shortcuts', shortcut: 'Ctrl+K', group: 'Help', onSelect: () => {} },
+  { id: 'reconnect', label: 'Reconnect', shortcut: 'Ctrl+R', group: 'Connection', onSelect: () => {} },
+  { id: 'clearHistory', label: 'Clear History', shortcut: 'Ctrl+H', group: 'Session', onSelect: () => {} },
+  { id: 'copyLastResponse', label: 'Copy Last Response', shortcut: 'Ctrl+Shift+C', group: 'General', onSelect: () => {} },
 ];
 
 const AppHeader: React.FC = () => {
@@ -71,7 +79,7 @@ const CommandBar: React.FC<CommandBarProps> = ({ isSidebarOpen, isLoading }) => 
 
 const AppContent: React.FC = () => {
   const { state: uiState, togglePalette, toggleSidebar, setHelp, setLoading, setStreaming } = useUIContext();
-  const { state: sessionState, createSession, addMessage, updateMessage, getActiveSession, clearMessages, setSessions, loadSessionMessages, addToolCall, updateToolCall } = useSessionContext();
+  const { state: sessionState, createSession, deleteSession, addMessage, updateMessage, getActiveSession, clearMessages, setSessions, loadSessionMessages, addToolCall, updateToolCall } = useSessionContext();
   const [input, setInput] = useState('');
   const [selectedAgent, setSelectedAgent] = useState('assistant');
   const [showSettings, setShowSettings] = useState(false);
@@ -180,8 +188,35 @@ const AppContent: React.FC = () => {
       case 'selectAgent':
         setShowAgentSelector(true);
         break;
+      case 'deleteSession':
+        const sessionToDelete = getActiveSession();
+        if (sessionToDelete) {
+          deleteSession(sessionToDelete.id);
+        }
+        break;
+      case 'exportSession':
+        console.log('Export session - not implemented');
+        break;
+      case 'toggleTheme':
+        console.log('Toggle theme - not implemented');
+        break;
+      case 'reconnect':
+        bridge.disconnect().then(() => bridge.connect());
+        break;
+      case 'clearHistory':
+        console.log('Clear history - not implemented');
+        break;
+      case 'copyLastResponse':
+        const lastSession = getActiveSession();
+        if (lastSession && lastSession.messages.length > 0) {
+          const lastMsg = lastSession.messages[lastSession.messages.length - 1];
+          if (typeof lastMsg.content === 'string') {
+            console.log(lastMsg.content);
+          }
+        }
+        break;
     }
-  }, [createSession, getActiveSession, clearMessages, setHelp, toggleSidebar]);
+  }, [createSession, deleteSession, getActiveSession, clearMessages, setHelp, toggleSidebar, bridge]);
 
   useInput((input, key) => {
     if (key.ctrl && input === 'k') {
@@ -229,6 +264,7 @@ const AppContent: React.FC = () => {
       const request: QueryRequest = {
         message: input,
         threadId: sessionId,
+        model: selectedAgent,
       };
 
       await bridge.streamQuery(request);
@@ -262,6 +298,52 @@ const AppContent: React.FC = () => {
           ],
           onChange: (value) => console.log('Theme changed to:', value),
         },
+        {
+          id: 'fontSize',
+          label: 'Font Size',
+          type: 'select',
+          value: '14',
+          options: [
+            { value: '12', label: 'Small (12px)' },
+            { value: '14', label: 'Medium (14px)' },
+            { value: '16', label: 'Large (16px)' },
+            { value: '18', label: 'Extra Large (18px)' },
+          ],
+          onChange: (value) => console.log('Font size changed to:', value),
+        },
+        {
+          id: 'showShortcuts',
+          label: 'Show Shortcuts',
+          type: 'toggle',
+          value: true,
+          onChange: (value) => console.log('Show shortcuts:', value),
+        },
+      ],
+    },
+    {
+      title: 'Behavior',
+      items: [
+        {
+          id: 'autoSave',
+          label: 'Auto Save Sessions',
+          type: 'toggle',
+          value: true,
+          onChange: (value) => console.log('Auto save:', value),
+        },
+        {
+          id: 'streamResponse',
+          label: 'Stream Responses',
+          type: 'toggle',
+          value: true,
+          onChange: (value) => console.log('Stream responses:', value),
+        },
+        {
+          id: 'soundEffects',
+          label: 'Sound Effects',
+          type: 'toggle',
+          value: false,
+          onChange: (value) => console.log('Sound effects:', value),
+        },
       ],
     },
     {
@@ -274,6 +356,23 @@ const AppContent: React.FC = () => {
           value: selectedAgent,
           options: AGENTS.map((a) => ({ value: a.id, label: a.name })),
           onChange: (value) => setSelectedAgent(value as string),
+        },
+      ],
+    },
+    {
+      title: 'About',
+      items: [
+        {
+          id: 'version',
+          label: 'Version',
+          type: 'input',
+          value: '0.1.0',
+        },
+        {
+          id: 'github',
+          label: 'GitHub',
+          type: 'input',
+          value: 'github.com/hunterLee666/openflow-cli',
         },
       ],
     },

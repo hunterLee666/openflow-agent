@@ -161,18 +161,20 @@ OpenFlow Server - AI 编码助手服务端
   });
 
   bridge.registerHandler("query", async (params: unknown, sessionId: string) => {
-    const { message } = params as { message: string };
+    const { message, model } = params as { message: string; model?: string };
 
     if (!message) {
       throw new Error("消息内容不能为空");
     }
 
-    console.log(`[Session ${sessionId}] 收到查询: ${message}`);
+    console.log(`[Session ${sessionId}] 收到查询: ${message}${model ? ` (model: ${model})` : ''}`);
 
-    const result = await core.executeQuery({
-      message,
-      threadId: sessionId,
-    });
+    const queryOptions: any = { message, threadId: sessionId };
+    if (model) {
+      queryOptions.model = model;
+    }
+
+    const result = await core.executeQuery(queryOptions);
 
     console.log(`[Session ${sessionId}] 查询完成`);
 
@@ -185,7 +187,7 @@ OpenFlow Server - AI 编码助手服务端
   });
 
   bridge.registerHandler("streamQuery", async (params: unknown, sessionId: string) => {
-    const { message } = params as { message: string };
+    const { message, model } = params as { message: string; model?: string };
 
     if (!message) {
       throw new Error("消息内容不能为空");
@@ -194,8 +196,13 @@ OpenFlow Server - AI 编码助手服务端
     const chunks: string[] = [];
     let contentLength = 0;
 
+    const queryOptions: any = { message, threadId: sessionId };
+    if (model) {
+      queryOptions.model = model;
+    }
+
     const result = await core.executeQuery(
-      { message, threadId: sessionId },
+      queryOptions,
       async (event) => {
         if (event.kind === "assistant_text_delta" || event.kind === "completion") {
           const text = event.text || "";
