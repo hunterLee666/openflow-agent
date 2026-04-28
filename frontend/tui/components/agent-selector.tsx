@@ -22,7 +22,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
   agents,
   selected,
   onSelect,
-  width = 20,
+  width = 50,
 }) => {
   const theme = useTheme();
   const [focusIndex, setFocusIndex] = useState(0);
