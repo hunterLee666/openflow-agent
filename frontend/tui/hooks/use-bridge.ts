@@ -113,6 +113,8 @@ export function createBridgeClient(url: string): BridgeClient {
             }
 
             if (method === 'stream_chunk' && result) {
+              const debugLog = `[BRIDGE] stream_chunk: ${JSON.stringify(result)}, sessionId: ${message.sessionId}\n`;
+              require('fs').appendFileSync('/tmp/openflow-debug.log', debugLog);
               for (const cb of streamChunkCallbacks) {
                 cb(result as StreamChunk, message.sessionId);
               }

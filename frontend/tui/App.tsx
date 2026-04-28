@@ -137,24 +137,21 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     const handleStreamChunk = (event: { chunk: string; contentLength: number; isFirst: boolean }, notificationSessionId?: string) => {
-      console.log('[handleStreamChunk] chunk:', event.chunk, 'isFirst:', event.isFirst, 'streamingStateRef:', streamingStateRef.current);
+      const log = `[HANDLE_CHUNK] chunk: "${event.chunk}", isFirst: ${event.isFirst}, streamingState: ${JSON.stringify(streamingStateRef.current)}\n`;
+      require('fs').appendFileSync('/tmp/openflow-debug.log', log);
       if (streamingStateRef.current) {
         const { sessionId, messageIndex } = streamingStateRef.current;
         const session = sessionsRef.current.find((s: any) => s.id === sessionId);
-        console.log('[handleStreamChunk] session found:', session ? 'yes' : 'no', 'messageIndex:', messageIndex, 'messages count:', session?.messages?.length);
-        if (session) {
-          console.log('[handleStreamChunk] current content before:', session.messages[messageIndex]?.content);
-        }
         if (session && session.messages[messageIndex]) {
           const currentContent = session.messages[messageIndex].content || '';
           const newContent = currentContent + event.chunk;
-          console.log('[handleStreamChunk] updating to:', newContent);
+          require('fs').appendFileSync('/tmp/openflow-debug.log', `[HANDLE_CHUNK] updating session ${sessionId}[${messageIndex}] from "${currentContent}" to "${newContent}"\n`);
           updateMessage(sessionId, messageIndex, { content: newContent });
         } else {
-          console.log('[handleStreamChunk] ERROR: session or message not found!');
+          require('fs').appendFileSync('/tmp/openflow-debug.log', `[HANDLE_CHUNK] ERROR: session or message not found! session=${!!session}, messageIndex=${messageIndex}, messages=${session?.messages?.length}\n`);
         }
       } else {
-        console.log('[handleStreamChunk] ERROR: streamingStateRef.current is null!');
+        require('fs').appendFileSync('/tmp/openflow-debug.log', `[HANDLE_CHUNK] ERROR: streamingStateRef.current is null!\n`);
       }
     };
 
@@ -196,11 +193,11 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (pendingQuery) {
       const { message, sessionId, model, assistantMessageIndex } = pendingQuery;
-      console.log('[pendingQuery useEffect] triggering streamQuery for session:', sessionId, 'messageIndex:', assistantMessageIndex, 'message:', message);
+      require('fs').appendFileSync('/tmp/openflow-debug.log', `[PENDING_QUERY] triggering for session=${sessionId}, index=${assistantMessageIndex}, msg="${message}"\n`);
       setPendingQuery(null);
 
       streamingStateRef.current = { sessionId, messageIndex: assistantMessageIndex };
-      console.log('[pendingQuery useEffect] streamingStateRef set to:', streamingStateRef.current);
+      require('fs').appendFileSync('/tmp/openflow-debug.log', `[PENDING_QUERY] streamingStateRef set: ${JSON.stringify(streamingStateRef.current)}\n`);
 
       bridge.streamQuery({ message, threadId: sessionId, model }).catch((error) => {
         if (streamingStateRef.current?.sessionId === sessionId) {
@@ -294,6 +291,7 @@ const AppContent: React.FC = () => {
   const handleSubmit = useCallback(async () => {
     if (!input.trim()) return;
     if (!bridge.isConnected) {
+      require('fs').appendFileSync('/tmp/openflow-debug.log', `[HANDLE_SUBMIT] Error: Not connected to server\n`);
       console.error('Not connected to server');
       return;
     }
@@ -303,6 +301,7 @@ const AppContent: React.FC = () => {
     const sessionId = newSession.id;
 
     const existingMessageCount = activeSession?.messages.length ?? 0;
+    require('fs').appendFileSync('/tmp/openflow-debug.log', `[HANDLE_SUBMIT] activeSession=${!!activeSession}, sessionId=${sessionId}, existingMessageCount=${existingMessageCount}\n`);
 
     addMessage(sessionId, {
       role: 'user',
