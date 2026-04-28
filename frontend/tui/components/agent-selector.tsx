@@ -26,13 +26,11 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
 }) => {
   const theme = useTheme();
   const [focusIndex, setFocusIndex] = useState(0);
-  const [isOpen, setIsOpen] = useState(false);
 
   const selectedAgent = agents.find((a) => a.id === selected);
 
   const handleSelect = (id: string) => {
     onSelect?.(id);
-    setIsOpen(false);
   };
 
   useInput((_input, key) => {
@@ -41,37 +39,14 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
     } else if (key.downArrow) {
       setFocusIndex((prev) => Math.min(agents.length - 1, prev + 1));
     } else if (key.return) {
-      if (!isOpen) {
-        setIsOpen(true);
-      } else {
-        const agent = agents[focusIndex];
-        if (agent) {
-          handleSelect(agent.id);
-        }
+      const agent = agents[focusIndex];
+      if (agent) {
+        handleSelect(agent.id);
       }
     } else if (key.escape) {
-      setIsOpen(false);
+      onSelect?.(selected);
     }
   });
-
-  if (!isOpen) {
-    return (
-      <Box
-        flexDirection="column"
-        width={width}
-        borderStyle="single"
-        borderColor={theme.colors.border}
-      >
-        <Box paddingX={1} paddingY={1}>
-          <Text dimColor>Agent: </Text>
-          <Text bold color="cyan">
-            {selectedAgent?.name || 'None'}
-          </Text>
-          <Text dimColor> (Enter to select)</Text>
-        </Box>
-      </Box>
-    );
-  }
 
   return (
     <Box
