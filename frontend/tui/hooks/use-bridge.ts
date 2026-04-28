@@ -62,20 +62,24 @@ export function createBridgeClient(url: string): BridgeClient {
   const connect = async (): Promise<void> => {
     return new Promise((resolve, reject) => {
       try {
+        console.log(`[Bridge Client] Connecting to ${url}...`);
         ws = new WebSocket(url);
 
         ws.onopen = () => {
+          console.log(`[Bridge Client] Connected!`);
           connected = true;
           reconnectAttempts = 0;
           resolve();
         };
 
         ws.onclose = () => {
+          console.log(`[Bridge Client] Disconnected`);
           connected = false;
           ws = null;
         };
 
         ws.onerror = (error) => {
+          console.log(`[Bridge Client] WebSocket error:`, error);
           if (!connected) {
             reject(error);
           }
@@ -173,13 +177,16 @@ export function createBridgeClient(url: string): BridgeClient {
         payload,
       };
 
+      console.log(`[Bridge Client] Sending ${method} request:`, id);
       pendingRequests.set(id, { resolve: resolve as (value: unknown) => void, reject });
 
       ws!.send(JSON.stringify(request));
+      console.log(`[Bridge Client] Request sent: ${method}`, id);
 
       setTimeout(() => {
         if (pendingRequests.has(id)) {
           pendingRequests.delete(id);
+          console.log(`[Bridge Client] Request timed out: ${method}`, id);
           reject(new Error(`Request ${method} timed out`));
         }
       }, 30000);
