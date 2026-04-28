@@ -94,11 +94,18 @@ const AppContent: React.FC = () => {
   }, [bridge]);
 
   useEffect(() => {
-    bridge.connect().catch(console.error);
+    let cancelled = false;
+    if (cancelled) return;
+
+    bridge.connect().catch((e) => {
+      if (!cancelled) console.error('Bridge connect error:', e);
+    });
+
     return () => {
+      cancelled = true;
       bridge.disconnect().catch(console.error);
     };
-  }, [bridge]);
+  }, []);
 
   useEffect(() => {
     if (hasLoadedSessions.current) return;
