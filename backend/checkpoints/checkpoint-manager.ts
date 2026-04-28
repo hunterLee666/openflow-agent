@@ -32,6 +32,22 @@ export interface CheckpointManagerConfig {
   excludePatterns?: string[];
 }
 
+/**
+ * CheckpointManager - 透明文件快照保护层
+ *
+ * 功能：自动为文件修改操作创建快照，防止意外损坏
+ * 位置：~/.openflow/checkpoints/
+ *
+ * 使用方式：
+ * 1. OpenFlowCore 自动调用 - LLM执行 Write/Edit/Bash 等工具前自动创建快照
+ * 2. 手动调用 - newCheckpointTurn() 每轮开始时清空去重集合
+ *
+ * 特性：
+ * - 每轮最多一次快照（同一目录）
+ * - 自动清理：7天过期，最多50个快照
+ * - 排除规则：node_modules, .git, dist, .env 等
+ * - Git不可用时优雅降级
+ */
 export class CheckpointManager {
   private checkpointSystem: CheckpointSystem;
   private config: CheckpointManagerConfig;
@@ -60,10 +76,21 @@ export class CheckpointManager {
     await this.checkpointSystem.initialize();
   }
 
+  /**
+   * 开始新的一轮对话 - 清空去重集合
+   * 应在每轮LLM交互开始时调用
+   */
   newTurn(): void {
     this.checkpointedDirs.clear();
   }
 
+  /**
+   * 确保目录已创建快照（如果尚未创建）
+   * @param sessionId 会话ID
+   * @param workingDir 工作目录
+   * @param reason 创建原因
+   * @returns 是否成功创建快照
+   */
   async ensureCheckpoint(
     sessionId: string,
     workingDir: string,
