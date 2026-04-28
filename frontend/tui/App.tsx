@@ -84,7 +84,7 @@ const AppContent: React.FC = () => {
   const [selectedAgent, setSelectedAgent] = useState('assistant');
   const [showSettings, setShowSettings] = useState(false);
   const [showAgentSelector, setShowAgentSelector] = useState(false);
-  const [pendingQuery, setPendingQuery] = useState<{ message: string; sessionId: string; model: string } | null>(null);
+  const [pendingQuery, setPendingQuery] = useState<{ message: string; sessionId: string; model: string; assistantMessageIndex: number } | null>(null);
   const bridge = useBridge('ws://localhost:8765');
   const streamingStateRef = useRef<{ sessionId: string; messageIndex: number } | null>(null);
   const bridgeRef = useRef(bridge);
@@ -181,11 +181,9 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     if (pendingQuery) {
-      const { message, sessionId, model } = pendingQuery;
+      const { message, sessionId, model, assistantMessageIndex } = pendingQuery;
       setPendingQuery(null);
 
-      const session = sessionState.sessions.find(s => s.id === sessionId);
-      const assistantMessageIndex = session ? session.messages.length : 0;
       streamingStateRef.current = { sessionId, messageIndex: assistantMessageIndex };
 
       bridge.streamQuery({ message, threadId: sessionId, model }).catch((error) => {
@@ -203,7 +201,7 @@ const AppContent: React.FC = () => {
         setStreaming(false);
       });
     }
-  }, [pendingQuery, sessionState.sessions, bridge, updateMessage, setLoading, setStreaming]);
+  }, [pendingQuery, bridge, updateMessage, setLoading, setStreaming]);
 
   const handleCommand = useCallback((cmd: Command) => {
     switch (cmd.id) {
@@ -298,7 +296,10 @@ const AppContent: React.FC = () => {
       content: '',
     });
 
-    setPendingQuery({ message: input, sessionId, model: selectedAgent });
+    const currentSession = getActiveSession();
+    const assistantMessageIndex = currentSession?.messages.length ?? 0;
+
+    setPendingQuery({ message: input, sessionId, model: selectedAgent, assistantMessageIndex });
 
     setInput('');
     setLoading(true);
