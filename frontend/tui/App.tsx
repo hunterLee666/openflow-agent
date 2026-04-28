@@ -136,13 +136,24 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     const handleStreamChunk = (event: { chunk: string; contentLength: number; isFirst: boolean }, notificationSessionId?: string) => {
+      console.log('[handleStreamChunk] chunk:', event.chunk, 'isFirst:', event.isFirst, 'streamingStateRef:', streamingStateRef.current);
       if (streamingStateRef.current) {
         const { sessionId, messageIndex } = streamingStateRef.current;
         const session = sessionsRef.current.find((s: any) => s.id === sessionId);
+        console.log('[handleStreamChunk] session found:', session ? 'yes' : 'no', 'messageIndex:', messageIndex, 'messages count:', session?.messages?.length);
+        if (session) {
+          console.log('[handleStreamChunk] current content before:', session.messages[messageIndex]?.content);
+        }
         if (session && session.messages[messageIndex]) {
           const currentContent = session.messages[messageIndex].content || '';
-          updateMessage(sessionId, messageIndex, { content: currentContent + event.chunk });
+          const newContent = currentContent + event.chunk;
+          console.log('[handleStreamChunk] updating to:', newContent);
+          updateMessage(sessionId, messageIndex, { content: newContent });
+        } else {
+          console.log('[handleStreamChunk] ERROR: session or message not found!');
         }
+      } else {
+        console.log('[handleStreamChunk] ERROR: streamingStateRef.current is null!');
       }
     };
 
@@ -184,9 +195,11 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (pendingQuery) {
       const { message, sessionId, model, assistantMessageIndex } = pendingQuery;
+      console.log('[pendingQuery useEffect] triggering streamQuery for session:', sessionId, 'messageIndex:', assistantMessageIndex, 'message:', message);
       setPendingQuery(null);
 
       streamingStateRef.current = { sessionId, messageIndex: assistantMessageIndex };
+      console.log('[pendingQuery useEffect] streamingStateRef set to:', streamingStateRef.current);
 
       bridge.streamQuery({ message, threadId: sessionId, model }).catch((error) => {
         if (streamingStateRef.current?.sessionId === sessionId) {
