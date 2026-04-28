@@ -286,6 +286,8 @@ const AppContent: React.FC = () => {
     const newSession = activeSession || createSession();
     const sessionId = newSession.id;
 
+    const existingMessageCount = activeSession?.messages.length ?? 0;
+
     addMessage(sessionId, {
       role: 'user',
       content: input,
@@ -296,8 +298,7 @@ const AppContent: React.FC = () => {
       content: '',
     });
 
-    const currentSession = getActiveSession();
-    const assistantMessageIndex = currentSession?.messages.length ?? 0;
+    const assistantMessageIndex = existingMessageCount + 1;
 
     setPendingQuery({ message: input, sessionId, model: selectedAgent, assistantMessageIndex });
 
