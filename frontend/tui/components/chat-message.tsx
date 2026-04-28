@@ -76,7 +76,7 @@ export const ChatMessage = ({
   const renderContent = () => {
     if (streaming) {
       return (
-        <Box>
+        <Box flexGrow={1}>
           {children ? (
             wrapPlainChildren(children)
           ) : (
@@ -89,7 +89,7 @@ export const ChatMessage = ({
     }
     if (isCollapsed) {
       return (
-        <Box>
+        <Box flexGrow={1}>
           <Text dimColor>
             {firstLine.slice(0, 60)}
             {firstLine.length > 60 || childrenText.includes("\n") ? "..." : ""}
@@ -97,7 +97,7 @@ export const ChatMessage = ({
         </Box>
       );
     }
-    return <Box>{wrapPlainChildren(children)}</Box>;
+    return <Box flexGrow={1}>{wrapPlainChildren(children)}</Box>;
   };
 
   return (
