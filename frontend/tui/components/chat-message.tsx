@@ -71,6 +71,7 @@ export const ChatMessage = ({
   const dots = ["", "●", "●●", "●●●"][dotFrame] ?? "";
 
   const childrenText = typeof children === "string" ? children : "";
+  console.log('[ChatMessage] children length:', childrenText.length, 'content:', childrenText);
   const firstLine = childrenText.split("\n")[0] ?? "";
 
   const renderContent = () => {

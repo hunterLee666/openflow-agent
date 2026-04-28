@@ -135,18 +135,11 @@ const AppContent: React.FC = () => {
     const handleStreamChunk = (event: { chunk: string; contentLength: number; isFirst: boolean }) => {
       if (streamingStateRef.current) {
         const { sessionId, messageIndex } = streamingStateRef.current;
-        console.log('[handleStreamChunk] sessionId:', sessionId, 'messageIndex:', messageIndex, 'chunk:', event.chunk);
         const session = sessionState.sessions.find((s: any) => s.id === sessionId);
         if (session && session.messages[messageIndex]) {
           const currentContent = session.messages[messageIndex].content || '';
-          console.log('[handleStreamChunk] Before update, current content:', currentContent);
           updateMessage(sessionId, messageIndex, { content: currentContent + event.chunk });
-          console.log('[handleStreamChunk] After update');
-        } else {
-          console.log('[handleStreamChunk] Session or message not found');
         }
-      } else {
-        console.log('[handleStreamChunk] No streaming state');
       }
     };
 
@@ -273,14 +266,12 @@ const AppContent: React.FC = () => {
     });
 
     const assistantMessageIndex = (sessionState.sessions.find(s => s.id === sessionId)?.messages.length ?? 0) + 1;
-    console.log('[handleSubmit] User message added, assistantMessageIndex will be:', assistantMessageIndex);
 
     addMessage(sessionId, {
       role: 'assistant',
       content: '',
     });
 
-    console.log('[handleSubmit] Setting streamingStateRef with messageIndex:', assistantMessageIndex);
     streamingStateRef.current = { sessionId, messageIndex: assistantMessageIndex };
 
     setInput('');
