@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { Box, Text } from 'ink';
 import { useInput } from './hooks/use-input';
 import { useBridge } from './hooks/use-bridge';
@@ -88,6 +89,7 @@ const AppContent: React.FC = () => {
   const streamingStateRef = useRef<{ sessionId: string; messageIndex: number } | null>(null);
   const bridgeRef = useRef(bridge);
   const hasLoadedSessions = useRef(false);
+  const pendingQueryRef = useRef<{ message: string; sessionId: string; model: string } | null>(null);
 
   useEffect(() => {
     bridgeRef.current = bridge;
@@ -132,10 +134,13 @@ const AppContent: React.FC = () => {
   }, [bridge.isConnected, sessionState.sessions.length, bridge, setSessions]);
 
   useEffect(() => {
-    const handleStreamChunk = (event: { chunk: string; contentLength: number; isFirst: boolean }) => {
+    const handleStreamChunk = (event: { chunk: string; contentLength: number; isFirst: boolean }, notificationSessionId?: string) => {
+      console.log('[handleStreamChunk] Received chunk:', event.chunk, 'isFirst:', event.isFirst, 'notificationSessionId:', notificationSessionId);
       if (streamingStateRef.current) {
         const { sessionId, messageIndex } = streamingStateRef.current;
+        console.log('[handleStreamChunk] streamingStateRef sessionId:', sessionId, 'messageIndex:', messageIndex);
         const session = sessionState.sessions.find((s: any) => s.id === sessionId);
+        console.log('[handleStreamChunk] Found session:', session ? 'yes' : 'no', 'session messages count:', session?.messages?.length);
         if (session && session.messages[messageIndex]) {
           const currentContent = session.messages[messageIndex].content || '';
           updateMessage(sessionId, messageIndex, { content: currentContent + event.chunk });
@@ -177,6 +182,25 @@ const AppContent: React.FC = () => {
     bridge.onToolCall(handleToolCall);
     bridge.onToolResult(handleToolResult);
   }, [bridge, sessionState.sessions, updateMessage, addToolCall, updateToolCall]);
+
+  useEffect(() => {
+    if (pendingQueryRef.current && sessionState.sessions.length > 0) {
+      const { message, sessionId, model } = pendingQueryRef.current;
+      pendingQueryRef.current = null;
+
+      const assistantMessageIndex = sessionState.sessions.find(s => s.id === sessionId)?.messages.length ?? 0;
+      streamingStateRef.current = { sessionId, messageIndex: assistantMessageIndex };
+
+      bridge.streamQuery({ message, threadId: sessionId, model }).catch((error) => {
+        if (streamingStateRef.current?.sessionId === sessionId) {
+          updateMessage(sessionId, assistantMessageIndex, {
+            content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          });
+          streamingStateRef.current = null;
+        }
+      });
+    }
+  }, [sessionState.sessions, bridge, updateMessage]);
 
   const handleCommand = useCallback((cmd: Command) => {
     switch (cmd.id) {
@@ -265,39 +289,17 @@ const AppContent: React.FC = () => {
       content: input,
     });
 
-    const assistantMessageIndex = (sessionState.sessions.find(s => s.id === sessionId)?.messages.length ?? 0) + 1;
-
     addMessage(sessionId, {
       role: 'assistant',
       content: '',
     });
 
-    streamingStateRef.current = { sessionId, messageIndex: assistantMessageIndex };
+    pendingQueryRef.current = { message: input, sessionId, model: selectedAgent };
 
     setInput('');
     setLoading(true);
     setStreaming(true);
-
-    try {
-      const request: QueryRequest = {
-        message: input,
-        threadId: sessionId,
-        model: selectedAgent,
-      };
-
-      await bridge.streamQuery(request);
-    } catch (error) {
-      if (streamingStateRef.current?.sessionId === sessionId) {
-        updateMessage(sessionId, assistantMessageIndex, {
-          content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        });
-      }
-    } finally {
-      streamingStateRef.current = null;
-      setLoading(false);
-      setStreaming(false);
-    }
-  }, [input, bridge, getActiveSession, createSession, addMessage, updateMessage, setLoading, setStreaming, sessionState.sessions]);
+  }, [input, bridge, getActiveSession, createSession, addMessage, setLoading, setStreaming]);
 
   const settingsSections: SettingsSection[] = useMemo(() => [
     {
