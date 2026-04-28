@@ -270,38 +270,41 @@ export function createWebTools(): ToolDefinition[] {
       ];
 
       const startedAt = Date.now();
-      let lastError: Error | null = null;
 
-      for (const engine of searchEngines) {
+      const searchPromises = searchEngines.map(async (engine) => {
         try {
-          console.log(`[WebSearch] Trying ${engine.name}...`);
+          console.log(`[WebSearch] Trying ${engine.name} in parallel...`);
           const results = await engine.fn(input.query);
-
-          if (results.length > 0) {
-            const response = {
-              query: input.query,
-              results,
-              count: results.length,
-              provider: engine.name.toLowerCase(),
-              took_ms: Date.now() - startedAt,
-            };
-
-            webCache.set(cacheKey, {
-              content: JSON.stringify(response),
-              timestamp: Date.now(),
-            });
-
-            console.log(`[WebSearch] ${engine.name} succeeded with ${results.length} results in ${response.took_ms}ms`);
-            return response;
-          }
+          return { engine, results, success: results.length > 0 };
         } catch (e) {
-          lastError = e instanceof Error ? e : new Error(String(e));
-          console.log(`[WebSearch] ${engine.name} failed: ${lastError.message}`);
-          continue;
+          const error = e instanceof Error ? e : new Error(String(e));
+          console.log(`[WebSearch] ${engine.name} failed: ${error.message}`);
+          return { engine, results: [], success: false, error };
         }
+      });
+
+      const settled = await Promise.all(searchPromises);
+      const winner = settled.find(r => r.success && r.results.length > 0);
+
+      if (winner) {
+        const response = {
+          query: input.query,
+          results: winner.results,
+          count: winner.results.length,
+          provider: winner.engine.name.toLowerCase(),
+          took_ms: Date.now() - startedAt,
+        };
+
+        webCache.set(cacheKey, {
+          content: JSON.stringify(response),
+          timestamp: Date.now(),
+        });
+
+        console.log(`[WebSearch] Winner: ${winner.engine.name} with ${response.count} results in ${response.took_ms}ms`);
+        return response;
       }
 
-      console.error(`[WebSearch] All search engines failed. Last error: ${lastError?.message}`);
+      console.error(`[WebSearch] All search engines failed.`);
 
       return {
         query: input.query,

@@ -855,10 +855,14 @@ export class OpenFlowCore {
       ? [...llmTools, ...subAgentTools]
       : subAgentTools;
 
-    const openflowMdResult = await this.openflowMdLoader.loadStack(this.config.workspaceRoot);
+    const [openflowMdResult, autoObservations, distilledCards] = await Promise.all([
+      this.openflowMdLoader.loadStack(this.config.workspaceRoot),
+      this.autoMemoryExtractor.getObservations(this.config.workspaceRoot),
+      Promise.resolve(this.kairosDreaming.getDistilledCards()),
+    ]);
+
     const memoryWarnings = [...openflowMdResult.warnings];
 
-    const autoObservations = await this.autoMemoryExtractor.getObservations(this.config.workspaceRoot);
     const candidates: MemoryCard[] = autoObservations.map((obs) => ({
       id: obs.id,
       title: `${obs.type}: ${obs.content.slice(0, 40)}`,
@@ -868,7 +872,6 @@ export class OpenFlowCore {
       confidence: obs.confidence,
     }));
 
-    const distilledCards = this.kairosDreaming.getDistilledCards();
     const allCandidates = [...candidates, ...distilledCards.map((card) => ({
       id: card.id,
       title: card.title,

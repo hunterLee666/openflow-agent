@@ -160,7 +160,7 @@ export function createBridgeClient(url: string): BridgeClient {
     connected = false;
   };
 
-  const call = async <T>(method: string, params?: unknown): Promise<T> => {
+  const call = async <T>(method: string, params?: unknown, timeoutMs?: number): Promise<T> => {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       throw new Error('Not connected to server');
     }
@@ -186,13 +186,14 @@ export function createBridgeClient(url: string): BridgeClient {
       ws!.send(JSON.stringify(request));
       console.log(`[Bridge Client] Request sent: ${method}`, id);
 
+      const timeout = timeoutMs ?? (method === 'streamQuery' ? 120000 : 30000);
       setTimeout(() => {
         if (pendingRequests.has(id)) {
           pendingRequests.delete(id);
           console.log(`[Bridge Client] Request timed out: ${method}`, id);
-          reject(new Error(`Request ${method} timed out`));
+          reject(new Error(`Request ${method} timed out after ${timeout}ms`));
         }
-      }, 30000);
+      }, timeout);
     });
   };
 

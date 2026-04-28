@@ -161,15 +161,28 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     const handleStreamChunk = (event: { chunk: string; contentLength: number; isFirst: boolean }, notificationSessionId?: string) => {
-      console.log('[DEBUG handleStreamChunk] Received chunk:', { 
-        chunkLength: event.chunk.length, 
+      console.log('[DEBUG handleStreamChunk] Received chunk:', {
+        chunkLength: event.chunk.length,
         chunkPreview: event.chunk.substring(0, 50),
         contentLength: event.contentLength,
         isFirst: event.isFirst,
         streamingState: streamingStateRef.current,
         sessionCount: sessionsRef.current.length
       });
-      
+
+      if (!streamingStateRef.current) {
+        console.log('[DEBUG handleStreamChunk] streamingStateRef is null, attempting to initialize');
+        if (notificationSessionId) {
+          const session = sessionsRef.current.find((s: any) => s.id === notificationSessionId);
+          if (session) {
+            const assistantMessageIndex = session.messages.findIndex((m: any) => m.role === 'assistant' && m.status === 'streaming');
+            const targetIndex = assistantMessageIndex !== -1 ? assistantMessageIndex : session.messages.length;
+            console.log('[DEBUG handleStreamChunk] Auto-starting streaming for session:', notificationSessionId, 'messageIndex:', targetIndex);
+            startStreaming(notificationSessionId, targetIndex);
+          }
+        }
+      }
+
       const result = appendChunk(event.chunk);
       if (result === null) {
         console.log('[DEBUG handleStreamChunk] ERROR: streamingStateRef is null, chunk not appended');
@@ -218,7 +231,7 @@ const AppContent: React.FC = () => {
       offToolCall();
       offToolResult();
     };
-  }, [bridge, sessionsRef, appendChunk, addToolCall, updateToolCall]);
+  }, [bridge, sessionsRef, appendChunk, startStreaming, addToolCall, updateToolCall]);
 
   useEffect(() => {
     if (pendingQuery) {
