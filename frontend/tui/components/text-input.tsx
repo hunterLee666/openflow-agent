@@ -80,9 +80,10 @@ export const TextInput = ({
     if (
       key.upArrow ||
       key.downArrow ||
-      (key.ctrl && input === "c") ||
       key.tab ||
-      (key.shift && key.tab)
+      (key.shift && key.tab) ||
+      key.escape ||
+      (key.ctrl && input)
     ) {
       return;
     }
@@ -95,10 +96,6 @@ export const TextInput = ({
       }
       setError(null);
       onSubmit?.(value);
-      return;
-    }
-
-    if (key.escape) {
       return;
     }
 
