@@ -21,7 +21,7 @@ const formatTime = (date: Date): string =>
 
 const wrapPlainChildren = (node: ReactNode): ReactNode =>
   typeof node === "string" || typeof node === "number" ? (
-    <Text>{node}</Text>
+    <Text wrap="wrap">{node}</Text>
   ) : (
     node
   );
@@ -71,7 +71,6 @@ export const ChatMessage = ({
   const dots = ["", "●", "●●", "●●●"][dotFrame] ?? "";
 
   const childrenText = typeof children === "string" ? children : "";
-  console.log('[ChatMessage] content length:', childrenText.length, 'full content:', childrenText);
   const firstLine = childrenText.split("\n")[0] ?? "";
 
   const renderContent = () => {
