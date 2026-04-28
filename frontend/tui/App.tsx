@@ -117,19 +117,20 @@ const AppContent: React.FC = () => {
     hasLoadedSessions.current = true;
     bridge.listSessions().then(async (response) => {
       if (response.sessions && response.sessions.length > 0) {
-        const sessionsWithMessages = await Promise.all(
-          response.sessions.map(async (s: any) => {
-            const msgResponse = await bridge.getSession(s.id);
-            return {
-              id: s.id,
-              title: s.title || `Session ${s.id.slice(-4)}`,
-              messages: msgResponse.messages || [],
-              createdAt: s.startedAt || Date.now(),
-              updatedAt: s.endedAt || Date.now(),
-            };
-          })
-        );
-        setSessions(sessionsWithMessages);
+        const validSessions: any[] = [];
+        for (const s of response.sessions as any[]) {
+          const sessionId = s?.id || s?.sessionId || s;
+          if (!sessionId) continue;
+          const msgResponse = await bridge.getSession(sessionId);
+          validSessions.push({
+            id: sessionId,
+            title: s?.title || `Session ${String(sessionId).slice(-4)}`,
+            messages: msgResponse.messages || [],
+            createdAt: s?.startedAt || Date.now(),
+            updatedAt: s?.endedAt || Date.now(),
+          });
+        }
+        setSessions(validSessions);
       }
     }).catch(console.error);
   }, [bridge.isConnected, sessionState.sessions.length, bridge, setSessions]);
