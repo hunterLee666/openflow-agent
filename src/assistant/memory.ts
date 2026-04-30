@@ -11,7 +11,7 @@ export class JarvisMemory {
   private dailyLogPath: string
 
   constructor(memoryDir?: string, maxMemorySize: number = 10000) {
-    this.memoryDir = memoryDir ?? join(homedir(), '.openflow', 'jarvis', 'memory')
+    this.memoryDir = memoryDir || join(homedir(), '.openflow', 'jarvis', 'memory')
     this.maxMemorySize = maxMemorySize
     this.dailyLogPath = this.getDailyLogPath()
     this.ensureMemoryDir()
