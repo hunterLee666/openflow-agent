@@ -1,91 +1,74 @@
-import type { ToolUseContext } from '@tool'
-import type { PermissionMode } from '@openflow-types/permissionMode'
+import type { PermissionMode } from '@openflow-types/permissionMode';
+import { getCwd } from '@utils/state';
 
-const DEFAULT_CONVERSATION_KEY = 'default'
+// 定义权限模式的循环顺序
+const PERMISSION_MODE_ORDER: PermissionMode[] = [
+  'bypassPermissions',
+  'ask',
+  'auto',
+  'acceptEdits',
+  'dontAsk',
+  'plan',
+  'default',
+];
 
-const permissionModeByConversationKey = new Map<string, PermissionMode>()
+const DEFAULT_CONVERSATION_KEY = 'default';
+const permissionModeByConversationKey = new Map<string, PermissionMode>();
 
-function getConversationKey(context?: Pick<ToolUseContext, 'options'>): string {
-  const messageLogName =
-    context?.options?.messageLogName ?? DEFAULT_CONVERSATION_KEY
-  const forkNumber = context?.options?.forkNumber ?? 0
-  return `${messageLogName}:${forkNumber}`
+export function getNextPermissionMode(current: PermissionMode): PermissionMode {
+  const currentIndex = PERMISSION_MODE_ORDER.indexOf(current);
+  if (currentIndex === -1) {
+    return PERMISSION_MODE_ORDER[0];
+  }
+  const nextIndex = (currentIndex + 1) % PERMISSION_MODE_ORDER.length;
+  return PERMISSION_MODE_ORDER[nextIndex];
+}
+
+export function parsePermissionMode(mode: any): PermissionMode {
+  if (typeof mode === 'string' && PERMISSION_MODE_ORDER.includes(mode as PermissionMode)) {
+    return mode as PermissionMode;
+  }
+  return 'default';
 }
 
 export function getPermissionModeForConversationKey(options: {
-  conversationKey: string
-  isBypassPermissionsModeAvailable: boolean
+  conversationKey: string;
+  isBypassPermissionsModeAvailable: boolean;
 }): PermissionMode {
-  const existing = permissionModeByConversationKey.get(options.conversationKey)
-  if (existing) {
-    if (
-      existing === 'bypassPermissions' &&
-      !options.isBypassPermissionsModeAvailable
-    ) {
-      permissionModeByConversationKey.set(options.conversationKey, 'default')
-      return 'default'
-    }
-    return existing
+  const key = options.conversationKey || DEFAULT_CONVERSATION_KEY;
+  const stored = permissionModeByConversationKey.get(key);
+  if (stored) {
+    return stored;
   }
-
-  permissionModeByConversationKey.set(options.conversationKey, 'default')
-  return 'default'
+  // 如果 bypass 可用，默认使用它；否则使用 ask
+  return options.isBypassPermissionsModeAvailable ? 'bypassPermissions' : 'ask';
 }
 
 export function setPermissionModeForConversationKey(options: {
-  conversationKey: string
-  mode: PermissionMode
+  conversationKey: string;
+  mode: PermissionMode;
 }): void {
-  permissionModeByConversationKey.set(options.conversationKey, options.mode)
+  const key = options.conversationKey || DEFAULT_CONVERSATION_KEY;
+  permissionModeByConversationKey.set(key, options.mode);
 }
 
-export function getPermissionMode(context?: ToolUseContext): PermissionMode {
-  const conversationKey = getConversationKey(context)
-  const safeMode = context?.options?.safeMode ?? false
-
-  const fromToolPermissionContext =
-    context?.options?.toolPermissionContext?.mode
-  if (
-    fromToolPermissionContext === 'default' ||
-    fromToolPermissionContext === 'acceptEdits' ||
-    fromToolPermissionContext === 'plan' ||
-    fromToolPermissionContext === 'dontAsk' ||
-    fromToolPermissionContext === 'bypassPermissions'
-  ) {
-    if (fromToolPermissionContext === 'bypassPermissions' && safeMode) {
-      return 'default'
-    }
-    return fromToolPermissionContext
+export function getPermissionMode(context?: { conversationKey?: string; isBypassPermissionsModeAvailable?: boolean }): PermissionMode {
+  if (!context) {
+    return 'default';
   }
-
-  const override = context?.options?.permissionMode
-  if (
-    override === 'default' ||
-    override === 'acceptEdits' ||
-    override === 'plan' ||
-    override === 'dontAsk' ||
-    override === 'bypassPermissions'
-  ) {
-    if (override === 'bypassPermissions' && safeMode) {
-      return 'default'
-    }
-    return override
-  }
-
   return getPermissionModeForConversationKey({
-    conversationKey,
-    isBypassPermissionsModeAvailable: !safeMode,
-  })
+    conversationKey: context.conversationKey || DEFAULT_CONVERSATION_KEY,
+    isBypassPermissionsModeAvailable: context.isBypassPermissionsModeAvailable ?? false,
+  });
 }
 
-export function setPermissionMode(
-  context: ToolUseContext,
-  mode: PermissionMode,
-): void {
-  const conversationKey = getConversationKey(context)
-  permissionModeByConversationKey.set(conversationKey, mode)
+export function setPermissionMode(context: { conversationKey?: string }, mode: PermissionMode): void {
+  setPermissionModeForConversationKey({
+    conversationKey: context.conversationKey || DEFAULT_CONVERSATION_KEY,
+    mode,
+  });
 }
 
 export function __resetPermissionModeStateForTests(): void {
-  permissionModeByConversationKey.clear()
+  permissionModeByConversationKey.clear();
 }

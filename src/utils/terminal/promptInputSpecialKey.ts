@@ -19,10 +19,11 @@ export function getPromptInputSpecialKeyAction(args: {
   }
 
   const optionOrMeta = Boolean(args.key.meta) || Boolean(args.key.option)
+  const isM = args.inputChar === 'm' || args.inputChar === 'M' || args.inputChar === '\r'
 
   if (
     args.inputChar === 'µ' ||
-    (optionOrMeta && (args.inputChar === 'm' || args.inputChar === 'M'))
+    (optionOrMeta && isM)
   ) {
     return 'modelSwitch'
   }

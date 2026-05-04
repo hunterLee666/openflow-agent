@@ -174,10 +174,13 @@ function PromptInput({
 
   const { columns, rows } = useTerminalSize()
 
-  const commandWidth = useMemo(
-    () => Math.max(...commands.map(cmd => cmd.userFacingName().length)) + 5,
-    [commands],
-  )
+   const commandWidth = useMemo(() => {
+     const lengths = commands.map(cmd => {
+       const name = typeof cmd.userFacingName === 'function' ? cmd.userFacingName() : (cmd.name || '');
+       return name.length;
+     });
+     return (lengths.length > 0 ? Math.max(...lengths) : 0) + 5;
+   }, [commands]);
 
   const {
     suggestions,
@@ -749,21 +752,21 @@ function PromptInput({
               ) : mode === 'prompt' && currentMode !== 'default' ? (
                 <CompactModeIndicator />
               ) : (
-                <>
-                  <Text
-                    color={mode === 'bash' ? theme.bashBorder : undefined}
-                    dimColor={mode !== 'bash'}
-                  >
-                    ! run shell command
-                  </Text>
-                  <Text dimColor> · / for commands · </Text>
-                  <Text
-                    color={mode === 'openflowing' ? theme.noting : undefined}
-                    dimColor={mode !== 'openflowing'}
-                  >
-                    #
-                  </Text>
-                </>
+                 <>
+                   <Text
+                     color={mode === 'bash' ? theme.bashBorder : undefined}
+                     dimColor={mode !== 'bash'}
+                   >
+                     ! run shell command
+                   </Text>
+                   <Text dimColor> · / for commands · </Text>
+                   <Text
+                     color={mode === 'openflowing' ? theme.noting : undefined}
+                     dimColor={mode !== 'openflowing'}
+                   >
+                     #
+                   </Text>
+                 </>
               )}
             </Box>
             <Box justifyContent="flex-end">
@@ -783,11 +786,11 @@ function PromptInput({
                 minHeight={1}
               >
                 <Box justifyContent="flex-start" gap={1}>
-                  <Text dimColor wrap="truncate-end">
-                    opt+Enter newline ·{' '}
-                    {showQuickModelSwitchShortcut ? 'opt+M model · ' : ''}
-                    opt+G editor · {modeCycleShortcut.displayText} switch
-                  </Text>
+                   <Text dimColor wrap="truncate-end">
+                     opt+Enter newline ·{' '}
+                     {showQuickModelSwitchShortcut ? 'opt+m model · ' : ''}
+                     opt+G editor · {modeCycleShortcut.displayText} switch
+                   </Text>
                 </Box>
                 <SentryErrorBoundary
                   children={

@@ -1,858 +1,200 @@
-import { memoize } from 'lodash-es'
+// Model utilities
+import type { GlobalConfig } from '../../types';
+import { getGlobalConfig as loadGlobalConfig, saveGlobalConfig } from '@utils/config';
 
-import { logError } from '@utils/log'
-import { debug as debugLogger } from '@utils/log/debugLogger'
-import {
-  getGlobalConfig,
-  ModelProfile,
-  ModelPointerType,
-  saveGlobalConfig,
-} from '@utils/config'
-
-export const USE_BEDROCK = !!(
-  process.env.OPENFLOW_USE_BEDROCK ?? process.env.CLAUDE_CODE_USE_BEDROCK
-)
-export const USE_VERTEX = !!(
-  process.env.OPENFLOW_USE_VERTEX ?? process.env.CLAUDE_CODE_USE_VERTEX
-)
-
-export interface ModelConfig {
-  bedrock: string
-  vertex: string
-  firstParty: string
+export function isDefaultSlowAndCapableModel(_model: string): boolean {
+  return false;
+}
+export function getModelInfo(_model: string): any {
+  return null;
 }
 
-const DEFAULT_MODEL_CONFIG: ModelConfig = {
-  bedrock: 'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
-  vertex: 'claude-3-7-sonnet@20250219',
-  firstParty: 'claude-sonnet-4-20250514',
-}
+// Singleton instance (used by getModelManager)
+let defaultModelManager: ModelManager | null = null;
 
-async function getModelConfig(): Promise<ModelConfig> {
-  return DEFAULT_MODEL_CONFIG
-}
-
-export const getSlowAndCapableModel = memoize(async (): Promise<string> => {
-  const config = await getGlobalConfig()
-
-  const modelManager = new ModelManager(config)
-  const model = modelManager.getMainAgentModel()
-
-  if (model) {
-    return model
+export function getModelManager(): ModelManager {
+  if (!defaultModelManager) {
+    const cfg = loadGlobalConfig();
+    defaultModelManager = new ModelManager(cfg);
   }
-
-  const modelConfig = await getModelConfig()
-  if (USE_BEDROCK) return modelConfig.bedrock
-  if (USE_VERTEX) return modelConfig.vertex
-  return modelConfig.firstParty
-})
-
-export async function isDefaultSlowAndCapableModel(): Promise<boolean> {
-  return (
-    !process.env.ANTHROPIC_MODEL ||
-    process.env.ANTHROPIC_MODEL === (await getSlowAndCapableModel())
-  )
+  return defaultModelManager;
 }
 
-export function getVertexRegionForModel(
-  model: string | undefined,
-): string | undefined {
-  if (model?.startsWith('claude-3-5-haiku')) {
-    return process.env.VERTEX_REGION_CLAUDE_3_5_HAIKU
-  } else if (model?.startsWith('claude-3-5-sonnet')) {
-    return process.env.VERTEX_REGION_CLAUDE_3_5_SONNET
-  } else if (model?.startsWith('claude-3-7-sonnet')) {
-    return process.env.VERTEX_REGION_CLAUDE_3_7_SONNET
-  }
+export function reloadModelManager(): void {
+  defaultModelManager = null;
 }
 
 export class ModelManager {
-  private config: any
-  private modelProfiles: ModelProfile[]
+  // No hardcoded models; all models come from user configuration
 
-  constructor(config: any) {
-    this.config = config
-    this.modelProfiles = config.modelProfiles || []
+  constructor(private config: GlobalConfig) {}
+
+  getModelName(pointer?: string): string {
+    const model = this.config.model;
+    if (pointer === 'main' || !pointer) {
+      return model || '';
+    }
+    return model || '';
   }
 
-  getCurrentModel(): string | null {
-    const mainModelName = this.config.modelPointers?.main
-    if (mainModelName) {
-      const profile = this.findModelProfile(mainModelName)
-      if (profile && profile.isActive) {
-        return profile.modelName
-      }
-    }
-
-    return this.getMainAgentModel()
-  }
-
-  getMainAgentModel(): string | null {
-    const mainModelName = this.config.modelPointers?.main
-    if (mainModelName) {
-      const profile = this.findModelProfile(mainModelName)
-      if (profile && profile.isActive) {
-        return profile.modelName
-      }
-    }
-
-    const activeProfile = this.modelProfiles.find(p => p.isActive)
-    if (activeProfile) {
-      return activeProfile.modelName
-    }
-
-    return null
-  }
-
-  getTaskToolModel(): string | null {
-    const taskModelName = this.config.modelPointers?.task
-    if (taskModelName) {
-      const profile = this.findModelProfile(taskModelName)
-      if (profile && profile.isActive) {
-        return profile.modelName
-      }
-    }
-
-    return this.getMainAgentModel()
-  }
-
-  switchToNextModelWithContextCheck(currentContextTokens: number = 0): {
-    success: boolean
-    modelName: string | null
-    previousModelName: string | null
-    contextOverflow: boolean
-    usagePercentage: number
-    currentContextTokens: number
-    skippedModels?: Array<{
-      name: string
-      provider: string
-      contextLength: number
-      budgetTokens: number | null
-      usagePercentage: number
-    }>
-  } {
-    const allProfiles = this.getAllConfiguredModels()
-    if (allProfiles.length === 0) {
-      return {
-        success: false,
-        modelName: null,
-        previousModelName: null,
-        contextOverflow: false,
-        usagePercentage: 0,
-        currentContextTokens,
-      }
-    }
-
-    allProfiles.sort((a, b) => a.createdAt - b.createdAt)
-
-    const currentMainModelName = this.config.modelPointers?.main
-    const currentModel = currentMainModelName
-      ? this.findModelProfile(currentMainModelName)
-      : null
-    const previousModelName = currentModel?.name || null
-
-    const budgetForModel = (
-      model: ModelProfile,
-    ): {
-      budgetTokens: number | null
-      usagePercentage: number
-      compatible: boolean
-    } => {
-      const contextLength = Number(model.contextLength)
-      if (!Number.isFinite(contextLength) || contextLength <= 0) {
-        return { budgetTokens: null, usagePercentage: 0, compatible: true }
-      }
-      const budgetTokens = Math.floor(contextLength * 0.9)
-      const usagePercentage =
-        budgetTokens > 0 ? (currentContextTokens / budgetTokens) * 100 : 0
-      return {
-        budgetTokens,
-        usagePercentage,
-        compatible:
-          budgetTokens > 0 ? currentContextTokens <= budgetTokens : true,
-      }
-    }
-
-    const currentIndex = currentMainModelName
-      ? allProfiles.findIndex(p => p.modelName === currentMainModelName)
-      : -1
-    const startIndex = currentIndex >= 0 ? currentIndex : -1
-
-    if (allProfiles.length === 1) {
-      return {
-        success: false,
-        modelName: null,
-        previousModelName,
-        contextOverflow: false,
-        usagePercentage: 0,
-        currentContextTokens,
-      }
-    }
-
-    const maxOffsets =
-      startIndex === -1 ? allProfiles.length : allProfiles.length - 1
-    const skippedModels: NonNullable<
-      ReturnType<
-        ModelManager['switchToNextModelWithContextCheck']
-      >['skippedModels']
-    > = []
-
-    let selected: ModelProfile | null = null
-    let selectedUsagePercentage = 0
-
-    for (let offset = 1; offset <= maxOffsets; offset++) {
-      const candidateIndex =
-        (startIndex + offset + allProfiles.length) % allProfiles.length
-      const candidate = allProfiles[candidateIndex]
-      if (!candidate) continue
-
-      const { budgetTokens, usagePercentage, compatible } =
-        budgetForModel(candidate)
-      if (compatible) {
-        selected = candidate
-        selectedUsagePercentage = usagePercentage
-        break
-      }
-      skippedModels.push({
-        name: candidate.name,
-        provider: candidate.provider,
-        contextLength: candidate.contextLength,
-        budgetTokens,
-        usagePercentage,
-      })
-    }
-
-    if (!selected) {
-      const firstSkipped = skippedModels[0]
-      return {
-        success: false,
-        modelName: null,
-        previousModelName,
-        contextOverflow: true,
-        usagePercentage: firstSkipped?.usagePercentage ?? 0,
-        currentContextTokens,
-        skippedModels,
-      }
-    }
-
-    if (!selected.isActive) {
-      selected.isActive = true
-    }
-
-    this.setPointer('main', selected.modelName)
-    this.updateLastUsed(selected.modelName)
-
-    return {
-      success: true,
-      modelName: selected.name,
-      previousModelName,
-      contextOverflow: false,
-      usagePercentage: selectedUsagePercentage,
-      currentContextTokens,
-      skippedModels,
-    }
-  }
-
-  switchToNextModel(currentContextTokens: number = 0): {
-    success: boolean
-    modelName: string | null
-    blocked?: boolean
-    message?: string
-  } {
-    const result = this.switchToNextModelWithContextCheck(currentContextTokens)
-
-    const formatTokens = (tokens: number): string => {
-      if (!Number.isFinite(tokens)) return 'unknown'
-      if (tokens >= 1000) return `${Math.round(tokens / 1000)}k`
-      return String(Math.round(tokens))
-    }
-
-    const allModels = this.getAllConfiguredModels()
-    if (allModels.length === 0) {
-      return {
-        success: false,
-        modelName: null,
-        blocked: false,
-        message: '❌ No models configured. Use /model to add models.',
-      }
-    }
-    if (allModels.length === 1) {
-      return {
-        success: false,
-        modelName: null,
-        blocked: false,
-        message: `⚠️ Only one model configured (${allModels[0].modelName}). Use /model to add more models for switching.`,
-      }
-    }
-
-    const currentModel = this.findModelProfile(this.config.modelPointers?.main)
-    const modelsSorted = [...allModels].sort(
-      (a, b) => a.createdAt - b.createdAt,
-    )
-    const currentIndex = modelsSorted.findIndex(
-      m => m.modelName === currentModel?.modelName,
-    )
-    const totalModels = modelsSorted.length
-
-    if (result.success && result.modelName) {
-      const skippedCount = result.skippedModels?.length ?? 0
-      const skippedSuffix =
-        skippedCount > 0 ? ` · skipped ${skippedCount} incompatible` : ''
-      const contextSuffix =
-        currentModel?.contextLength && result.currentContextTokens
-          ? ` · context ~${formatTokens(result.currentContextTokens)}/${formatTokens(currentModel.contextLength)}`
-          : ''
-
-      return {
-        success: true,
-        modelName: result.modelName,
-        blocked: false,
-        message: `✅ Switched to ${result.modelName} (${currentIndex + 1}/${totalModels})${currentModel?.provider ? ` [${currentModel.provider}]` : ''}${skippedSuffix}${contextSuffix}`,
-      }
-    }
-
-    if (result.contextOverflow) {
-      const attempted = result.skippedModels?.[0]
-      const attemptedContext = attempted?.contextLength
-      const attemptedBudget = attempted?.budgetTokens
-      const currentLabel =
-        currentModel?.name || currentModel?.modelName || 'current model'
-
-      const attemptedText = attempted
-        ? `Can't switch to ${attempted.name}: current ~${formatTokens(result.currentContextTokens)} tokens exceeds safe budget (~${formatTokens(attemptedBudget ?? 0)} tokens, 90% of ${formatTokens(attemptedContext ?? 0)}).`
-        : `Can't switch models due to context size (~${formatTokens(result.currentContextTokens)} tokens).`
-
-      return {
-        success: false,
-        modelName: null,
-        blocked: true,
-        message: `⚠️ ${attemptedText} Keeping ${currentLabel}.`,
-      }
-    }
-
-    return {
-      success: false,
-      modelName: null,
-      blocked: false,
-      message: '❌ Failed to switch models',
-    }
-  }
-
-  revertToPreviousModel(previousModelName: string): boolean {
-    const previousModel = this.modelProfiles.find(
-      p => p.name === previousModelName && p.isActive,
-    )
-    if (!previousModel) {
-      return false
-    }
-
-    this.setPointer('main', previousModel.modelName)
-    this.updateLastUsed(previousModel.modelName)
-    return true
-  }
-
-  analyzeContextCompatibility(
-    model: ModelProfile,
-    contextTokens: number,
-  ): {
-    compatible: boolean
-    severity: 'safe' | 'warning' | 'critical'
-    usagePercentage: number
-    recommendation: string
-  } {
-    const usableContext = Math.floor(model.contextLength * 0.8)
-    const usagePercentage = (contextTokens / usableContext) * 100
-
-    if (usagePercentage <= 70) {
-      return {
-        compatible: true,
-        severity: 'safe',
-        usagePercentage,
-        recommendation: 'Full context preserved',
-      }
-    } else if (usagePercentage <= 90) {
-      return {
-        compatible: true,
-        severity: 'warning',
-        usagePercentage,
-        recommendation: 'Context usage high, consider compression',
-      }
-    } else {
-      return {
-        compatible: false,
-        severity: 'critical',
-        usagePercentage,
-        recommendation: 'Auto-compression or message truncation required',
-      }
-    }
-  }
-
-  switchToNextModelWithAnalysis(currentContextTokens: number = 0): {
-    modelName: string | null
-    contextAnalysis: ReturnType<typeof this.analyzeContextCompatibility> | null
-    requiresCompression: boolean
-    estimatedTokensAfterSwitch: number
-  } {
-    const result = this.switchToNextModel(currentContextTokens)
-
-    if (!result.success || !result.modelName) {
-      return {
-        modelName: null,
-        contextAnalysis: null,
-        requiresCompression: false,
-        estimatedTokensAfterSwitch: 0,
-      }
-    }
-
-    const newModel = this.getModel('main')
-    if (!newModel) {
-      return {
-        modelName: result.modelName,
-        contextAnalysis: null,
-        requiresCompression: false,
-        estimatedTokensAfterSwitch: currentContextTokens,
-      }
-    }
-
-    const analysis = this.analyzeContextCompatibility(
-      newModel,
-      currentContextTokens,
-    )
-
-    return {
-      modelName: result.modelName,
-      contextAnalysis: analysis,
-      requiresCompression: analysis.severity === 'critical',
-      estimatedTokensAfterSwitch: currentContextTokens,
-    }
-  }
-
-  canModelHandleContext(model: ModelProfile, contextTokens: number): boolean {
-    const analysis = this.analyzeContextCompatibility(model, contextTokens)
-    return analysis.compatible
-  }
-
-  findModelWithSufficientContext(
-    models: ModelProfile[],
-    contextTokens: number,
-  ): ModelProfile | null {
-    return (
-      models.find(model => this.canModelHandleContext(model, contextTokens)) ||
-      null
-    )
-  }
-
-  getModelForContext(
-    contextType: 'terminal' | 'main-agent' | 'task-tool',
-  ): string | null {
-    switch (contextType) {
-      case 'terminal':
-        return this.getCurrentModel()
-      case 'main-agent':
-        return this.getMainAgentModel()
-      case 'task-tool':
-        return this.getTaskToolModel()
-      default:
-        return this.getMainAgentModel()
-    }
-  }
-
-  getActiveModelProfiles(): ModelProfile[] {
-    return this.modelProfiles.filter(p => p.isActive)
-  }
-
-  hasConfiguredModels(): boolean {
-    return this.getActiveModelProfiles().length > 0
-  }
-
-  getModel(pointer: ModelPointerType): ModelProfile | null {
-    const pointerId = this.config.modelPointers?.[pointer]
-    if (!pointerId) {
-      return this.getDefaultModel()
-    }
-
-    const profile = this.findModelProfile(pointerId)
-    return profile && profile.isActive ? profile : this.getDefaultModel()
-  }
-
-  getModelName(pointer: ModelPointerType): string | null {
-    const profile = this.getModel(pointer)
-    return profile ? profile.modelName : null
-  }
-
-  getCompactModel(): string | null {
-    return this.getModelName('compact') || this.getModelName('main')
-  }
-
-  getQuickModel(): string | null {
-    return (
-      this.getModelName('quick') ||
-      this.getModelName('task') ||
-      this.getModelName('main')
-    )
-  }
-
-  async addModel(
-    config: Omit<ModelProfile, 'createdAt' | 'isActive'>,
-  ): Promise<string> {
-    const existingByModelName = this.modelProfiles.find(
-      p => p.modelName === config.modelName,
-    )
-    if (existingByModelName) {
-      throw new Error(
-        `Model with modelName '${config.modelName}' already exists: ${existingByModelName.name}`,
-      )
-    }
-
-    const existingByName = this.modelProfiles.find(p => p.name === config.name)
-    if (existingByName) {
-      throw new Error(`Model with name '${config.name}' already exists`)
-    }
-
-    const newModel: ModelProfile = {
-      ...config,
-      createdAt: Date.now(),
+  getActiveModelProfiles(): Array<{ modelName: string; provider: string; isActive: boolean; capabilities?: string[]; maxTokens?: number }> {
+    const model = this.config.model;
+    if (!model) return [];
+    const provider = this.getProviderForModel(model);
+    return [{
+      modelName: model,
+      provider,
       isActive: true,
-    }
-
-    this.modelProfiles.push(newModel)
-
-    if (this.modelProfiles.length === 1) {
-      this.config.modelPointers = {
-        main: config.modelName,
-        task: config.modelName,
-        compact: config.modelName,
-        quick: config.modelName,
-      }
-      this.config.defaultModelName = config.modelName
-    } else {
-      if (!this.config.modelPointers) {
-        this.config.modelPointers = {
-          main: config.modelName,
-          task: '',
-          compact: '',
-          quick: '',
-        }
-      } else {
-        this.config.modelPointers.main = config.modelName
-      }
-    }
-
-    this.saveConfig()
-    return config.modelName
+      capabilities: ['tool_calling', 'streaming'],
+      maxTokens: 16384,
+    }];
   }
 
-  setPointer(pointer: ModelPointerType, modelName: string): void {
-    if (!this.findModelProfile(modelName)) {
-      throw new Error(`Model '${modelName}' not found`)
+  resolveModelWithInfo(modelId: string): { success: boolean; profile: any | null } {
+    const model = this.resolveModel(modelId);
+    if (model) {
+      return { success: true, profile: { ...model, isActive: true, provider: model.provider } };
     }
-
-    if (!this.config.modelPointers) {
-      this.config.modelPointers = {
-        main: '',
-        task: '',
-        compact: '',
-        quick: '',
-      }
-    }
-
-    this.config.modelPointers[pointer] = modelName
-    this.saveConfig()
+    return { success: true, profile: null };
   }
 
-  getAvailableModels(): ModelProfile[] {
-    return this.modelProfiles.filter(p => p.isActive)
+  resolveModel(modelId: string): { modelName: string; provider: string; isActive: boolean } | null {
+    if (modelId === 'main' || modelId === 'default') {
+      const model = this.config.model;
+      if (!model) return null;
+      return { modelName: model, provider: this.getProviderForModel(model), isActive: true };
+    }
+    return null;
   }
 
-  getAllConfiguredModels(): ModelProfile[] {
-    return this.modelProfiles
+  getModel(pointer: string): { modelName: string; provider: string; isActive: boolean; name: string } | null {
+    if (pointer === 'main' || pointer === 'default') {
+      const model = this.config.model;
+      if (!model) return null;
+      return {
+        modelName: model,
+        provider: this.getProviderForModel(model),
+        isActive: true,
+        name: this.getDisplayName(model),
+      };
+    }
+    return null;
+  }
+
+  async addModel(config: { modelName?: string; name?: string }): Promise<string> {
+    const modelName = config.modelName || config.name || '';
+    if (!modelName) return 'custom';
+    // Add model to global config's models array
+    const cfg = loadGlobalConfig();
+    if (!cfg.models) cfg.models = [];
+    if (!cfg.models.includes(modelName)) {
+      cfg.models.push(modelName);
+      saveGlobalConfig(cfg);
+      reloadModelManager();
+    }
+    return modelName;
+  }
+
+  getModelSwitchingDebugInfo(): { enabled: boolean; totalModels: number; activeModels: number } {
+    const models = this.getAllModels();
+    const activeCount = this.config.model ? 1 : 0;
+    return { enabled: true, totalModels: models.length, activeModels: activeCount };
   }
 
   getAllAvailableModelNames(): string[] {
-    return this.getAvailableModels().map(p => p.modelName)
+    return this.getAllModels();
   }
 
-  getAllConfiguredModelNames(): string[] {
-    return this.getAllConfiguredModels().map(p => p.modelName)
+  getAvailableModels(): Array<{ modelName: string; provider: string; isActive: boolean; displayName?: string; capabilities?: string[]; maxTokens?: number }> {
+    const models = this.getAllModels();
+    const currentModel = this.config.model;
+    return models.map(model => ({
+      modelName: model,
+      provider: this.getProviderForModel(model),
+      isActive: model === currentModel,
+      displayName: this.getDisplayName(model),
+      capabilities: ['tool_calling', 'streaming'],
+      maxTokens: 16384,
+    }));
   }
 
-  getModelSwitchingDebugInfo(): {
-    totalModels: number
-    activeModels: number
-    inactiveModels: number
-    currentMainModel: string | null
-    availableModels: Array<{
-      name: string
-      modelName: string
-      provider: string
-      isActive: boolean
-      lastUsed?: number
-    }>
-    modelPointers: Record<string, string | undefined>
-  } {
-    const availableModels = this.getAvailableModels()
-    const currentMainModelName = this.config.modelPointers?.main
-
-    return {
-      totalModels: this.modelProfiles.length,
-      activeModels: availableModels.length,
-      inactiveModels: this.modelProfiles.length - availableModels.length,
-      currentMainModel: currentMainModelName || null,
-      availableModels: this.modelProfiles.map(p => ({
-        name: p.name,
-        modelName: p.modelName,
-        provider: p.provider,
-        isActive: p.isActive,
-        lastUsed: p.lastUsed,
-      })),
-      modelPointers: this.config.modelPointers || {},
+  async removeModel(modelName: string): Promise<boolean> {
+    const cfg = loadGlobalConfig();
+    if (!cfg.models) return false;
+    const index = cfg.models.indexOf(modelName);
+    if (index === -1) return false;
+    cfg.models.splice(index, 1);
+    // If removing the currently active model, unset it
+    if (cfg.model === modelName) {
+      cfg.model = undefined;
     }
+    saveGlobalConfig(cfg);
+    reloadModelManager();
+    return true;
   }
 
-  removeModel(modelName: string): void {
-    this.modelProfiles = this.modelProfiles.filter(
-      p => p.modelName !== modelName,
-    )
-
-    if (this.config.modelPointers) {
-      Object.keys(this.config.modelPointers).forEach(pointer => {
-        if (
-          this.config.modelPointers[pointer as ModelPointerType] === modelName
-        ) {
-          this.config.modelPointers[pointer as ModelPointerType] =
-            this.config.defaultModelName || ''
-        }
-      })
+  switchToNextModel(_currentTokens: number): { success: boolean; modelName?: string; message?: string; blocked?: boolean } {
+    const models = this.getAllModels();
+    if (models.length <= 1) {
+      return { success: false, message: 'Need at least 2 models to switch. Use /model add to add more.' };
     }
-
-    this.saveConfig()
-  }
-
-  private getDefaultModel(): ModelProfile | null {
-    if (this.config.defaultModelId) {
-      const profile = this.findModelProfile(this.config.defaultModelId)
-      if (profile && profile.isActive) {
-        return profile
-      }
-    }
-    return this.modelProfiles.find(p => p.isActive) || null
-  }
-
-  private saveConfig(): void {
-    const updatedConfig = {
-      ...this.config,
-      modelProfiles: this.modelProfiles,
-    }
-    saveGlobalConfig(updatedConfig)
-  }
-
-  async getFallbackModel(): Promise<string> {
-    const modelConfig = await getModelConfig()
-    if (USE_BEDROCK) return modelConfig.bedrock
-    if (USE_VERTEX) return modelConfig.vertex
-    return modelConfig.firstParty
-  }
-
-  resolveModel(modelParam: string | ModelPointerType): ModelProfile | null {
-    if (['main', 'task', 'compact', 'quick'].includes(modelParam)) {
-      const pointerId =
-        this.config.modelPointers?.[modelParam as ModelPointerType]
-      if (pointerId) {
-        let profile = this.findModelProfile(pointerId)
-        if (!profile) {
-          profile = this.findModelProfileByModelName(pointerId)
-        }
-        if (profile && profile.isActive) {
-          return profile
-        }
-      }
-      return this.getDefaultModel()
-    }
-
-    let profile = this.findModelProfile(modelParam)
-    if (profile && profile.isActive) {
-      return profile
-    }
-
-    profile = this.findModelProfileByModelName(modelParam)
-    if (profile && profile.isActive) {
-      return profile
-    }
-
-    profile = this.findModelProfileByName(modelParam)
-    if (profile && profile.isActive) {
-      return profile
-    }
-
-    if (typeof modelParam === 'string') {
-      const qualified = this.resolveProviderQualifiedModel(modelParam)
-      if (qualified && qualified.isActive) {
-        return qualified
-      }
-    }
-
-    return this.getDefaultModel()
-  }
-
-  resolveModelWithInfo(modelParam: string | ModelPointerType): {
-    success: boolean
-    profile: ModelProfile | null
-    error?: string
-  } {
-    const isPointer = ['main', 'task', 'compact', 'quick'].includes(modelParam)
-
-    if (isPointer) {
-      const pointerId =
-        this.config.modelPointers?.[modelParam as ModelPointerType]
-      if (!pointerId) {
-        return {
-          success: false,
-          profile: null,
-          error: `Model pointer '${modelParam}' is not configured. Use /model to set up models.`,
-        }
-      }
-
-      let profile = this.findModelProfile(pointerId)
-      if (!profile) {
-        profile = this.findModelProfileByModelName(pointerId)
-      }
-
-      if (!profile) {
-        return {
-          success: false,
-          profile: null,
-          error: `Model pointer '${modelParam}' points to invalid model '${pointerId}'. Use /model to reconfigure.`,
-        }
-      }
-
-      if (!profile.isActive) {
-        return {
-          success: false,
-          profile: null,
-          error: `Model '${profile.name}' (pointed by '${modelParam}') is inactive. Use /model to activate it.`,
-        }
-      }
-
-      return {
-        success: true,
-        profile,
-      }
+    const currentModel = this.config.model;
+    const currentIndex = currentModel ? models.indexOf(currentModel) : -1;
+    let nextModel: string;
+    if (currentIndex === -1) {
+      nextModel = models[0];
     } else {
-      let profile = this.findModelProfile(modelParam)
-      if (!profile) {
-        profile = this.findModelProfileByModelName(modelParam)
-      }
-      if (!profile) {
-        profile = this.findModelProfileByName(modelParam)
-      }
-
-      if (!profile && typeof modelParam === 'string') {
-        profile = this.resolveProviderQualifiedModel(modelParam)
-      }
-
-      if (!profile) {
-        return {
-          success: false,
-          profile: null,
-           error: `Model '${modelParam}' not found. Use /model to add models, or run 'openflow models list' to see configured profiles.`,
-        }
-      }
-
-      if (!profile.isActive) {
-        return {
-          success: false,
-          profile: null,
-          error: `Model '${profile.name}' is inactive. Use /model to activate it.`,
-        }
-      }
-
-      return {
-        success: true,
-        profile,
-      }
+      const nextIdx = (currentIndex + 1) % models.length;
+      nextModel = models[nextIdx];
     }
+    this.setModel(nextModel);
+    return { success: true, modelName: nextModel };
   }
 
-  private resolveProviderQualifiedModel(input: string): ModelProfile | null {
-    const trimmed = input.trim()
-    const colonIndex = trimmed.indexOf(':')
-    if (colonIndex <= 0 || colonIndex >= trimmed.length - 1) return null
-
-    const provider = trimmed.slice(0, colonIndex).trim().toLowerCase()
-    const modelOrName = trimmed.slice(colonIndex + 1).trim()
-    if (!provider || !modelOrName) return null
-
-    const providerProfiles = this.modelProfiles.filter(
-      p => String(p.provider).trim().toLowerCase() === provider,
-    )
-    if (providerProfiles.length === 0) return null
-
-    const byModelName = providerProfiles.find(p => p.modelName === modelOrName)
-    if (byModelName) return byModelName
-
-    const byName = providerProfiles.find(p => p.name === modelOrName)
-    if (byName) return byName
-
-    return null
-  }
-
-  private findModelProfile(modelName: string): ModelProfile | null {
-    return this.modelProfiles.find(p => p.modelName === modelName) || null
-  }
-
-  private findModelProfileByModelName(modelName: string): ModelProfile | null {
-    return this.modelProfiles.find(p => p.modelName === modelName) || null
-  }
-
-  private findModelProfileByName(name: string): ModelProfile | null {
-    return this.modelProfiles.find(p => p.name === name) || null
-  }
-
-  private updateLastUsed(modelName: string): void {
-    const profile = this.findModelProfile(modelName)
-    if (profile) {
-      profile.lastUsed = Date.now()
+  private getAllModels(): string[] {
+    // Use configured model list; if none, return empty array (no defaults)
+    const cfg = this.config;
+    const configuredModels = cfg.models || [];
+    // Ensure current model is in the list if it exists
+    if (cfg.model && !configuredModels.includes(cfg.model)) {
+      return [...configuredModels, cfg.model];
     }
+    return configuredModels;
+  }
+
+  private setModel(model: string): void {
+    // Update global config
+    const cfg = loadGlobalConfig();
+    cfg.model = model;
+    saveGlobalConfig(cfg);
+    // Update instance config
+    this.config.model = model;
+    // Reset singleton to force reload with new config
+    reloadModelManager();
+  }
+
+  private getProviderForModel(model: string): string {
+    if (model.startsWith('claude-') || model.startsWith('anthropic-')) {
+      return 'anthropic';
+    }
+    if (model.startsWith('gpt-') || model.startsWith('o1-') || model.startsWith('o3-') || model.startsWith('o4-') || model.startsWith('deepseek') || model.startsWith('qwen') || model.startsWith('yi-') || model.startsWith('glm') || model.startsWith('mistral') || model.startsWith('gemma')) {
+      return 'openai';
+    }
+    return 'custom';
+  }
+
+  private getDisplayName(model: string): string {
+    if (model.includes('sonnet')) return 'Sonnet';
+    if (model.includes('opus')) return 'Opus';
+    if (model.includes('gpt-4')) return 'GPT-4';
+    if (model.includes('gpt-3.5')) return 'GPT-3.5';
+    return model;
   }
 }
 
-let globalModelManager: ModelManager | null = null
-
-export const getModelManager = (): ModelManager => {
-  try {
-    if (!globalModelManager) {
-      const config = getGlobalConfig()
-      if (!config) {
-        debugLogger.warn('MODEL_MANAGER_GLOBAL_CONFIG_MISSING', {})
-        globalModelManager = new ModelManager({
-          modelProfiles: [],
-          modelPointers: { main: '', task: '', compact: '', quick: '' },
-        })
-      } else {
-        globalModelManager = new ModelManager(config)
-      }
-    }
-    return globalModelManager
-  } catch (error) {
-    logError(error)
-    debugLogger.error('MODEL_MANAGER_CREATE_FAILED', {
-      error: error instanceof Error ? error.message : String(error),
-    })
-    return new ModelManager({
-      modelProfiles: [],
-      modelPointers: { main: '', task: '', compact: '', quick: '' },
-    })
-  }
-}
-
-export const reloadModelManager = (): void => {
-  globalModelManager = null
-  getModelManager()
-}
-
-export const getQuickModel = (): string => {
-  const manager = getModelManager()
-  const quickModel = manager.getModel('quick')
-  return quickModel?.modelName || 'quick'
+// Bedrock / Vertex flags
+export const USE_BEDROCK = false;
+export const USE_VERTEX = false;
+export function getVertexRegionForModel(_model: string): string {
+  return 'us-east-1';
 }

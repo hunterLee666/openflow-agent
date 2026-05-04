@@ -1,58 +1,19 @@
-import { execFileNoThrow } from '@utils/system/execFileNoThrow'
-import { memoize } from 'lodash-es'
-import { join } from 'path'
-import { homedir } from 'os'
-import { CONFIG_BASE_DIR, CONFIG_FILE } from '@constants/product'
+import { platform as osPlatform } from 'os';
+import { homedir } from 'os';
+import { join } from 'path';
+
+const baseDir = join(homedir(), '.config', 'openflow');
+
 export function getOpenflowBaseDir(): string {
-  return (
-    process.env.OPENFLOW_CONFIG_DIR ??
-    join(homedir(), CONFIG_BASE_DIR)
-  )
+  return baseDir;
 }
 
 export function getGlobalConfigFilePath(): string {
-  return process.env.OPENFLOW_CONFIG_DIR
-    ? join(getOpenflowBaseDir(), 'config.json')
-    : join(homedir(), CONFIG_FILE)
+  return join(baseDir, 'config.json');
 }
-
-export function getMemoryDir(): string {
-  return join(getOpenflowBaseDir(), 'memory')
-}
-
-export const OPENFLOW_BASE_DIR = getOpenflowBaseDir()
-export const GLOBAL_CONFIG_FILE = getGlobalConfigFilePath()
-export const MEMORY_DIR = getMemoryDir()
-
-const getIsDocker = memoize(async (): Promise<boolean> => {
-  const { code } = await execFileNoThrow('test', ['-f', '/.dockerenv'])
-  if (code !== 0) {
-    return false
-  }
-  return process.platform === 'linux'
-})
-
-const hasInternetAccess = memoize(async (): Promise<boolean> => {
-  const offline =
-    process.env.OPENFLOW_OFFLINE ??
-    process.env.OFFLINE ??
-    process.env.NO_NETWORK ??
-    ''
-  const normalized = String(offline).trim().toLowerCase()
-  if (['1', 'true', 'yes', 'on'].includes(normalized)) return false
-  return true
-})
 
 export const env = {
-  getIsDocker,
-  hasInternetAccess,
-  isCI: Boolean(process.env.CI),
-  platform:
-    process.platform === 'win32'
-      ? 'windows'
-      : process.platform === 'darwin'
-        ? 'macos'
-        : 'linux',
-  nodeVersion: process.version,
-  terminal: process.env.TERM_PROGRAM,
-}
+  terminal: process.env.TERM_PROGRAM || process.env.TERM || '',
+  platform: osPlatform(),
+  isCI: !!process.env.CI,
+};

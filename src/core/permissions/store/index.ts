@@ -1,1 +1,0 @@
-export { savePermission } from './savePermission'

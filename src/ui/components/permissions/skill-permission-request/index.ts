@@ -1,0 +1,1 @@
+export { MinimalPermissionRequest } from '../MinimalPermissionRequest';

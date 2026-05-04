@@ -35,20 +35,13 @@ function getRuntimeInfo(): RuntimeInfo {
     platform: process.platform,
     bunVersion: process.versions?.bun,
     nodeVersion: process.versions?.node,
-  }
+  };
 }
 
 export function __getPermissionModeCycleShortcutForTests(
-  runtime: RuntimeInfo,
+  _runtime: RuntimeInfo,
 ): InputShortcut {
-  if (!supportsShiftTabOnWindows(runtime)) {
-    return {
-      displayText: 'alt+m',
-      check: (input, key) =>
-        Boolean(key.meta) && (input === 'm' || input === 'M'),
-    }
-  }
-
+  // 统一使用 shift+tab 作为权限模式切换快捷键
   return {
     displayText: 'shift+tab',
     check: (_input, key) => Boolean(key.tab) && Boolean(key.shift),

@@ -35,42 +35,73 @@ export async function getPrompt(safeMode: boolean): Promise<string> {
     })
     .join('\n')
 
-  return `Launch a new agent to handle complex, multi-step tasks autonomously. 
+  return `Launch a specialized sub-agent to handle complex, multi-step tasks autonomously.
 
-Available agent types and the tools they have access to:
+## When to Use
+- Delegate tasks that require specific expertise (code review, testing, research, refactoring)
+- When the task is complex enough to warrant focused attention and multiple tool uses
+- For long-running operations that would block the main conversation
+- When you need to work on multiple workstreams concurrently
+
+## When NOT to Use
+- Reading a specific file: use ${FileReadTool.name} or ${GlobTool.name} directly
+- Searching for a class/function definition: use ${GlobTool.name} directly
+- Searching within 2-3 specific files: use ${FileReadTool.name} directly
+- Trivial tasks that can be done in one or two steps
+- Tasks requiring stateful interaction with you (sub-agents are stateless)
+
+## Approach
+1. Choose the appropriate subagent_type from the list below based on the task's nature
+2. Provide a concise "description" (3-5 words) summarizing the task
+3. Write a detailed "prompt" with clear deliverables and expected output format
+4. Optionally include "context" for background information
+5. Optionally override the model with "model" (string or {provider, model})
+6. Await the agent's final report; it cannot communicate with you mid-task
+
+## Parameters
+- description (required): Short title for the task (3-5 words)
+- prompt (required): Detailed instructions, including what to produce and how
+- subagent_type (required): Which agent type to use (must be from available list)
+- context (optional): Background information the sub-agent should know
+- model (optional): Override model for this sub-agent
+  - string: keep parent provider, override model id
+  - { provider, model }: explicit provider + model choice
+  - omitted: inherit parent model
+
+## Output
+- The sub-agent's final text message
+- May include pending permissions if the sub-agent needed but wasn't auto-approved
+- Agent output is not automatically shown to the user; you must summarize it if you want it visible
+
+## Constraints
+- Sub-agents inherit the same sandbox, working directory, and tool restrictions
+- Delegation depth may be limited to prevent infinite recursion
+- Sub-agents are stateless: they cannot access your state or the parent conversation unless provided in the prompt
+- The parent agent cannot communicate with the sub-agent after launch
+
+## Safety/Limitations
+- Sub-agents cannot spawn further sub-agents unless explicitly allowed (depth limited)
+- All operations are confined to the sandbox; no escaping
+- High-impact commands may require approval depending on policy
+- Background processes started by sub-agents must be tracked and cleaned up
+
+## Avoid Repetition (Anti-Loop)
+- Do NOT use the Task tool to execute tasks that are already within your own capabilities
+- If a sub-agent returns a result that you could have produced directly, adjust your delegation strategy
+- Avoid creating circular delegation: don't have sub-agent A spawn B which then spawns A
+- If a sub-agent fails with a particular approach, do not immediately re-delegate the same task—adjust the prompt or do it yourself
+- Limit nested delegation depth: prefer delegating to leaf agents rather than chaining many levels
+- For simple file operations (read, grep, edit), use the direct tools yourself; only delegate if the task is compound and multi-step
+
+## Available Agent Templates
 ${agentDescriptions}
 
-When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
-
-When to use the Agent tool:
-- When you are instructed to execute custom slash commands. Use the Agent tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(description="Check the file", prompt="/check-file path/to/file.py")
-
-When NOT to use the Agent tool:
-- If you want to read a specific file path, use the ${FileReadTool.name} or ${GlobTool.name} tool instead of the Agent tool, to find the match more quickly
-- If you are searching for a specific class definition like "class Foo", use the ${GlobTool.name} tool instead, to find the match more quickly
-- If you are searching for code within a specific file or set of 2-3 files, use the ${FileReadTool.name} tool instead of the Agent tool, to find the match more quickly
-- Other tasks that are not related to the agent descriptions above
-
-Usage notes:
-1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses
-2. When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.
-3. Each agent invocation is stateless. You will not be able to send additional messages to the agent, nor will the agent be able to communicate with you outside of its final report. Therefore, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.
-4. The agent's outputs should generally be trusted
-5. Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent
-6. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
-
-Example usage:
-
-<example_agent_descriptions>
-"code-reviewer": use this agent after you are done writing a signficant piece of code
-"greeting-responder": use this agent when to respond to user greetings with a friendly joke
-</example_agent_description>
+## Example Usage
 
 <example>
 user: "Please write a function that checks if a number is prime"
-assistant: Sure let me write a function that checks if a number is prime
-assistant: First let me use the ${FileWriteTool.name} tool to write a function that checks if a number is prime
-assistant: I'm going to use the ${FileWriteTool.name} tool to write the following code:
+assistant: Sure, I'll write that function.
+assistant: I'll use the ${FileWriteTool.name} to create the function.
 <code>
 function isPrime(n) {
   if (n <= 1) return false
@@ -81,17 +112,16 @@ function isPrime(n) {
 }
 </code>
 <commentary>
-Since a signficant piece of code was written and the task was completed, now use the code-reviewer agent to review the code
+The code is written. For completeness, I'll have the code-reviewer agent check it.
 </commentary>
-assistant: Now let me use the code-reviewer agent to review the code
-assistant: Uses the Task tool to launch the with the code-reviewer agent 
+assistant: Launching code-reviewer agent to review the isPrime function.
 </example>
 
 <example>
 user: "Hello"
 <commentary>
-Since the user is greeting, use the greeting-responder agent to respond with a friendly joke
+Greeting requires a friendly response. I'll delegate to the greeting-responder agent.
 </commentary>
-assistant: "I'm going to use the Task tool to launch the with the greeting-responder agent"
+assistant: I'm launching the greeting-responder agent to craft a reply.
 </example>`
 }

@@ -86,6 +86,13 @@ function getModeIndicatorLabel(mode: PermissionMode): string {
       return 'Bypass Permissions'
     case 'dontAsk':
       return "Don't Ask"
+    case 'ask':
+      return 'Ask'
+    case 'auto':
+      return 'Auto'
+    default:
+      // 对于未知模式，返回原样或友好提示
+      return String(mode).replace(/([A-Z])/g, ' $1').trim()
   }
 }
 
@@ -98,13 +105,19 @@ function getModeIndicatorIcon(mode: PermissionMode): string {
     case 'acceptEdits':
     case 'bypassPermissions':
     case 'dontAsk':
+    case 'ask':
+    case 'auto':
       return '⏵⏵'
+    default:
+      return 'ℹ'
   }
 }
 
 function getModeIndicatorColor(theme: Theme, mode: PermissionMode): string {
   switch (mode) {
     case 'default':
+    case 'ask':
+    case 'auto':
       return theme.text
     case 'plan':
       return theme.planMode
@@ -113,6 +126,8 @@ function getModeIndicatorColor(theme: Theme, mode: PermissionMode): string {
     case 'bypassPermissions':
     case 'dontAsk':
       return theme.error
+    default:
+      return theme.text
   }
 }
 

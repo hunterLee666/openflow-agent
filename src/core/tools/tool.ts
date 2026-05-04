@@ -1,123 +1,40 @@
 import { z } from 'zod'
-import type * as React from 'react'
-import type { PermissionMode } from '@openflow-types/permissionMode'
-import type { ToolPermissionContext } from '@openflow-types/toolPermissionContext'
 
-export type SetToolJSXFn = (
-  jsx: {
-    jsx: React.ReactNode | null
-    shouldHidePromptInput: boolean
-  } | null,
-) => void
-
-export interface ToolUseContext {
-  messageId: string | undefined
-  toolUseId?: string
-  agentId?: string
-  safeMode?: boolean
-  abortController: AbortController
-  readFileTimestamps: { [filePath: string]: number }
-  options?: {
-    commands?: any[]
-    tools?: any[]
-    verbose?: boolean
-    slowAndCapableModel?: string
-    safeMode?: boolean
-    permissionMode?: PermissionMode
-    toolPermissionContext?: ToolPermissionContext
-    lastUserPrompt?: string
-    forkNumber?: number
-    messageLogName?: string
-    maxThinkingTokens?: any
-    model?: string
-    commandAllowedTools?: string[]
-    isOpenflowingRequest?: boolean
-    openflowingContext?: string
-    isCustomCommand?: boolean
-    mcpClients?: any[]
-    disableSlashCommands?: boolean
-    persistSession?: boolean
-    shouldAvoidPermissionPrompts?: boolean
-  }
-  responseState?: {
-    previousResponseId?: string
-    conversationId?: string
-  }
-}
-
-export interface ExtendedToolUseContext extends ToolUseContext {
-  setToolJSX: SetToolJSXFn
-}
-
-export interface ValidationResult {
-  result: boolean
-  message?: string
-  errorCode?: number
-  meta?: any
-}
-
-export interface Tool<
-  TInput extends z.ZodTypeAny = z.ZodTypeAny,
-  TOutput = any,
-> {
-  name: string
-  description?: string | ((input?: z.infer<TInput>) => Promise<string>)
-  inputSchema: TInput
-  inputJSONSchema?: Record<string, unknown>
-  prompt: (options?: { safeMode?: boolean }) => Promise<string>
-  userFacingName?: (input?: z.infer<TInput>) => string
-  cachedDescription?: string
-  isEnabled: () => Promise<boolean>
-  isReadOnly: (input?: z.infer<TInput>) => boolean
-  isConcurrencySafe: (input?: z.infer<TInput>) => boolean
-  needsPermissions: (input?: z.infer<TInput>) => boolean
-  requiresUserInteraction?: (input?: z.infer<TInput>) => boolean
+/** Minimal tool interface used by OpenFlow */
+export interface Tool<In = any, Out = any> {
+  name: string;
+  description?: string;
+  inputSchema: z.ZodType<In>;
+  call: (input: In, context: ToolUseContext) => AsyncGenerator<any, void, unknown>;
+  isEnabled: () => boolean | Promise<boolean>;
+  isReadOnly: (input?: In) => boolean;
+  isConcurrencySafe?: (input?: In) => boolean;
   validateInput?: (
-    input: z.infer<TInput>,
-    context?: ToolUseContext,
-  ) => Promise<ValidationResult>
-  renderResultForAssistant: (output: TOutput) => string | any[]
-  renderToolUseMessage: (
-    input: z.infer<TInput>,
-    options: { verbose: boolean },
-  ) => string | React.ReactElement | null
-  renderToolUseRejectedMessage?: (...args: any[]) => React.ReactElement
-  renderToolResultMessage?: (
-    output: TOutput,
-    options: { verbose: boolean },
-  ) => React.ReactNode
-  call: (
-    input: z.infer<TInput>,
+    input: In,
     context: ToolUseContext,
-  ) => AsyncGenerator<
-    | {
-        type: 'result'
-        data: TOutput
-        resultForAssistant?: string | any[]
-        newMessages?: unknown[]
-        contextModifier?: {
-          modifyContext: (ctx: ToolUseContext) => ToolUseContext
-        }
-      }
-    | {
-        type: 'progress'
-        content: any
-        normalizedMessages?: any[]
-        tools?: any[]
-      },
-    void,
-    unknown
-  >
+  ) => Promise<{ result: boolean; message?: string }>;
+  renderResultForAssistant?: (data: Out) => string | any[];
 }
 
+/** Context passed to tool execution */
+export interface ToolUseContext {
+  cwd: string;
+  abortController: AbortController;
+  toolUseId?: string;
+  messageId?: string;
+  conversationKey?: string;
+  options?: any; // Various options: safeMode, verbose, tools, etc.
+  readFileTimestamps?: Record<string, number>;
+  [key: string]: any;
+}
+
+/** Validation result */
+export type ValidationResult = {
+  result: boolean;
+  message?: string;
+};
+
+/** Helper to get tool description */
 export function getToolDescription(tool: Tool): string {
-  if (tool.cachedDescription) {
-    return tool.cachedDescription
-  }
-
-  if (typeof tool.description === 'string') {
-    return tool.description
-  }
-
-  return `Tool: ${tool.name}`
+  return (tool as any).cachedDescription || (tool as any).description || `Tool: ${tool.name}`;
 }

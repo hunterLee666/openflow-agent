@@ -593,14 +593,22 @@ async function parseArgs(
           })
           return
         } else {
-          if (sessionPersistence === false) {
-            console.error(
-              'Error: --no-session-persistence only works with --print',
-            )
-            process.exit(1)
-          }
+           if (sessionPersistence === false) {
+             console.error(
+               'Error: --no-session-persistence only works with --print',
+             )
+             process.exit(1)
+           }
 
-          const updateInfo = await (async () => {
+           // Require TTY for interactive UI
+           if (!process.stdin.isTTY) {
+             console.error(
+               'Interactive mode requires a TTY. Use --print for non-interactive usage.',
+             )
+             process.exit(1)
+           }
+
+           const updateInfo = await (async () => {
             try {
               const [
                 { getLatestVersion, getUpdateCommandSuggestions },

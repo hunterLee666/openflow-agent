@@ -199,33 +199,37 @@ export function extractTag(html: string, tagName: string): string | null {
   return null
 }
 
-export function isNotEmptyMessage(message: Message): boolean {
-  if (message.type === 'progress') {
-    return true
-  }
+ export function isNotEmptyMessage(message: Message): boolean {
+   if (message.type === 'progress') {
+     return true
+   }
 
-  if (typeof message.message.content === 'string') {
-    return message.message.content.trim().length > 0
-  }
+   if (!message.message) {
+     return false
+   }
 
-  if (message.message.content.length === 0) {
-    return false
-  }
+   if (typeof message.message.content === 'string') {
+     return message.message.content.trim().length > 0
+   }
 
-  if (message.message.content.length > 1) {
-    return true
-  }
+   if (!Array.isArray(message.message.content) || message.message.content.length === 0) {
+     return false
+   }
 
-  if (message.message.content[0]!.type !== 'text') {
-    return true
-  }
+   if (message.message.content.length > 1) {
+     return true
+   }
 
-  return (
-    message.message.content[0]!.text.trim().length > 0 &&
-    message.message.content[0]!.text !== NO_CONTENT_MESSAGE &&
-    message.message.content[0]!.text !== INTERRUPT_MESSAGE_FOR_TOOL_USE
-  )
-}
+   if (message.message.content[0]!.type !== 'text') {
+     return true
+   }
+
+   return (
+     message.message.content[0]!.text.trim().length > 0 &&
+     message.message.content[0]!.text !== NO_CONTENT_MESSAGE &&
+     message.message.content[0]!.text !== INTERRUPT_MESSAGE_FOR_TOOL_USE
+   )
+ }
 
 type NormalizedUserMessage = {
   message: {
@@ -241,53 +245,82 @@ type NormalizedUserMessage = {
   uuid: UUID
 }
 
-export type NormalizedMessage =
-  | NormalizedUserMessage
-  | AssistantMessage
-  | ProgressMessage
+ export type NormalizedMessage =
+   | NormalizedUserMessage
+   | AssistantMessage
+   | ProgressMessage
 
-export function normalizeMessages(messages: Message[]): NormalizedMessage[] {
-  return messages.flatMap(message => {
-    if (message.type === 'progress') {
-      return [message] as NormalizedMessage[]
-    }
-    if (typeof message.message.content === 'string') {
-      return [message] as NormalizedMessage[]
-    }
-    const contentBlocks = message.message.content.filter(
-      block =>
-        !(
-          block.type === 'thinking' &&
-          (typeof (block as any).thinking !== 'string' ||
-            (block as any).thinking.trim().length === 0)
-        ),
-    )
+ export function normalizeMessages(messages: Message[]): NormalizedMessage[] {
+   return messages.flatMap(message => {
+     if (message.type === 'progress') {
+       return [message] as NormalizedMessage[]
+     }
+     // Guard: if message.message is missing or content is missing, skip or convert to text
+     if (!message.message) {
+       console.error('[normalizeMessages] Message missing message.message:', message.type, message);
+       // Produce a minimal valid message to avoid crash
+       if (message.type === 'assistant') {
+         return [{
+           type: 'assistant',
+           uuid: message.uuid || randomUUID(),
+           message: {
+             id: 'fallback',
+             type: 'message',
+             role: 'assistant',
+             content: [{ type: 'text', text: 'Internal error: malformed assistant message' }],
+             model: 'n/a',
+             stop_reason: 'end_turn',
+             stop_sequence: null,
+             usage: { input_tokens: 0, output_tokens: 0 },
+           },
+           costUSD: 0,
+           durationMs: 0,
+         }] as NormalizedMessage[];
+       }
+       return [];
+     }
+     if (typeof message.message.content === 'string') {
+       return [message] as NormalizedMessage[]
+     }
+     if (!Array.isArray(message.message.content)) {
+       console.error('[normalizeMessages] Message content is not array:', message.type, message.message.content);
+       // Convert to empty array to avoid crash
+       message.message.content = [];
+     }
+     const contentBlocks = message.message.content.filter(
+       block =>
+         !(
+           block.type === 'thinking' &&
+           (typeof (block as any).thinking !== 'string' ||
+             (block as any).thinking.trim().length === 0)
+         ),
+     )
 
-    return contentBlocks.map((block, blockIndex) => {
-      switch (message.type) {
-        case 'assistant':
-          const baseSeed = String(
-            (message as any).uuid ??
-              (message as any).message?.id ??
-              randomUUID(),
-          )
-          return {
-            type: 'assistant',
-            uuid: stableUuidFromSeed(`${baseSeed}:${blockIndex}`),
-            message: {
-              ...message.message,
-              content: [block],
-            },
-            costUSD:
-              (message as AssistantMessage).costUSD / contentBlocks.length,
-            durationMs: (message as AssistantMessage).durationMs,
-          } as NormalizedMessage
-        case 'user':
-          return message as NormalizedUserMessage
-      }
-    })
-  })
-}
+     return contentBlocks.map((block, blockIndex) => {
+       switch (message.type) {
+         case 'assistant':
+           const baseSeed = String(
+             (message as any).uuid ??
+               (message as any).message?.id ??
+               randomUUID(),
+           )
+           return {
+             type: 'assistant',
+             uuid: stableUuidFromSeed(`${baseSeed}:${blockIndex}`),
+             message: {
+               ...message.message,
+               content: [block],
+             },
+             costUSD:
+               (message as AssistantMessage).costUSD / contentBlocks.length,
+             durationMs: (message as AssistantMessage).durationMs,
+           } as NormalizedMessage
+         case 'user':
+           return message as NormalizedUserMessage
+       }
+     })
+   })
+ }
 
 type ToolUseRequestMessage = AssistantMessage & {
   message: { content: any[] }

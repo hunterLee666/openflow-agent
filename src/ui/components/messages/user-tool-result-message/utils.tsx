@@ -1,9 +1,7 @@
 import { ToolUseBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import { Message } from '@query'
 import { useMemo } from 'react'
-import { Tool } from '@tool'
-import { GlobTool } from '@tools/GlobTool/GlobTool'
-import { GrepTool } from '@tools/search/GrepTool/GrepTool'
+import type { Tool } from '@tool'
 
 function getToolUseFromMessages(
   toolUseID: string,
@@ -43,14 +41,11 @@ export function useGetToolFromMessages(
         `Tool use not found for tool_use_id ${toolUseID}`,
       )
     }
-    const tool = [...tools, GlobTool, GrepTool].find(
-      _ => _.name === toolUse.name,
-    )
-    if (tool === GlobTool || tool === GrepTool) {
-    }
+    const tool = tools.find(_ => _.name === toolUse.name)
     if (!tool) {
       throw new ReferenceError(`Tool not found for ${toolUse.name}`)
     }
     return { tool, toolUse }
   }, [toolUseID, messages, tools])
 }
+

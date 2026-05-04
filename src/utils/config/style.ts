@@ -1,26 +1,55 @@
-import { readFileSync } from 'fs'
-import { memoize } from 'lodash-es'
-import { getCwd } from '@utils/state'
-import { getProjectInstructionFiles } from './projectInstructions'
+import chalk from 'chalk';
 
-const STYLE_PROMPT =
-  'The codebase follows strict style guidelines shown below. All code changes must strictly adhere to these guidelines to maintain consistency and quality.'
+// Simple theme colors as strings for Ink (ANSI names or hex)
+export const THEME = {
+  primary: 'blue',
+  secondary: 'gray',
+  success: 'green',
+  error: 'red',
+  warning: 'yellow',
+  info: 'cyan',
+  border: 'gray',
+  background: 'black',
+  text: 'white',
+  textMuted: 'gray',
+  textDim: 'gray',
+  secondaryText: 'gray',
+  openflow: 'magenta',
+};
 
-export const getCodeStyle = memoize((): string => {
-  const styles: string[] = []
+export const COLORS = {
+  // Basic ANSI
+  reset: chalk.reset,
+  bright: chalk.bold,
+  dim: chalk.dim,
+  underline: chalk.underline,
 
-  const instructionFiles = getProjectInstructionFiles(getCwd())
-  for (const file of instructionFiles) {
-    try {
-      styles.push(
-        `Contents of ${file.absolutePath}:\n\n${readFileSync(file.absolutePath, 'utf-8')}`,
-      )
-    } catch {}
-  }
+  // Semantic
+  info: chalk.blue,
+  success: chalk.green,
+  warning: chalk.yellow,
+  error: chalk.red,
 
-  if (styles.length === 0) {
-    return ''
-  }
+  // Brand
+  openflow: chalk.magenta,
 
-  return `${STYLE_PROMPT}\n\n${styles.join('\n\n')}`
-})
+  // Status colors
+  pending: chalk.yellow,
+  running: chalk.cyan,
+  completed: chalk.green,
+  failed: chalk.red,
+};
+
+export function styleToken(token: string): string {
+  return chalk.cyan(token);
+}
+
+export function styleValue(value: string): string {
+  return chalk.white(value);
+}
+
+export function styleKey(key: string): string {
+  return chalk.yellow(key);
+}
+
+export { chalk };

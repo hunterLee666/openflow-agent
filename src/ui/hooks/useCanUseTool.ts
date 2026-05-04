@@ -1,15 +1,13 @@
 import React, { useCallback } from 'react'
 import { hasPermissionsToUseTool } from '@permissions'
-import { BashTool, inputSchema } from '@tools/BashTool/BashTool'
 import { getCommandSubcommandPrefix } from '@utils/commands'
 import {
   REJECT_MESSAGE,
   REJECT_MESSAGE_WITH_FEEDBACK_PREFIX,
 } from '@utils/messages'
 import { ToolUseConfirm } from '@components/permissions/PermissionRequest'
-import { AbortError } from '@utils/text/errors'
 import { logError } from '@utils/log'
-import type { CanUseToolFn } from '@openflow-types/canUseTool'
+import type { CanUseToolFn } from '@types'
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
@@ -61,17 +59,25 @@ function useCanUseTool(
               return
             }
 
-            const [description, commandPrefix] = await Promise.all([
+            const [description] = await Promise.all([
               typeof tool.description === 'function'
                 ? tool.description(input as never)
-                : Promise.resolve(tool.description ?? `Tool: ${tool.name}`),
-              tool === BashTool
-                ? getCommandSubcommandPrefix(
-                    inputSchema.parse(input).command,
-                    toolUseContext.abortController.signal,
-                  )
-                : Promise.resolve(null),
-            ])
+                : Promise.resolve(tool.description ?? tool.userFacingName?.(input) ?? `Tool: ${tool.name}`),
+            ]);
+            // For Bash tool, try to get command prefix (if inputSchema available)
+            let commandPrefix: string | null = null;
+            if (tool.name === 'Bash' && tool.inputSchema) {
+              try {
+                // Try to parse command from input (simplified)
+                const parsed = typeof tool.inputSchema.parse === 'function' ? tool.inputSchema.parse(input) : null;
+                const command = typeof parsed === 'object' && parsed ? (parsed as any).command : null;
+                if (typeof command === 'string') {
+                  commandPrefix = getCommandSubcommandPrefix(command, toolUseContext.abortController.signal);
+                }
+              } catch (e) {
+                // ignore
+              }
+            }
 
             if (toolUseContext.abortController.signal.aborted) {
               logCancelledEvent()

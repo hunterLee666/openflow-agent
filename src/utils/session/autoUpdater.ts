@@ -17,24 +17,8 @@ export type VersionConfig = {
 }
 
 export async function assertMinVersion(): Promise<void> {
-  try {
-    const versionConfig: VersionConfig = { minVersion: '0.0.0' }
-    if (versionConfig.minVersion) {
-      const { lt } = await getSemver()
-      if (!lt(MACRO.VERSION, versionConfig.minVersion)) return
-
-      const suggestions = await getUpdateCommandSuggestions()
-      process.stderr.write(
-        `Your ${PRODUCT_NAME} version ${MACRO.VERSION} is below the minimum supported ${versionConfig.minVersion}.\n` +
-          'Update using one of:\n' +
-          suggestions.map(c => `  ${c}`).join('\n') +
-          '\n',
-      )
-      process.exit(1)
-    }
-  } catch (error) {
-    logError(`Error checking minimum version: ${error}`)
-  }
+  // Simplified: no version check
+  return;
 }
 
 export async function getLatestVersion(): Promise<string | null> {

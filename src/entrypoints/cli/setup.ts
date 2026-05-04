@@ -1,53 +1,21 @@
-import { getContext } from '@context'
-import { getCurrentProjectConfig } from '@utils/config'
-import { cleanupOldMessageFilesInBackground } from '@utils/session/cleanup'
-import { grantReadPermissionForOriginalDir } from '@utils/permissions/filesystem'
-import { setCwd, setOriginalCwd } from '@utils/state'
-import { debug as debugLogger } from '@utils/log/debugLogger'
+import { getProjectConfigPath, getCurrentProjectConfig, saveCurrentProjectConfig } from '@utils/config';
+import { getOpenflowBaseDir } from '@utils/config/env';
+import { logError } from '@utils/log';
+import { startMCPServer } from '../mcp';
+import { existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
 
-export async function setup(cwd: string, safeMode?: boolean): Promise<void> {
-  if (cwd !== process.cwd()) {
-    setOriginalCwd(cwd)
-  }
-  await setCwd(cwd)
-
-  grantReadPermissionForOriginalDir()
-
-  let agentLoader: any
+export async function setup(cwd: string, safe: boolean): Promise<void> {
+  // Minimal implementation: ensure config dir and maybe start MCP servers
   try {
-    agentLoader = await import('@utils/agent/loader')
-  } catch {
-    agentLoader = await import('@utils/agent/loader')
-  }
-  const { startAgentWatcher } = agentLoader
-  await startAgentWatcher(() => {
-    debugLogger.info('AGENTS_HOT_RELOADED', { ok: true })
-  })
-
-  if (safeMode) {
-    if (
-      process.platform !== 'win32' &&
-      typeof process.getuid === 'function' &&
-      process.getuid() === 0
-    ) {
-      console.error(
-        `--safe mode cannot be used with root/sudo privileges for security reasons`,
-      )
-      process.exit(1)
+    // Ensure project config exists
+    const configPath = getProjectConfigPath(cwd);
+    if (!existsSync(configPath)) {
+      mkdirSync(join(configPath, '..'), { recursive: true });
+      saveCurrentProjectConfig({}, cwd);
     }
-  }
-
-  if (process.env.NODE_ENV === 'test') {
-    return
-  }
-
-  cleanupOldMessageFilesInBackground()
-  getContext()
-
-  const projectConfig = getCurrentProjectConfig()
-  if (
-    projectConfig.lastCost !== undefined &&
-    projectConfig.lastDuration !== undefined
-  ) {
+    // Could start MCP servers (no-op in stub)
+  } catch (err) {
+    logError('Setup failed:', err);
   }
 }

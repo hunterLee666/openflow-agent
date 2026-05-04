@@ -28,7 +28,7 @@
     "yoga.wasm",
     "dist/**/*",
     "scripts/cli-wrapper.cjs",
-     "scripts/cli-acp-wrapper.cjs"
+    "scripts/cli-acp-wrapper.cjs"
   ],
   "scripts": {
     "dev": "bun run ./src/entrypoints/cli.tsx --verbose",
@@ -51,6 +51,7 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@anthropic-ai/vertex-sdk": "^0.7.0",
     "@aws-sdk/client-bedrock-runtime": "3.797.0",
+    "@codeany/open-agent-sdk": "0.2.1",
     "@commander-js/extra-typings": "^13.1.0",
     "@inkjs/ui": "^2.0.0",
     "@modelcontextprotocol/sdk": "^1.15.1",
@@ -99,7 +100,7 @@
     "which": "^6.0.0",
     "wrap-ansi": "^9.0.0",
     "zod": "^3.25.76",
-    "zod-to-json-schema": "^3.24.6"
+    "zod-to-json-schema": "3.25.2"
   },
   "devDependencies": {
     "@types/bun": "latest",

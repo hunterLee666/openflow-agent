@@ -9,6 +9,7 @@
         "@anthropic-ai/sdk": "^0.39.0",
         "@anthropic-ai/vertex-sdk": "^0.7.0",
         "@aws-sdk/client-bedrock-runtime": "3.797.0",
+        "@codeany/open-agent-sdk": "0.2.1",
         "@commander-js/extra-typings": "^13.1.0",
         "@inkjs/ui": "^2.0.0",
         "@modelcontextprotocol/sdk": "^1.15.1",
@@ -57,7 +58,7 @@
         "which": "^6.0.0",
         "wrap-ansi": "^9.0.0",
         "zod": "^3.25.76",
-        "zod-to-json-schema": "^3.24.6",
+        "zod-to-json-schema": "3.25.2",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -199,6 +200,8 @@
     "@babel/traverse": ["@babel/traverse@7.29.0", "", { "dependencies": { "@babel/code-frame": "^7.29.0", "@babel/generator": "^7.29.0", "@babel/helper-globals": "^7.28.0", "@babel/parser": "^7.29.0", "@babel/template": "^7.28.6", "@babel/types": "^7.29.0", "debug": "^4.3.1" } }, "sha512-4HPiQr0X7+waHfyXPZpWPfWL/J7dcN1mx9gL6WdQVMbPnF3+ZhSMs8tCxN7oHddJE9fhNE7+lxdnlyemKfJRuA=="],
 
     "@babel/types": ["@babel/types@7.29.0", "", { "dependencies": { "@babel/helper-string-parser": "^7.27.1", "@babel/helper-validator-identifier": "^7.28.5" } }, "sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A=="],
+
+    "@codeany/open-agent-sdk": ["@codeany/open-agent-sdk@0.2.1", "", { "dependencies": { "@anthropic-ai/sdk": "^0.52.0", "@modelcontextprotocol/sdk": "^1.12.1", "zod": "^3.23.0", "zod-to-json-schema": "^3.24.0" } }, "sha512-Q/+xvY4dcuy/nmdm4wP+ANcRRDl08rhdfbRx3SPtVoOBHo3j/JcLRCAneUVzvDCQp9De5pFKhwQ3wPEY47qy3Q=="],
 
     "@colors/colors": ["@colors/colors@1.5.0", "", {}, "sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ=="],
 
@@ -1453,6 +1456,8 @@
     "@babel/helper-compilation-targets/lru-cache": ["lru-cache@5.1.1", "", { "dependencies": { "yallist": "^3.0.2" } }, "sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w=="],
 
     "@babel/helper-compilation-targets/semver": ["semver@6.3.1", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA=="],
+
+    "@codeany/open-agent-sdk/@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.52.0", "", { "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-d4c+fg+xy9e46c8+YnrrgIQR45CZlAi7PwdzIfDXDM6ACxEZli1/fxhURsq30ZpMZy6LvSkr41jGq5aF5TD7rQ=="],
 
     "@eslint/eslintrc/ajv": ["ajv@6.15.0", "", { "dependencies": { "fast-deep-equal": "^3.1.1", "fast-json-stable-stringify": "^2.0.0", "json-schema-traverse": "^0.4.1", "uri-js": "^4.2.2" } }, "sha512-fgFx7Hfoq60ytK2c7DhnF8jIvzYgOMxfugjLOSMHjLIPgenqa7S7oaagATUq99mV6IYvN2tRmC0wnTYX6iPbMw=="],
 

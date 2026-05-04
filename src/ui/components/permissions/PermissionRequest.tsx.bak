@@ -1,0 +1,76 @@
+import * as React from 'react';
+import { Box, Text } from 'ink';
+import { Card } from '@components/base';
+import type { Tool, ToolUseConfirm } from '@types';
+import { getToolDescription } from '@tools/descriptions';
+
+// Permission request component that uses tool descriptions
+export function PermissionRequest(props: {
+  toolUseConfirm: ToolUseConfirm;
+  onDone: () => void;
+  verbose: boolean;
+}) {
+  const { toolUseConfirm, verbose } = props;
+  const { tool, input } = toolUseConfirm;
+
+  const desc = getToolDescription(tool.name);
+  const title = desc?.userFacingName?.(input) || tool.name;
+  const message = desc?.renderToolUseMessage?.(input, { verbose }) || `${tool.name}: ${JSON.stringify(input)}`;
+
+  return (
+    <Card borderTitle={title}>
+      <Box flexDirection="column" padding={1}>
+        <Text>{message}</Text>
+      </Box>
+    </Card>
+  );
+}
+
+// Re-export types expected by other modules
+export type { ToolUseConfirm } from './PermissionRequestTypes';
+export type PermissionRequestProps = {
+  toolUseConfirm: ToolUseConfirm;
+  onDone: () => void;
+  verbose: boolean;
+};
+
+export function toolUseConfirmGetPrefix(
+  _toolUseConfirm: ToolUseConfirm,
+): string | null {
+  // Simplified: no command prefix detection in simplified mode
+  return null;
+}
+
+export type PermissionRequestProps = {
+  toolUseConfirm: ToolUseConfirm
+  onDone(): void
+  verbose: boolean
+}
+
+export function toolUseConfirmGetPrefix(
+  toolUseConfirm: ToolUseConfirm,
+): string | null {
+  return (
+    (toolUseConfirm.commandPrefix &&
+      !(toolUseConfirm.commandPrefix as any).commandInjectionDetected &&
+      (toolUseConfirm.commandPrefix as any).commandPrefix) ||
+    null
+  )
+}
+
+// Main Permission Request renderer
+export function PermissionRequest(props: PermissionRequestProps) {
+  const { toolUseConfirm, onDone, verbose } = props;
+  const { tool, input, toolUseContext } = toolUseConfirm;
+
+  const desc = getToolDescription(tool.name);
+  const Component = permissionComponentForTool(tool);
+
+  return (
+    <Card borderTitle={desc?.userFacingName?.(input) || tool.name}>
+      <Box flexDirection="column" padding={1}>
+        <Text>{desc?.renderToolUseMessage?.(input, { verbose }) || `Tool: ${tool.name}`}</Text>
+      </Box>
+    </Card>
+  );
+}

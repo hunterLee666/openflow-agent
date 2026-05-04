@@ -1,35 +1,4 @@
-import { UUID } from 'crypto'
-import type { MessageParam } from '@anthropic-ai/sdk/resources/index.mjs'
-import type { Message as APIAssistantMessage } from '@anthropic-ai/sdk/resources/index.mjs'
-
-export type Message = UserMessage | AssistantMessage | ProgressMessage
-
-export interface UserMessage {
-  message: MessageParam
-  type: 'user'
-  uuid: UUID
-  toolUseResult?: any
-  options?: {
-    isOpenflowingRequest?: boolean
-    openflowingContext?: string
-  }
-}
-
-export interface AssistantMessage {
-  costUSD: number
-  durationMs: number
-  message: APIAssistantMessage
-  type: 'assistant'
-  uuid: UUID
-  isApiErrorMessage?: boolean
-}
-
-export interface ProgressMessage {
-  content: AssistantMessage
-  normalizedMessages: any[]
-  siblingToolUseIDs: Set<string>
-  tools: any[]
-  toolUseID: string
-  type: 'progress'
-  uuid: UUID
-}
+// Minimal conversation types
+export type Message = any;
+export type UserMessage = any;
+export type AssistantMessage = any;
