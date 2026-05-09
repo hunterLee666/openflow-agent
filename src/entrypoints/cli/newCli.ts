@@ -1,12 +1,14 @@
 #!/usr/bin/env bun
 import { getAgentService } from '../../services/agent.js'
+import { asciiLogo } from '../../utils/asciiLogo.js'
 
 async function main() {
   const args = process.argv.slice(2)
   const prompt = args.join(' ') || 'Hello'
 
+  console.log(asciiLogo)
   console.log('OpenFlow CLI - New SDK')
-console.log('===================\n')
+  console.log('===================\n')
 
   const agent = getAgentService({
     permissionMode: 'bypassPermissions',

@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { getAgentService } from '../../engine/agentService'
+import { asciiLogo } from '../../utils/asciiLogo'
 import * as readline from 'readline'
 
 const rl = readline.createInterface({
@@ -9,6 +10,7 @@ const rl = readline.createInterface({
 
 const agent = getAgentService()
 
+console.log(asciiLogo)
 console.log('OpenFlow CLI - Type your message (Ctrl+C to quit)\n')
 
 async function chat(prompt: string) {

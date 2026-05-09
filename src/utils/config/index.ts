@@ -27,8 +27,9 @@ function loadGlobalConfigFromDisk(): GlobalConfig {
 let globalConfig = loadGlobalConfigFromDisk();
 
 export function getGlobalConfig(): GlobalConfig {
-  // Merge with defaults to ensure required fields exist
-  return { ...DEFAULT_GLOBAL_CONFIG, ...globalConfig };
+  const envModel = process.env.OPENAI_MODEL || process.env.ANTHROPIC_MODEL;
+  const envConfig: GlobalConfig = envModel ? { model: envModel } : {};
+  return { ...DEFAULT_GLOBAL_CONFIG, ...globalConfig, ...envConfig };
 }
 
 export function saveGlobalConfig(config: GlobalConfig): void {
@@ -56,6 +57,7 @@ export {
   deleteConfigForCLI,
   enableConfigs,
   validateAndRepairAllGPT5Profiles,
+  getAnthropicApiKey,
 } from './cli';
 
 // Types

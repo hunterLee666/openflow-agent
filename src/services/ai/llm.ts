@@ -1,4 +1,3 @@
-import '@anthropic-ai/sdk/shims/node'
 import Anthropic, { APIConnectionError, APIError } from '@anthropic-ai/sdk'
 import { StreamingEvent } from './adapters/base'
 import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'

@@ -37,10 +37,6 @@ export function getNextAvailableLogForkNumber(_cwd: string, _baseName: string): 
   return 0;
 }
 
-export function loadLogList(_cwd: string, _includeForks?: boolean): any[] {
-  return [];
-}
-
 export function getLogsDir(): string {
   ensureLogsDir();
   return LOGS_DIR;
@@ -107,7 +103,6 @@ export function overwriteLog(logName: string, messages: any[]): void {
 }
 
 export function getInMemoryErrors(): any[] {
-  // Simplified: return empty array
   return [];
 }
 
@@ -115,52 +110,15 @@ export function formatDate(date: Date | string): string {
   return new Date(date).toISOString();
 }
 
-export function dateToFilename(date: Date = new Date()): string {
-  return date.toISOString().replace(/[:.]/g, '-').split('T')[0];
-}
-
-export function parseLogFilename(filename: string): { date: Date; name: string } | null {
-  // Simplified parsing
-  const match = filename.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
-  if (!match) return null;
-  return {
-    date: new Date(match[1]),
-    name: match[2],
-  };
-}
-
-export function getLogForkPath(baseName: string): string {
-  const n = getNextAvailableLogForkNumber();
-  return `${baseName}-fork-${n}`;
-}
-
-export function getNextAvailableLogForkNumber(): number {
-  const dir = SESSION_LOG_DIR;
-  if (!existsSync(dir)) return 0;
-  const files = readdirSync(dir).filter(f => f.endsWith('.json'));
-  const numbers = files
-    .map(f => f.match(/fork-(\d+)/))
-    .filter(Boolean)
-    .map(m => parseInt(m![1], 10))
-    .filter(n => !isNaN(n));
-  return numbers.length;
-}
-
-// Simplified sidechain number getter (used by TaskTool)
-export function getNextAvailableLogSidechainNumber(_baseName: string, _forkNumber: number): number {
-  // Simplified: just return forkNumber + 1
-  return _forkNumber + 1;
-}
-
-export function loadLogList(): any[] {
+export function loadLogList(_cwd?: string, _includeForks?: boolean): any[] {
   const dir = SESSION_LOG_DIR;
   if (!existsSync(dir)) return [];
-  const files = readdirSync(dir)
-    .filter(f => f.endsWith('.json'))
-    .map(f => {
-      const path = join(dir, f);
-      try {
-        const stat = (statSync(path) as any);
+  try {
+    const files = readdirSync(dir)
+      .filter(f => f.endsWith('.json'))
+      .map(f => {
+        const path = join(dir, f);
+        const stat = require('fs').statSync(path);
         const parsed = parseLogFilename(f.replace('.json', ''));
         return {
           name: f.replace('.json', ''),
@@ -169,12 +127,21 @@ export function loadLogList(): any[] {
           modified: stat.mtime,
           date: parsed?.date || null,
         };
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
-  return files.sort((a, b) => (b?.modified || 0) - (a?.modified || 0));
+      })
+      .filter(Boolean);
+    return files.sort((a: any, b: any) => (b?.modified || 0) - (a?.modified || 0));
+  } catch {
+    return [];
+  }
+}
+
+export function getLogForkPath(baseName: string): string {
+  const n = getNextAvailableLogForkNumber();
+  return `${baseName}-fork-${n}`;
+}
+
+export function getNextAvailableLogSidechainNumber(_baseName: string, _forkNumber: number): number {
+  return _forkNumber + 1;
 }
 
 // Cache paths

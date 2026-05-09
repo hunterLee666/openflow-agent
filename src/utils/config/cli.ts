@@ -3,8 +3,9 @@ import {
   saveCurrentProjectConfig,
   getProjectConfigPath,
 } from './project';
+import { getAnthropicApiKey as _getAnthropicApiKey } from '../../core/config/loader';
 
-export { getCurrentProjectConfig, saveCurrentProjectConfig, getProjectConfigPath };
+export { getCurrentProjectConfig, saveCurrentProjectConfig, getProjectConfigPath, _getAnthropicApiKey as getAnthropicApiKey };
 
 // MCP server definitions - returns { servers: Record<string, any>; sources?: Record<string, string> }
 export function getProjectMcpServerDefinitions(): { servers: Record<string, any>; sources?: Record<string, string> } {

@@ -1,4 +1,8 @@
 // Simplified context module - minimal implementation
+export async function getProjectDocs(): Promise<string> {
+  return '';
+}
+
 export async function getInstructionFilesNote(): Promise<string | null> {
   return null;
 }

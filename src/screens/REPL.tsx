@@ -3,6 +3,7 @@ import { Text, Box, useInput } from 'ink';
 import { AgentService } from '@engine/agentService';
 import { getGlobalConfig } from '@utils/config';
 import { getCwd } from '@utils/state';
+import { ASCII_LOGO } from '@constants/product';
 
 interface REPLProps {
   commands?: any;
@@ -44,7 +45,8 @@ export function REPL(props: REPLProps): React.ReactNode {
   // Simplified UI using Ink
   return (
     <Box flexDirection="column">
-      <Text bold>OpenFlow REPL (simplified)</Text>
+      <Text>{ASCII_LOGO}</Text>
+      <Text bold>OpenFlow REPL</Text>
       {output && (
         <Box borderStyle="round" paddingX={1} paddingY={0} marginBottom={1}>
           <Text>{output}</Text>

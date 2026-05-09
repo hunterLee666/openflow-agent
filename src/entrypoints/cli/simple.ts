@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { Agent } from '@codeany/open-agent-sdk'
+import { asciiLogo } from '../../utils/asciiLogo'
 import readline from 'readline'
 
 const rl = readline.createInterface({
@@ -12,6 +13,7 @@ const agent = new Agent({
   permissionMode: 'bypassPermissions',
 })
 
+console.log(asciiLogo)
 console.log('OpenFlow CLI (New SDK)')
 console.log('Type your message or "exit" to quit\n> ')
 

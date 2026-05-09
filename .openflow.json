@@ -1,10 +1,14 @@
 {
   "lastCost": 0,
   "lastAPIDuration": 0,
-  "lastDuration": 93952,
+  "lastDuration": 64450,
   "lastSessionId": "cli-session",
   "hasCompletedProjectOnboarding": true,
   "history": [
+    "帮我分析这个项目",
+    "/config",
+    "今天北京天气怎么样？",
+    "你好",
     "很棒",
     "read package.json",
     "很棒",
